@@ -6033,9 +6033,9 @@ dependencies = [
 
 [[package]]
 name = "ntest"
-version = "0.9.3"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb183f0a1da7a937f672e5ee7b7edb727bf52b8a52d531374ba8ebb9345c0330"
+checksum = "7fddcec96a55ae9a8fbb2c84224eaef0e2172fad4f57e45c60f15948299e24a2"
 dependencies = [
  "ntest_test_cases",
  "ntest_timeout",
@@ -6043,9 +6043,9 @@ dependencies = [
 
 [[package]]
 name = "ntest_test_cases"
-version = "0.9.3"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16d0d3f2a488592e5368ebbe996e7f1d44aa13156efad201f5b4d84e150eaa93"
+checksum = "c57f1d8b90b1d22281705c5f8eea471aba7de924bfe289f6ebde216348e6dede"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6054,9 +6054,9 @@ dependencies = [
 
 [[package]]
 name = "ntest_timeout"
-version = "0.9.3"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcc7c92f190c97f79b4a332f5e81dcf68c8420af2045c936c9be0bc9de6f63b5"
+checksum = "ca4e08a21c15734a66f881c6dbc15c10ca83a4f2e6469889e12f594861d0f7ad"
 dependencies = [
  "proc-macro-crate 3.4.0",
  "proc-macro2",
