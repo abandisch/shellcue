@@ -15,8 +15,8 @@ use crate::{
 
 const PLUGIN_PREFIX: &str = "q-for-command-line-companion";
 
-/// Version of the Amazon Q Intellij plugin. This should match the version in
-/// [build.gradle](../../../../extensions/jetbrains/build.gradle).
+/// Version of the Amazon Q Intellij plugin. This should match the version of
+/// the plugin jar bundled in this directory.
 const PLUGIN_VERSION: &str = "1.0.4";
 
 /// Legacy plugin names that should be removed on uninstall.
