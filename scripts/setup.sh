@@ -27,7 +27,7 @@ install_linux_deps() {
 install_macos_deps() {
   echo "Detected macOS"
   xcode-select --install || true
-  brew install mise pnpm protobuf zsh bash fish shellcheck jq
+  brew install mise zsh bash fish shellcheck jq
 }
 
 install_rust() {
@@ -83,7 +83,7 @@ add_mise_to_shell() {
 }
 
 setup_mise() {
-  echo "Installing Python and Node with mise..."
+  echo "Installing the pinned toolchain with mise..."
   add_mise_to_shell
   mise trust
   mise install
@@ -91,7 +91,7 @@ setup_mise() {
 
 setup_precommit() {
   echo "Installing pre-commit hooks..."
-  pnpm install --ignore-scripts
+  mise exec -- pnpm install --ignore-scripts
 }
 
 echo "Setting up project dependencies..."

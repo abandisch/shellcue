@@ -114,7 +114,7 @@ rustup target add x86_64-apple-darwin
 rustup target add aarch64-apple-darwin
 ```
 
-### 3. Setup Python and Node using [`mise`](https://mise.jdx.dev)
+### 3. Setup the pinned toolchain using [`mise`](https://mise.jdx.dev)
 
 Add mise integrations to your shell:
 
@@ -133,7 +133,9 @@ For fish:
 echo 'mise activate fish | source' >> ~/.config/fish/config.fish
 ```
 
-Install the Python and Node toolchains using:
+Do not install pnpm separately: the repo refuses to run with any pnpm version other than the one pinned in `package.json`.
+
+Install the pinned Node, pnpm, protoc, Python and Rust versions using:
 
 ```shell
 mise trust
