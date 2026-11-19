@@ -1,4 +1,4 @@
-# Keep in step: node and pnpm with package.json, rust with rust-toolchain.toml.
+# Keep in step: node and pnpm with package.json, rust with rust-toolchain.toml, all four tools with scripts/vm/guest.sh.
 [tools]
 node = "26.13.0"
 pnpm = "12.17.0"
