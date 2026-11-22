@@ -1,193 +1,234 @@
 use std::borrow::Cow;
-use std::sync::{
-    Arc,
-    LazyLock,
-};
+use std::io::ErrorKind;
+use std::path::Path;
+use std::sync::Arc;
 
-use anyhow::Result;
 use fig_os_shim::Context;
-use fig_request::reqwest::Client;
-use fnv::FnvHashSet;
-use futures::prelude::*;
-use serde::{
-    Deserialize,
-    Serialize,
-};
-use tokio::sync::{
-    MappedMutexGuard,
-    Mutex,
-    MutexGuard,
-};
-use tracing::error;
-use url::Url;
+use percent_encoding::percent_decode_str;
 use wry::http::header::CONTENT_TYPE;
 use wry::http::{
-    HeaderValue,
     Request,
     Response,
     StatusCode,
 };
 
+use super::util::{
+    res_400,
+    res_404,
+    res_500,
+};
 use crate::webview::WindowId;
-
-const APPLICATION_JAVASCRIPT: HeaderValue = HeaderValue::from_static("application/javascript");
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct CdnSource {
-    url: Url,
-}
-
-static CDNS: LazyLock<Vec<CdnSource>> = LazyLock::new(|| {
-    vec![
-        // Public cdn
-        CdnSource {
-            url: "https://specs.q.us-east-1.amazonaws.com".try_into().unwrap(),
-        },
-    ]
-});
-
-fn res_404() -> Response<Cow<'static, [u8]>> {
-    Response::builder()
-        .status(StatusCode::NOT_FOUND)
-        .header(CONTENT_TYPE, "text/plain")
-        .body(b"Not Found".as_ref().into())
-        .unwrap()
-}
-
-fn res_ok(bytes: Vec<u8>, content_type: HeaderValue) -> Response<Cow<'static, [u8]>> {
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(CONTENT_TYPE, content_type)
-        .body(bytes.into())
-        .unwrap()
-}
-
-#[derive(Debug, Clone)]
-struct SpecIndexMeta {
-    spec_index: SpecIndex,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SpecIndex {
-    completions: Vec<String>,
-    diff_versioned_completions: Vec<String>,
-}
-
-static INDEX_CACHE: Mutex<Option<Vec<Result<SpecIndexMeta>>>> = Mutex::const_new(None);
-
-async fn remote_index_json(client: &Client) -> MappedMutexGuard<'_, Vec<Result<SpecIndexMeta>>> {
-    let mut cache = INDEX_CACHE.lock().await;
-
-    if cache.is_none() {
-        *cache = Some(
-            future::join_all(CDNS.iter().map(|cdn_source| async move {
-                let mut url = cdn_source.url.clone();
-                url.set_path("index.json");
-
-                let response = match client.get(url).send().await.and_then(|res| res.error_for_status()) {
-                    Ok(response) => response,
-                    Err(err) => {
-                        error!(%err, "Failed to fetch spec index");
-                        return Err(err.into());
-                    },
-                };
-
-                let spec_index = match response.json().await {
-                    Ok(s) => s,
-                    Err(s) => {
-                        error!(%s, "Failed to parse spec index");
-                        return Err(s.into());
-                    },
-                };
-
-                Ok(SpecIndexMeta { spec_index })
-            }))
-            .await,
-        );
-    }
-
-    MutexGuard::map(cache, |cache| cache.as_mut().unwrap())
-}
-
-async fn merged_index_json(client: &Client) -> Result<SpecIndex> {
-    let mut completions = FnvHashSet::default();
-    let mut diff_versioned_completions = FnvHashSet::default();
-
-    for res in remote_index_json(client).await.iter() {
-        match res {
-            Ok(meta) => {
-                completions.extend(meta.spec_index.completions.clone());
-                diff_versioned_completions.extend(meta.spec_index.diff_versioned_completions.clone());
-            },
-            Err(err) => {
-                tracing::error!(%err, "failed to fetch spec index");
-            },
-        }
-    }
-
-    let mut completions: Vec<_> = completions.into_iter().collect();
-    completions.sort();
-
-    let mut diff_versioned_completions: Vec<_> = diff_versioned_completions.into_iter().collect();
-    diff_versioned_completions.sort();
-
-    Ok(SpecIndex {
-        completions,
-        diff_versioned_completions,
-    })
-}
 
 // handle `spec://localhost/spec.js`
 pub async fn handle(
-    _ctx: Arc<Context>,
+    ctx: Arc<Context>,
     request: Request<Vec<u8>>,
     _: WindowId,
 ) -> anyhow::Result<Response<Cow<'static, [u8]>>> {
-    let Some(client) = fig_request::client() else {
-        return Ok(res_404());
+    let specs_path = fig_util::directories::resources_path_ctx(&ctx)?.join("specs");
+    serve(&specs_path, request.uri().host(), request.uri().path())
+}
+
+fn serve(root: &Path, host: Option<&str>, uri_path: &str) -> anyhow::Result<Response<Cow<'static, [u8]>>> {
+    if host != Some("localhost") {
+        return res_400();
+    }
+
+    // the root itself may be a symlink, so compare canonical forms
+    let root = match root.canonicalize() {
+        Ok(root) => root,
+        Err(err) if err.kind() == ErrorKind::NotFound => return res_404(),
+        Err(err) => return res_500(err),
     };
 
-    let path = request.uri().path();
+    let Ok(decoded) = percent_decode_str(uri_path).decode_utf8() else {
+        return res_400();
+    };
+    let relative = decoded.trim_start_matches('/');
 
-    if path == "/index.json" {
-        let index = merged_index_json(client).await?;
-        Ok(res_ok(
-            serde_json::to_vec(&index)?,
-            "application/json".try_into().unwrap(),
-        ))
-    } else {
-        let mut url = CDNS[0].url.clone();
-        url.set_path(path);
+    let path = match root.join(relative).canonicalize() {
+        Ok(path) => path,
+        Err(err) if matches!(err.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory) => return res_404(),
+        Err(err) => return res_500(err),
+    };
 
-        let response = client.get(url).send().await?.error_for_status()?;
-
-        let content_type = response
-            .headers()
-            .get(http::header::CONTENT_TYPE)
-            .cloned()
-            .unwrap_or(APPLICATION_JAVASCRIPT);
-
-        Ok(res_ok(
-            response.bytes().await?.to_vec(),
-            content_type.as_bytes().try_into()?,
-        ))
+    // dont allow escaping the specs dir
+    if !path.starts_with(&root) {
+        return res_400();
     }
+
+    let content_type: &str = match path.extension().and_then(|ext| ext.to_str()) {
+        Some("js") => mime::APPLICATION_JAVASCRIPT_UTF_8.as_ref(),
+        Some("json") => mime::APPLICATION_JSON.as_ref(),
+        _ => return res_404(),
+    };
+
+    if !path.is_file() {
+        return res_404();
+    }
+
+    let content = match std::fs::read(&path) {
+        Ok(content) => content,
+        Err(err) if err.kind() == ErrorKind::NotFound => return res_404(),
+        Err(err) => return res_500(err),
+    };
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, content_type)
+        .body(content.into())?)
 }
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
 
-    #[test]
-    fn cdns() {
-        println!("{:?}", *CDNS);
+    fn specs_dir(dir: &Path) -> std::path::PathBuf {
+        let root = dir.join("specs");
+        fs::create_dir_all(&root).unwrap();
+        root
     }
 
-    #[tokio::test]
-    async fn test_index_json() {
-        let client = Client::new();
-        let index = remote_index_json(&client).await;
-        println!("{index:?}");
+    fn content_type<'a>(res: &'a Response<Cow<'static, [u8]>>) -> &'a str {
+        res.headers()[CONTENT_TYPE].to_str().unwrap()
+    }
+
+    #[test]
+    fn serves_index_json() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = specs_dir(dir.path());
+        let index = br#"{"completions":["git"],"diffVersionedCompletions":[]}"#;
+        fs::write(root.join("index.json"), index).unwrap();
+
+        let res = serve(&root, Some("localhost"), "/index.json").unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(content_type(&res), "application/json");
+        assert_eq!(&res.body()[..], index);
+    }
+
+    #[test]
+    fn serves_nested_js() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = specs_dir(dir.path());
+        fs::create_dir_all(root.join("aws")).unwrap();
+        fs::write(root.join("aws/s3.js"), b"export default {};").unwrap();
+
+        let res = serve(&root, Some("localhost"), "/aws/s3.js").unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(content_type(&res), "application/javascript; charset=utf-8");
+        assert_eq!(&res.body()[..], b"export default {};");
+    }
+
+    #[test]
+    fn refuses_parent_traversal() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = specs_dir(dir.path());
+        fs::write(dir.path().join("secret.js"), b"secret").unwrap();
+
+        let res = serve(&root, Some("localhost"), "/../secret.js").unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        assert_ne!(&res.body()[..], b"secret");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_symlink_out_of_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = specs_dir(dir.path());
+        fs::write(dir.path().join("secret.js"), b"secret").unwrap();
+        std::os::unix::fs::symlink(dir.path().join("secret.js"), root.join("link.js")).unwrap();
+
+        let res = serve(&root, Some("localhost"), "/link.js").unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        assert_ne!(&res.body()[..], b"secret");
+    }
+
+    #[test]
+    fn refuses_percent_encoded_parent_traversal() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = specs_dir(dir.path());
+        fs::write(dir.path().join("secret.js"), b"secret").unwrap();
+
+        let res = serve(&root, Some("localhost"), "/%2e%2e/secret.js").unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        assert_ne!(&res.body()[..], b"secret");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn serves_from_symlinked_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = specs_dir(dir.path());
+        let index = br#"{"completions":["git"],"diffVersionedCompletions":[]}"#;
+        fs::write(root.join("index.json"), index).unwrap();
+        let link = dir.path().join("specs-link");
+        std::os::unix::fs::symlink(&root, &link).unwrap();
+
+        let res = serve(&link, Some("localhost"), "/index.json").unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(content_type(&res), "application/json");
+        assert_eq!(&res.body()[..], index);
+    }
+
+    #[test]
+    fn wrong_host_is_bad_request() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = specs_dir(dir.path());
+        fs::write(root.join("git.js"), b"export default {};").unwrap();
+
+        let res = serve(&root, Some("example.com"), "/git.js").unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn unknown_extension_is_not_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = specs_dir(dir.path());
+        fs::write(root.join("x.png"), b"png").unwrap();
+
+        let res = serve(&root, Some("localhost"), "/x.png").unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn html_is_not_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = specs_dir(dir.path());
+        fs::write(root.join("x.html"), b"<html></html>").unwrap();
+
+        let res = serve(&root, Some("localhost"), "/x.html").unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn missing_file_is_not_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = specs_dir(dir.path());
+
+        let res = serve(&root, Some("localhost"), "/missing.js").unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn missing_root_is_not_found() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let res = serve(&dir.path().join("specs"), Some("localhost"), "/index.json").unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn serves_percent_encoded_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = specs_dir(dir.path());
+        fs::create_dir_all(root.join("@fig")).unwrap();
+        fs::write(root.join("@fig/x.js"), b"export default {};").unwrap();
+
+        let res = serve(&root, Some("localhost"), "/%40fig/x.js").unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(content_type(&res), "application/javascript; charset=utf-8");
+        assert_eq!(&res.body()[..], b"export default {};");
     }
 }

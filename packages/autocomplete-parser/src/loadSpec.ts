@@ -18,7 +18,7 @@ import {
   isInDevMode,
 } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
 import {
-  importFromPublicCDN,
+  importFromBundledSpecs,
   publicSpecExists,
   SpecFileImport,
   importSpecFromFile,
@@ -164,16 +164,15 @@ export const importSpecFromLocation = async (
     const { name, diffVersionedFile: versionFileName } = specLocation;
 
     if (await publicSpecExists(name)) {
-      // If we're here, importing was successful.
       try {
-        const result = await importFromPublicCDN(
+        const result = await importFromBundledSpecs(
           versionFileName ? `${name}/${versionFileName}` : name,
         );
 
         specFile = result;
         resolvedLocation = { type: "public", name };
       } catch (err) {
-        localLogger.error("Unable to load from CDN", err);
+        localLogger.error("Unable to load bundled spec", err);
         throw err;
       }
     } else {

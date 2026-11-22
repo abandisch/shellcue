@@ -1,8 +1,14 @@
 import * as wrappers from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
 import * as loadHelpers from "../src/loadHelpers";
+import { MOST_USED_SPECS } from "../src/constants";
 import { vi, describe, beforeEach, afterEach, it, expect } from "vitest";
 
-const { getVersionFromFullFile } = loadHelpers;
+const {
+  getVersionFromFullFile,
+  clearSpecIndex,
+  publicSpecExists,
+  isDiffVersionedSpec,
+} = loadHelpers;
 
 const specData = {
   getVersionCommand: vi.fn().mockReturnValue(Promise.resolve("1.0.0")),
@@ -59,5 +65,61 @@ describe("test `getVersionFromFullFile`", () => {
     );
     const version = await getVersionFromFullFile(specData, "node");
     expect(version).toEqual("1.0.0");
+  });
+});
+
+describe("bundled spec index", () => {
+  const index = {
+    completions: ["git", "aws"],
+    diffVersionedCompletions: ["aws"],
+  };
+
+  beforeEach(() => {
+    clearSpecIndex();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    clearSpecIndex();
+  });
+
+  it("requests only spec://localhost/index.json", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ json: () => Promise.resolve(index) });
+    vi.stubGlobal("fetch", fetchMock);
+    await publicSpecExists("git");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith("spec://localhost/index.json");
+  });
+
+  it("reflects a successfully loaded index", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ json: () => Promise.resolve(index) });
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await publicSpecExists("git")).toBe(true);
+    expect(await publicSpecExists("missing")).toBe(false);
+    expect(await isDiffVersionedSpec("aws")).toBe(true);
+    expect(await isDiffVersionedSpec("git")).toBe(false);
+    for (const [url] of fetchMock.mock.calls) {
+      expect(String(url).startsWith("spec://localhost/")).toBe(true);
+    }
+  });
+
+  it("treats a failing fetch as an empty index", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("offline"));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(publicSpecExists("git")).resolves.toBe(false);
+    await expect(isDiffVersionedSpec("aws")).resolves.toBe(false);
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+    for (const [url] of fetchMock.mock.calls) {
+      expect(String(url).startsWith("spec://localhost/")).toBe(true);
+    }
+  });
+});
+
+describe("MOST_USED_SPECS", () => {
+  it("does not preload the removed q spec", () => {
+    expect(MOST_USED_SPECS).not.toContain("q");
   });
 });
