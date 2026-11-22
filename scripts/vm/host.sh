@@ -11,7 +11,7 @@ VM_MEMORY="${SHELLCUE_VM_MEMORY:-12G}"
 VM_DISK="${SHELLCUE_VM_DISK:-60G}"
 GUEST_PATH="/home/ubuntu/guest.sh"
 GUEST_SRC="/home/ubuntu/shellcue"
-GUEST_STEPS="tools clone lock fetch web rust-check rust-test info"
+GUEST_STEPS="tools clone lock fetch web specs rust-check rust-test info"
 PULL_MAX_BYTES=52428800
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -55,6 +55,7 @@ Typical first session:
    keep using the VM's uncommitted lockfiles)
   scripts/vm/host.sh step fetch
   scripts/vm/host.sh step web
+  scripts/vm/host.sh step specs
   scripts/vm/host.sh step rust-check
   scripts/vm/host.sh step rust-test
   scripts/vm/host.sh stop

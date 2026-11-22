@@ -605,6 +605,30 @@ importers:
         specifier: ^3.0.8
         version: 3.0.8(@types/debug@4.1.12)(@types/node@22.15.20)(@vitest/ui@3.0.8)(jiti@1.21.7)(jsdom@24.1.0(supports-color@8.1.1))(supports-color@8.1.1)(terser@5.39.0)(tsx@4.19.4)(yaml@2.7.1)
 
+  packages/spec-compiler:
+    devDependencies:
+      '@fig/autocomplete-generators':
+        specifier: 2.4.0
+        version: 2.4.0
+      '@fig/autocomplete-helpers':
+        specifier: 2.0.0
+        version: 2.0.0
+      esbuild:
+        specifier: 0.25.3
+        version: 0.25.3
+      semver:
+        specifier: 7.7.2
+        version: 7.7.2
+      strip-json-comments:
+        specifier: 3.1.1
+        version: 3.1.1
+      vitest:
+        specifier: ^3.0.8
+        version: 3.0.8(@types/debug@4.1.12)(@types/node@22.15.20)(@vitest/ui@3.0.8)(jiti@1.21.7)(jsdom@24.1.0(supports-color@8.1.1))(supports-color@8.1.1)(terser@5.39.0)(tsx@4.19.4)(yaml@2.7.1)
+      yaml:
+        specifier: 2.7.1
+        version: 2.7.1
+
   packages/tsconfig:
     dependencies:
       typescript:
@@ -3862,11 +3886,6 @@ packages:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
     hasBin: true
 
-  semver@7.6.3:
-    resolution: {integrity: sha512-oVekP1cKtI+CTDvHWYFUcMtsK/00wmAEfyqKfNdARm8u1wNVhSgaX7A8d4UuIlUI5e84iEwOhs7ZPYRmzU9U6A==}
-    engines: {node: '>=10'}
-    hasBin: true
-
   semver@7.7.2:
     resolution: {integrity: sha512-RF0Fw+rO5AMf9MAyaRXI4AV0Ulj5lMHqVxxdSgiVbixSCXoEmmX/jk0CuJw4+3SqroYO9VoUh+HcuJivvtJemA==}
     engines: {node: '>=10'}
@@ -5514,7 +5533,7 @@ snapshots:
 
   '@fig/autocomplete-helpers@2.0.0':
     dependencies:
-      semver: 7.6.3
+      semver: 7.7.2
 
   '@fig/autocomplete-shared@1.1.2': {}
 
@@ -8595,8 +8614,6 @@ snapshots:
       loose-envify: 1.4.0
 
   semver@6.3.1: {}
-
-  semver@7.6.3: {}
 
   semver@7.7.2: {}
 
