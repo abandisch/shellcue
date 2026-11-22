@@ -3,7 +3,6 @@ mod notifications;
 mod onboarding;
 mod process;
 mod properties;
-mod user;
 mod window;
 
 use std::marker::PhantomData;
@@ -35,7 +34,6 @@ use fig_proto::fig::{
     RunProcessRequest,
     ServerOriginatedMessage,
     UpdateApplicationPropertiesRequest,
-    UserLogoutRequest,
     WindowFocusRequest,
 };
 use fig_remote_ipc::figterm::FigtermState;
@@ -176,10 +174,6 @@ impl<'a> fig_desktop_api::handler::EventHandler for EventHandler<'a> {
             request.context.figterm_state,
             request.context.intercept_state,
         )
-    }
-
-    async fn user_logout(&self, request: Wrapped<Self::Ctx, UserLogoutRequest>) -> RequestResult {
-        user::logout(request.request, request.context.proxy).await
     }
 }
 

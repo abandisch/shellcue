@@ -179,10 +179,6 @@ impl Env {
         self.get_os("Q_LOG_STDOUT").is_some()
     }
 
-    pub fn amazon_q_sigv4(&self) -> bool {
-        self.get("AMAZON_Q_SIGV4").is_ok_and(|v| !v.is_empty())
-    }
-
     pub fn q_cli_client_application(&self) -> Result<String, VarError> {
         self.get("Q_CLI_CLIENT_APPLICATION")
     }
@@ -209,10 +205,6 @@ impl Env {
 
     pub fn q_prompt_offset_workaround(&self) -> Result<String, VarError> {
         self.get("Q_PROMPT_OFFSET_WORKAROUND")
-    }
-
-    pub fn q_use_sendmessage(&self) -> bool {
-        self.get("Q_USE_SENDMESSAGE").is_ok_and(|v| !v.is_empty())
     }
 
     pub fn q_custom_cert(&self) -> Result<String, VarError> {

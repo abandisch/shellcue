@@ -1,8 +1,5 @@
 use url::ParseError;
 
-#[cfg(feature = "midway")]
-use crate::midway;
-
 #[derive(Debug)]
 pub enum Error {
     Reqwest(reqwest::Error),
@@ -13,8 +10,6 @@ pub enum Error {
     NoClient,
     NoToken,
     UrlParseError(ParseError),
-    #[cfg(feature = "midway")]
-    Midway(midway::MidwayError),
 }
 
 impl std::fmt::Display for Error {
@@ -29,8 +24,6 @@ impl std::fmt::Display for Error {
             Error::NoClient => write!(f, "No client"),
             Error::NoToken => write!(f, "No token"),
             Error::UrlParseError(err) => write!(f, "Url parse error: {err}"),
-            #[cfg(feature = "midway")]
-            Error::Midway(err) => write!(f, "Midway error: {err}"),
         }
     }
 }
@@ -70,12 +63,5 @@ impl From<fig_settings::Error> for Error {
 impl From<ParseError> for Error {
     fn from(e: ParseError) -> Self {
         Error::UrlParseError(e)
-    }
-}
-
-#[cfg(feature = "midway")]
-impl From<midway::MidwayError> for Error {
-    fn from(e: midway::MidwayError) -> Self {
-        Error::Midway(e)
     }
 }
