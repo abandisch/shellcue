@@ -53,12 +53,6 @@ allow = [
   "CDLA-Permissive-2.0",
 ]
 
-[[licenses.clarify]]
-name = "ring"
-version = "*"
-expression = "MIT AND ISC AND OpenSSL"
-license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
-
 [bans]
 multiple-versions = "allow"
 wildcards = "deny"
@@ -78,6 +72,34 @@ name = "git2"
 
 [[bans.deny]]
 name = "tempdir"
+
+# No HTTP or TLS client may be compiled in.
+[[bans.deny]]
+name = "reqwest"
+
+[[bans.deny]]
+name = "hyper"
+
+[[bans.deny]]
+name = "ureq"
+
+[[bans.deny]]
+name = "isahc"
+
+[[bans.deny]]
+name = "curl"
+
+[[bans.deny]]
+name = "surf"
+
+[[bans.deny]]
+name = "attohttpc"
+
+[[bans.deny]]
+name = "rustls"
+
+[[bans.deny]]
+name = "native-tls"
 
 [sources]
 unknown-registry = "deny"

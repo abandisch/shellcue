@@ -7,7 +7,6 @@ use anyhow::{
     Context,
     Result,
 };
-use fig_install::UpdateOptions;
 use fig_ipc::{
     BufferedUnixStream,
     RecvMessage,
@@ -164,7 +163,6 @@ async fn handle_local_ipc<Ctx>(
                     },
                     Some(command) => {
                         use fig_proto::local::command::Command::{
-                            BundleMetadata,
                             ConnectToIbus,
                             DebugMode,
                             Devtools,
@@ -173,7 +171,6 @@ async fn handle_local_ipc<Ctx>(
                             InputMethod,
                             ListTerminalIntegrations,
                             LogLevel,
-                            OpenBrowser,
                             OpenUiElement,
                             PromptAccessibility,
                             Quit,
@@ -183,7 +180,6 @@ async fn handle_local_ipc<Ctx>(
                             RestartSettingsListener,
                             RunInstallScript,
                             TerminalIntegration,
-                            Update,
                         };
 
                         match command {
@@ -191,7 +187,6 @@ async fn handle_local_ipc<Ctx>(
                             OpenUiElement(command) => commands::open_ui_element(command, &proxy).await,
                             Quit(command) => commands::quit(command, &proxy).await,
                             Diagnostics(command) => commands::diagnostic(command, &figterm_state).await,
-                            OpenBrowser(command) => commands::open_browser(command).await,
                             PromptAccessibility(_) => commands::prompt_for_accessibility_permission(&ctx).await,
                             LogLevel(command) => commands::log_level(command),
                             DumpState(command) => commands::dump_state(
@@ -201,20 +196,6 @@ async fn handle_local_ipc<Ctx>(
                                 &platform_state,
                             ),
                             ConnectToIbus(_) => commands::connect_to_ibus(proxy.clone(), &platform_state).await,
-                            BundleMetadata(_) => commands::bundle_metadata(&ctx.context_arc()).await,
-                            Update(_) => fig_install::update(
-                                ctx.context_arc(),
-                                Some(Box::new(move |_| {
-                                    debug!("Updating from proto");
-                                })),
-                                UpdateOptions::default(),
-                            )
-                            .await
-                            .map(|_| LocalResponse::Success(None))
-                            .map_err(|err| LocalResponse::Error {
-                                code: None,
-                                message: Some(format!("Failed to update: {err}")),
-                            }),
                             Devtools(command) => {
                                 let window_id = match command.window() {
                                     fig_proto::local::devtools_command::Window::DevtoolsAutocomplete => AUTOCOMPLETE_ID,

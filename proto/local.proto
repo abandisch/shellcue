@@ -11,7 +11,7 @@ message LocalMessage {
 }
 
 message Command {
-  reserved 102, 110;
+  reserved 102, 105, 110;
 
   optional int64 id = 1;
   optional bool no_response = 2; // opt-out of response from host app
@@ -21,7 +21,6 @@ message Command {
     ListTerminalIntegrationsCommand list_terminal_integrations = 101;
     RestartCommand restart = 103;
     QuitCommand quit = 104;
-    UpdateCommand update = 105;
     DiagnosticsCommand diagnostics = 106;
     ReportWindowCommand report_window = 107;
     RestartSettingsListenerCommand restart_settings_listener = 108;
@@ -31,16 +30,14 @@ message Command {
     DebugModeCommand debug_mode = 113;
     PromptAccessibilityCommand prompt_accessibility = 114;
     InputMethodCommand input_method = 115;
-    OpenBrowserCommand open_browser = 117;
     // A request to set the desktops's log level
     LogLevelCommand log_level = 118;
     DumpStateCommand dump_state = 119;
     DevtoolsCommand devtools = 120;
     ConnectToIBusCommand connect_to_ibus = 122;
-    BundleMetadataCommand bundle_metadata = 123;
   }
 
-  reserved 116, 121;
+  reserved 116, 117, 121, 123;
 }
 
 message Hook {
@@ -83,12 +80,6 @@ message ListTerminalIntegrationsCommand {}
 message RestartCommand {}
 
 message QuitCommand {}
-
-message UninstallCommand {}
-
-message UpdateCommand {
-  bool force = 1;
-}
 
 message DiagnosticsCommand {}
 
@@ -140,10 +131,6 @@ message InputMethodCommand {
 
 message PromptAccessibilityCommand {}
 
-message OpenBrowserCommand {
-  string url = 1;
-}
-
 message LogLevelCommand {
   string level = 1;
 }
@@ -168,8 +155,6 @@ message DevtoolsCommand {
 }
 
 message ConnectToIBusCommand {}
-
-message BundleMetadataCommand {}
 
 // == Hooks ==
 
@@ -363,10 +348,6 @@ message DumpStateResponse {
   string json = 1;
 }
 
-message BundleMetadataResponse {
-  optional string json = 1;
-}
-
 message CommandResponse {
   optional int64 id = 1;
 
@@ -380,6 +361,7 @@ message CommandResponse {
     // A response to a log level command
     LogLevelResponse log_level = 102;
     DumpStateResponse dump_state = 103;
-    BundleMetadataResponse bundle_metadata = 104;
   }
+
+  reserved 104;
 }

@@ -1,19 +1,10 @@
 use std::borrow::Cow;
 
 use cfg_if::cfg_if;
-use fig_install::index::get_file_type;
-use fig_install::{
-    InstallComponents,
-    UpdateOptions,
-};
+use fig_install::InstallComponents;
 use fig_os_shim::Context;
 use fig_remote_ipc::figterm::FigtermState;
 use fig_util::consts::PRODUCT_NAME;
-use fig_util::manifest::{
-    FileType,
-    Variant,
-};
-use fig_util::url::USER_MANUAL;
 use muda::{
     IconMenuItem,
     Menu,
@@ -24,12 +15,7 @@ use muda::{
     Submenu,
 };
 use tao::event_loop::ControlFlow;
-use tracing::{
-    debug,
-    error,
-    trace,
-    warn,
-};
+use tracing::trace;
 use tray_icon::{
     Icon,
     TrayIcon,
@@ -38,7 +24,6 @@ use tray_icon::{
 
 use crate::event::{
     Event,
-    ShowMessageNotification,
     WindowEvent,
 };
 use crate::{
@@ -66,164 +51,6 @@ use crate::{
 //     }};
 // }
 
-fn tray_update(proxy: &EventLoopProxy) {
-    let proxy_a = proxy.clone();
-    let proxy_b = proxy.clone();
-    tokio::runtime::Handle::current().spawn(async move {
-        let ctx = Context::new();
-
-        if !should_continue_with_update(&ctx, &proxy_a).await {
-            return;
-        }
-
-        let res = fig_install::update(
-            ctx,
-            Some(Box::new(move |_| {
-                proxy_a
-                    .send_event(
-                        ShowMessageNotification {
-                            title: format!("{PRODUCT_NAME} is updating in the background").into(),
-                            body: format!("You can continue to use {PRODUCT_NAME} while it updates").into(),
-                            ..Default::default()
-                        }
-                        .into(),
-                    )
-                    .unwrap();
-            })),
-            UpdateOptions {
-                ignore_rollout: true,
-                interactive: true,
-                relaunch_dashboard: true,
-                is_auto_update: false,
-            },
-        )
-        .await;
-        match res {
-            Ok(true) => {},
-            Ok(false) => {
-                // Didn't update, show a notification
-                proxy_b
-                    .send_event(
-                        ShowMessageNotification {
-                            title: format!("{PRODUCT_NAME} is already up to date").into(),
-                            body: concat!("Version ", env!("CARGO_PKG_VERSION")).into(),
-                            ..Default::default()
-                        }
-                        .into(),
-                    )
-                    .unwrap();
-            },
-            Err(err) => {
-                // Error updating, show a notification
-                proxy_b
-                    .send_event(
-                        ShowMessageNotification {
-                            title: format!("Error Updating {PRODUCT_NAME}").into(),
-                            body: err.to_string().into(),
-                            ..Default::default()
-                        }
-                        .into(),
-                    )
-                    .unwrap();
-            },
-        }
-    });
-}
-
-/// Checks if the app is able to update. If so, get permission from the user first before
-/// continuing.
-///
-/// Returns `true` if we should continue with updating, `false` otherwise.
-async fn should_continue_with_update(ctx: &Context, proxy: &EventLoopProxy) -> bool {
-    match fig_install::check_for_updates(true, false).await {
-        Ok(Some(pkg)) => {
-            let file_type = get_file_type(ctx, &Variant::Full)
-                .await
-                .map_err(|err| error!(?err, "Failed to get file type"))
-                .ok();
-            // Only AppImage and dmg is able to self-update.
-            if file_type == Some(FileType::AppImage) || file_type == Some(FileType::Dmg) {
-                let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-                proxy
-                    .send_event(
-                        ShowMessageNotification {
-                            title: format!("A new version of {} is available", PRODUCT_NAME).into(),
-                            body: format!(
-                                "New Version: {}\nCurrent Version: {}\nWould you like to update now?",
-                                pkg.version,
-                                env!("CARGO_PKG_VERSION")
-                            )
-                            .into(),
-                            buttons: Some(rfd::MessageButtons::YesNo),
-                            buttons_result: Some(tx),
-                            ..Default::default()
-                        }
-                        .into(),
-                    )
-                    .unwrap();
-                match rx.recv().await {
-                    Some(rfd::MessageDialogResult::Yes) => true,
-                    Some(rfd::MessageDialogResult::No) => {
-                        debug!("User declined to update, returning");
-                        false
-                    },
-                    Some(res) => {
-                        warn!(?res, "Unexpected result from the dialog");
-                        false
-                    },
-                    None => {
-                        debug!("No result from the dialog received");
-                        false
-                    },
-                }
-            } else {
-                proxy
-                    .send_event(
-                        ShowMessageNotification {
-                            title: format!("A new version of {} is available", PRODUCT_NAME).into(),
-                            body: format!(
-                                "New Version: {}\nCurrent Version: {}",
-                                pkg.version,
-                                env!("CARGO_PKG_VERSION")
-                            )
-                            .into(),
-                            ..Default::default()
-                        }
-                        .into(),
-                    )
-                    .unwrap();
-                false
-            }
-        },
-        Ok(None) => {
-            proxy
-                .send_event(
-                    ShowMessageNotification {
-                        title: format!("{PRODUCT_NAME} is already up to date").into(),
-                        body: concat!("Version ", env!("CARGO_PKG_VERSION")).into(),
-                        ..Default::default()
-                    }
-                    .into(),
-                )
-                .unwrap();
-            false
-        },
-        Err(err) => {
-            proxy
-                .send_event(
-                    ShowMessageNotification {
-                        title: "An error occurred while checking for updates".into(),
-                        body: err.to_string().into(),
-                        ..Default::default()
-                    }
-                    .into(),
-                )
-                .unwrap();
-            false
-        },
-    }
-}
-
 pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {
     match &*menu_event.id().0 {
         "dashboard-devtools" => {
@@ -241,9 +68,6 @@ pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {
                     window_event: WindowEvent::Devtools,
                 })
                 .unwrap();
-        },
-        "update" => {
-            tray_update(proxy);
         },
         "quit" => {
             proxy.send_event(Event::ControlFlow(ControlFlow::Exit)).unwrap();
@@ -291,11 +115,6 @@ pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {
                 #[allow(clippy::exit)]
                 std::process::exit(0);
             });
-        },
-        "user-manual" => {
-            if let Err(err) = fig_util::open_url(USER_MANUAL) {
-                error!(%err, "Failed to open user manual url");
-            }
         },
         id => {
             trace!(?id, "Unhandled tray event");
@@ -490,9 +309,7 @@ impl MenuElement {
 
 fn menu() -> Vec<MenuElement> {
     let not_working = MenuElement::entry(None, None, format!("{PRODUCT_NAME} not working?"), "not-working");
-    let manual = MenuElement::entry(None, None, "User Guide", "user-manual");
     let version = MenuElement::info(None, format!("Version: {}", env!("CARGO_PKG_VERSION")));
-    let update = MenuElement::entry(None, None, "Check for updates...", "update");
     let quit = MenuElement::entry(None, None, format!("Quit {PRODUCT_NAME}"), "quit");
     // let dashboard = MenuElement::entry(None, None, "Dashboard", "dashboard");
     let settings = MenuElement::entry(None, None, "Settings", "settings");
@@ -506,11 +323,9 @@ fn menu() -> Vec<MenuElement> {
 
     menu.extend(vec![
         MenuElement::Separator,
-        manual,
         not_working,
         MenuElement::Separator,
         version,
-        update,
         MenuElement::Separator,
         quit,
     ]);
@@ -537,11 +352,9 @@ mod tests {
         assert_eq!(shape, [
             "settings",
             "---",
-            "user-manual",
             "not-working",
             "---",
             "info",
-            "update",
             "---",
             "quit",
         ]);

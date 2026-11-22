@@ -25,46 +25,6 @@ subparsers = parser.add_subparsers(help="sub-command help", dest="subparser", re
 
 build_subparser = subparsers.add_parser(name="build")
 build_subparser.add_argument(
-    "--output-bucket",
-    action=StoreIfNotEmptyAction,
-    help="The name of bucket to store the build artifacts",
-)
-build_subparser.add_argument(
-    "--signing-bucket",
-    action=StoreIfNotEmptyAction,
-    help="The name of bucket to store the build artifacts",
-)
-build_subparser.add_argument(
-    "--aws-account-id",
-    action=StoreIfNotEmptyAction,
-    help="The AWS account ID",
-)
-build_subparser.add_argument(
-    "--chat-build-bucket-name",
-    action=StoreIfNotEmptyAction,
-    help="The name of the bucket containing the chat binary",
-)
-build_subparser.add_argument(
-    "--chat-download-role-arn",
-    action=StoreIfNotEmptyAction,
-    help="The IAM Role to assume when downloading from the chat build bucket",
-)
-build_subparser.add_argument(
-    "--apple-id-secret",
-    action=StoreIfNotEmptyAction,
-    help="The Apple ID secret",
-)
-build_subparser.add_argument(
-    "--signing-role-name",
-    action=StoreIfNotEmptyAction,
-    help="The name of the signing role",
-)
-build_subparser.add_argument(
-    "--stage-name",
-    action=StoreIfNotEmptyAction,
-    help="The name of the stage",
-)
-build_subparser.add_argument(
     "--not-release",
     action="store_true",
     help="Build a non-release version",
@@ -123,14 +83,6 @@ match args.subparser:
         build(
             release=not args.not_release,
             variants=variants,
-            output_bucket=args.output_bucket,
-            signing_bucket=args.signing_bucket,
-            aws_account_id=args.aws_account_id,
-            chat_build_bucket_name=args.chat_build_bucket_name,
-            chat_download_role_arn=args.chat_download_role_arn,
-            apple_id_secret=args.apple_id_secret,
-            signing_role_name=args.signing_role_name,
-            stage_name=args.stage_name,
             run_lints=not args.skip_lints,
             run_test=not args.skip_tests,
         )

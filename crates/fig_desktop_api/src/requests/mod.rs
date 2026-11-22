@@ -9,7 +9,6 @@ pub mod other;
 pub mod platform;
 pub mod settings;
 pub mod state;
-pub mod update;
 
 pub type ServerOriginatedSubMessage = fig_proto::fig::server_originated_message::Submessage;
 pub type RequestResult = Result<Box<ServerOriginatedSubMessage>, Error>;

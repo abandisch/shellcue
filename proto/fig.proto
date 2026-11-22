@@ -26,15 +26,13 @@ message ClientOriginatedMessage {
     RunProcessRequest run_process_request = 130;
     CreateDirectoryRequest create_directory_request = 132;
     InstallRequest install_request = 133;
-    CheckForUpdatesRequest check_for_updates_request = 138;
-    UpdateApplicationRequest update_application_request = 139;
     HistoryQueryRequest history_query_request = 140;
     PingRequest ping_request = 144;
     DragWindowRequest drag_window_request = 146;
     GetPlatformInfoRequest get_platform_info_request = 152;
   }
 
-  reserved 115, 117, 134, 135, 136, 137, 141, 142, 143, 145, 149, 150, 151, 155, 156;
+  reserved 115, 117, 134, 135, 136, 137, 138, 139, 141, 142, 143, 145, 149, 150, 151, 155, 156;
 }
 
 message ServerOriginatedMessage {
@@ -52,7 +50,6 @@ message ServerOriginatedMessage {
     GetLocalStateResponse get_local_state_response = 110;
     RunProcessResponse run_process_response = 111;
     InstallResponse install_response = 113;
-    CheckForUpdatesResponse check_for_updates_response = 114;
     HistoryQueryResponse history_query_response = 115;
     PingResponse ping_response = 119;
     GetPlatformInfoResponse get_platform_info_response = 125;
@@ -60,7 +57,7 @@ message ServerOriginatedMessage {
     Notification notification = 1000;
   }
 
-  reserved 116, 117, 118, 120, 122, 123, 124, 155;
+  reserved 114, 116, 117, 118, 120, 122, 123, 124, 155;
 }
 
 // Basic types
@@ -343,23 +340,6 @@ message OpenInExternalApplicationRequest {
   optional string url = 1;
 }
 
-/// Updating actions
-
-// check for updates and return the latest version
-message CheckForUpdatesRequest {}
-
-message CheckForUpdatesResponse {
-  optional bool is_update_available = 1;
-  optional string version = 2;
-}
-
-// update to the latest version available
-message UpdateApplicationRequest {
-  optional bool ignore_rollout = 1;
-  optional bool interactive = 2;
-  optional bool relaunch_dashboard = 3;
-}
-
 /// Actions
 
 enum ActionAvailability {
@@ -494,10 +474,11 @@ enum NotificationType {
   NOTIFICATION_TYPE_NOTIFY_ON_KEYBINDING_PRESSED = 6;
   NOTIFICATION_TYPE_NOTIFY_ON_FOCUS_CHANGED = 7;
   NOTIFICATION_TYPE_NOTIFY_ON_HISTORY_UPDATED = 8;
-  NOTIFICATION_TYPE_NOTIFY_ON_APPLICATION_UPDATE_AVAILABLE = 9;
   NOTIFICATION_TYPE_NOTIFY_ON_LOCAL_STATE_CHANGED = 10;
   NOTIFICATION_TYPE_NOTIFY_ON_EVENT = 11;
   NOTIFICATION_TYPE_NOTIFY_ON_ACCESSIBILITY_CHANGE = 12;
+
+  reserved 9;
 }
 
 message Notification {

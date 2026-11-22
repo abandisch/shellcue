@@ -12,10 +12,7 @@ use clap::error::{
 use crossterm::style::Stylize;
 use eyre::Result;
 use fig_log::get_log_level_max;
-use fig_util::{
-    CLI_BINARY_NAME,
-    PRODUCT_NAME,
-};
+use fig_util::PRODUCT_NAME;
 use tracing::metadata::LevelFilter;
 
 #[global_allocator]
@@ -45,11 +42,7 @@ fn main() -> Result<ExitCode> {
                 });
 
             if unknown_arg {
-                eprintln!(
-                    "\nThis command may be valid in newer versions of the {PRODUCT_NAME} CLI. Try running {} {}.",
-                    CLI_BINARY_NAME.magenta(),
-                    "update".magenta()
-                );
+                eprintln!("\nThis command may be valid in newer versions of the {PRODUCT_NAME} CLI.");
             }
 
             return Ok(ExitCode::from(err.exit_code().try_into().unwrap_or(2)));

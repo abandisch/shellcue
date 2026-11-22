@@ -44,19 +44,7 @@
 
 ## ⚡️ Installation
 
-- **macOS**:
-  - **DMG**: [Download now](https://desktop-release.q.us-east-1.amazonaws.com/latest/Amazon%20Q.dmg)
-  - **Homebrew**: `brew install amazon-q`
-- **Linux**:
-  - [Ubuntu/Debian](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-installing.html#command-line-installing-ubuntu)
-  - [AppImage](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-installing.html#command-line-installing-appimage)
-  - [Alternative Linux builds](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-installing.html#command-line-installing-alternative-linux)
-- **Windows**:
-  - Follow the discussions for
-    [Windows](https://github.com/aws/q-command-line-discussions/discussions/15)
-  - Or [use it on Windows with WSL](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-installing.html#command-line-installing-windows)
-- **Remote machines**
-  - [Autocomplete in SSH](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-autocomplete-ssh.html)
+ShellCue is built from source; build instructions will follow.
 
 
 ## 🚀 Start Contributing
@@ -225,8 +213,8 @@ Several projects live here:
 
 Other folder to be aware of
 
-- [`build-scripts/`](build-scripts/) - Contains all python scripts to build,
-  sign, and test the project on macOS and Linux
+- [`build-scripts/`](build-scripts/) - Contains all python scripts to build
+  and test the project on macOS and Linux
 - [`crates/`](crates/) - Contains all internal rust crates
 - [`packages/`](packages/) - Contains all internal npm packages
 - [`proto/`](proto/) -

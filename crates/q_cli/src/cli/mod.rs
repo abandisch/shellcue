@@ -11,11 +11,9 @@ mod init;
 mod installation;
 mod integrations;
 pub mod internal;
-mod issue;
 mod settings;
 mod theme;
 mod uninstall;
-mod update;
 
 use std::io::{
     Write as _,
@@ -124,9 +122,9 @@ pub enum CliRootCommands {
         #[arg(long, short = 'y')]
         no_confirm: bool,
     },
-    /// Update the Amazon Q application
+    /// Not available yet
     #[command(alias("upgrade"))]
-    Update(update::UpdateArgs),
+    Update,
     /// Run diagnostic tests
     #[command(alias("diagnostics"))]
     Diagnostic(diagnostics::DiagnosticArgs),
@@ -134,8 +132,6 @@ pub enum CliRootCommands {
     Init(init::InitArgs),
     /// Get or set theme
     Theme(theme::ThemeArgs),
-    /// Create a new Github issue
-    Issue(issue::IssueArgs),
     /// Fix and diagnose common issues
     Doctor(doctor::DoctorArgs),
     /// Generate CLI completion spec
@@ -243,7 +239,10 @@ impl Cli {
                     installation::install_cli(args.into(), no_confirm, force, global).await
                 },
                 CliRootCommands::Uninstall { no_confirm } => uninstall::uninstall_command(no_confirm).await,
-                CliRootCommands::Update(args) => args.execute().await,
+                CliRootCommands::Update => {
+                    println!("Updating is not available in this build yet.");
+                    Ok(ExitCode::SUCCESS)
+                },
                 CliRootCommands::Diagnostic(args) => args.execute().await,
                 CliRootCommands::Init(args) => args.execute().await,
                 CliRootCommands::Doctor(args) => args.execute().await,
@@ -251,7 +250,6 @@ impl Cli {
                 CliRootCommands::Theme(theme_args) => theme_args.execute().await,
                 CliRootCommands::Settings(settings_args) => settings_args.execute(&cli_context).await,
                 CliRootCommands::Debug(debug_subcommand) => debug_subcommand.execute().await,
-                CliRootCommands::Issue(args) => args.execute().await,
                 CliRootCommands::Completion(args) => args.execute(),
                 CliRootCommands::Internal(internal_subcommand) => internal_subcommand.execute().await,
                 CliRootCommands::Launch => launch_dashboard(false).await,
@@ -375,7 +373,6 @@ async fn launch_dashboard(help_fallback: bool) -> Result<ExitCode> {
     launch_fig_desktop(LaunchArgs {
         wait_for_socket: true,
         open_dashboard: true,
-        immediate_update: true,
         verbose: true,
     })?;
 

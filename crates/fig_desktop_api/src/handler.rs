@@ -146,7 +146,6 @@ where
         Some(submessage) => {
             use ClientOriginatedSubMessage::{
                 AppendToFileRequest,
-                CheckForUpdatesRequest,
                 ContentsOfDirectoryRequest,
                 CreateDirectoryRequest,
                 DestinationOfSymbolicLinkRequest,
@@ -165,7 +164,6 @@ where
                 ReadFileRequest,
                 RunProcessRequest,
                 UpdateApplicationPropertiesRequest,
-                UpdateApplicationRequest,
                 UpdateLocalStateRequest,
                 UpdateSettingsPropertyRequest,
                 WindowFocusRequest,
@@ -212,8 +210,6 @@ where
                 // other
                 OpenInExternalApplicationRequest(request) => other::open_in_external_application(request).await,
                 PingRequest(request) => other::ping(request),
-                UpdateApplicationRequest(request) => update::update_application(request).await,
-                CheckForUpdatesRequest(request) => update::check_for_updates(request).await,
                 GetPlatformInfoRequest(request) => platform::get_platform_info(request, &ctx).await,
             }
         },

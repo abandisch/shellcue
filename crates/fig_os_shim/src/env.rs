@@ -195,20 +195,12 @@ impl Env {
         self.get_os("Q_INIT_SNAPSHOT_TEST").is_some()
     }
 
-    pub fn q_desktop_release_url(&self) -> Result<String, VarError> {
-        self.get("Q_DESKTOP_RELEASE_URL")
-    }
-
     pub fn q_backend(&self) -> Result<String, VarError> {
         self.get("Q_BACKEND")
     }
 
     pub fn q_prompt_offset_workaround(&self) -> Result<String, VarError> {
         self.get("Q_PROMPT_OFFSET_WORKAROUND")
-    }
-
-    pub fn q_custom_cert(&self) -> Result<String, VarError> {
-        self.get("Q_CUSTOM_CERT")
     }
 
     pub fn has_q_parent(&self) -> bool {

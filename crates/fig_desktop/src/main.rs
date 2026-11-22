@@ -10,7 +10,6 @@ pub mod protocol;
 mod remote_ipc;
 mod request;
 mod tray;
-mod update;
 mod utils;
 mod webview;
 
@@ -142,7 +141,7 @@ async fn main() -> ExitCode {
     }
 
     let ctx = Context::new();
-    install::run_install(Arc::clone(&ctx), cli.ignore_immediate_update).await;
+    install::run_install(Arc::clone(&ctx)).await;
 
     #[cfg(target_os = "linux")]
     {

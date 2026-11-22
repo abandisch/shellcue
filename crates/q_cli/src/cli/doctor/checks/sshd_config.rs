@@ -3,7 +3,6 @@ use std::borrow::Cow;
 use async_trait::async_trait;
 use eyre::Context;
 use fig_util::CLI_BINARY_NAME;
-use fig_util::url::AUTOCOMPLETE_SSH_WIKI;
 use owo_colors::OwoColorize;
 use regex::Regex;
 
@@ -45,8 +44,6 @@ impl DoctorCheck<()> for SshdConfigCheck {
                 format!("{CLI_BINARY_NAME} doctor").bold()
             )
             .into(),
-            "".into(),
-            format!("See {AUTOCOMPLETE_SSH_WIKI} for more info").into(),
         ];
 
         let sshd_config_path = "/etc/ssh/sshd_config";
@@ -54,9 +51,7 @@ impl DoctorCheck<()> for SshdConfigCheck {
         let sshd_config = match std::fs::read_to_string(sshd_config_path).context("Could not read sshd_config") {
             Ok(config) => config,
             Err(_err) if fig_os_shim::Env::new().q_parent().is_ok() => {
-                return Err(DoctorError::warning(format!(
-                    "Could not read sshd_config, check {AUTOCOMPLETE_SSH_WIKI} for more info",
-                )));
+                return Err(DoctorError::warning("Could not read sshd_config"));
             },
             Err(err) => {
                 return Err(DoctorError::Error {

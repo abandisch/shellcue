@@ -16,10 +16,7 @@ use time::OffsetDateTime;
 
 #[cfg(unix)]
 use crate::RUNTIME_DIR_NAME;
-use crate::env_var::{
-    Q_BUNDLE_METADATA_PATH,
-    Q_PARENT,
-};
+use crate::env_var::Q_PARENT;
 use crate::linux::PACKAGE_NAME;
 use crate::system_info::{
     in_cloudshell,
@@ -421,18 +418,6 @@ pub fn manifest_path() -> Result<PathBuf> {
     }
 }
 
-/// The path to the metadata.json file included with a Linux desktop bundle.
-///
-/// This should only be called from the desktop binary since AppImage bundles can only access the
-/// resources directory from the AppImage mount, known only by the AppImage itself (ie, the desktop
-/// binary).
-pub fn bundle_metadata_path<Ctx: EnvProvider + PlatformProvider>(ctx: &Ctx) -> Result<PathBuf> {
-    if let Some(path) = ctx.env().get_os(Q_BUNDLE_METADATA_PATH) {
-        return Ok(path.into());
-    }
-    Ok(resources_path_ctx(ctx)?.join("bundle-metadata").join("metadata.json"))
-}
-
 /// The path to the fig settings file
 ///
 /// - Linux: `$HOME/.local/share/{data_dir}/settings.json`
@@ -440,15 +425,6 @@ pub fn bundle_metadata_path<Ctx: EnvProvider + PlatformProvider>(ctx: &Ctx) -> R
 /// - Windows: `%LOCALAPPDATA%\{data_dir}\settings.json`
 pub fn settings_path() -> Result<PathBuf> {
     Ok(fig_data_dir()?.join("settings.json"))
-}
-
-/// The path to the lock file used to indicate that the app is updating
-///
-/// - Linux: `$HOME/.local/share/{data_dir}/update.lock`
-/// - MacOS: `$HOME/Library/Application Support/{data_dir}/update.lock`
-/// - Windows: `%LOCALAPPDATA%\{data_dir}\update.lock`
-pub fn update_lock_path(ctx: &impl FsProvider) -> Result<PathBuf> {
-    Ok(fig_data_dir_ctx(ctx)?.join("update.lock"))
 }
 
 /// The path to the .zip bundle containing the GNOME Shell Extension identified by
@@ -531,7 +507,6 @@ mod linux_tests {
 
     #[test]
     fn all_paths() {
-        let ctx = Context::new();
         assert!(home_dir().is_ok());
         #[cfg(unix)]
         assert!(home_local_bin().is_ok());
@@ -545,7 +520,6 @@ mod linux_tests {
         assert!(backups_dir().is_ok());
         assert!(logs_dir().is_ok());
         assert!(settings_path().is_ok());
-        assert!(update_lock_path(&ctx).is_ok());
     }
 }
 
@@ -725,14 +699,6 @@ mod tests {
         linux!(settings_path(), @"$HOME/.local/share/amazon-q/settings.json");
         macos!(settings_path(), @"$HOME/Library/Application Support/amazon-q/settings.json");
         windows!(settings_path(), @r"C:\Users\$USER\AppData\Local\AmazonQ\settings.json");
-    }
-
-    #[test]
-    fn snapshot_update_lock_path() {
-        let ctx = Context::new();
-        linux!(update_lock_path(&ctx), @"$HOME/.local/share/amazon-q/update.lock");
-        macos!(update_lock_path(&ctx), @"$HOME/Library/Application Support/amazon-q/update.lock");
-        windows!(update_lock_path(&ctx), @r"C:\Users\$USER\AppData\Local\AmazonQ\update.lock");
     }
 
     #[test]

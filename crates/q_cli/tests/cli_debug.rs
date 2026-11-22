@@ -19,15 +19,6 @@ fn debug_verify_codesign() -> Result<()> {
 }
 
 #[test]
-fn debug_get_index() -> Result<()> {
-    cli()
-        .args(["debug", "get-index", "stable"])
-        .assert()
-        .code(predicate::in_iter([0, 1]));
-    Ok(())
-}
-
-#[test]
 fn debug_list_intellij_variants() -> Result<()> {
     cli()
         .args(["debug", "list-intellij-variants"])

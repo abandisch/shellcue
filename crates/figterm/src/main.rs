@@ -10,7 +10,6 @@ pub mod logger;
 mod message;
 pub mod pty;
 pub mod term;
-pub mod update;
 
 use std::env;
 #[cfg(unix)]
@@ -474,8 +473,6 @@ fn launch_shell(command: Option<&[String]>) -> Result<()> {
 fn figterm_main(command: Option<&[String]>) -> Result<()> {
     fig_settings::settings::init_global().ok();
 
-    let context = Context::new();
-
     let session_id = match std::env::var("MOCK_QTERM_SESSION_ID") {
         Ok(id) => id,
         Err(_) => uuid::Uuid::new_v4().simple().to_string(),
@@ -549,8 +546,6 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
         .build()?;
 
     let runtime_result = runtime.block_on(async {
-        update::check_for_update(&context);
-
         terminal.set_raw_mode()?;
 
         let (main_loop_tx, main_loop_rx) = flume::bounded::<MainLoopEvent>(16);
