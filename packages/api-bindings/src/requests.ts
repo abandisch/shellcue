@@ -28,9 +28,6 @@ import {
   CheckForUpdatesRequest,
   CheckForUpdatesRequestSchema,
   CheckForUpdatesResponse,
-  CodewhispererListCustomizationRequest,
-  CodewhispererListCustomizationRequestSchema,
-  CodewhispererListCustomizationResponse,
   ContentsOfDirectoryRequest,
   ContentsOfDirectoryRequestSchema,
   ContentsOfDirectoryResponse,
@@ -500,38 +497,6 @@ export async function sendPingRequest(
           default:
             reject(
               Error(`Invalid response '${response?.case}' for 'PingRequest'`),
-            );
-        }
-      },
-    );
-  });
-}
-
-export async function sendCodewhispererListCustomizationRequest(
-  request: Omit<
-    CodewhispererListCustomizationRequest,
-    "$typeName" | "$unknown"
-  >,
-): Promise<CodewhispererListCustomizationResponse> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      {
-        case: "codewhispererListCustomizationRequest",
-        value: create(CodewhispererListCustomizationRequestSchema, request),
-      },
-      (response) => {
-        switch (response?.case) {
-          case "codewhispererListCustomizationResponse":
-            resolve(response.value);
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'CodewhispererListCustomizationRequest'`,
-              ),
             );
         }
       },
