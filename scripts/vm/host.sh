@@ -181,7 +181,7 @@ run_logged() {
     cmdline="$(printf '%q ' "$@")"
     printf 'command: %s\n' "${cmdline% }" | tee -a "$log"
     set +e
-    ( set -e; "$@" ) 2>&1 | sanitize | tee -a "$log"
+    ( set -e; "$@" ) 3>>"$log" 2>&1 | sanitize | tee -a "$log"
     statuses=("${PIPESTATUS[@]}")
     set -e
     rc="${statuses[0]}"
@@ -197,6 +197,19 @@ run_logged() {
     return "$rc"
 }
 
+# Multipass spinners survive sanitize as debris, so output goes to fd 3 and reaches stdout only on failure; fd 3 must be open (run_logged points it at the log).
+run_quiet() {
+    local msg="$1" out rc=0
+    shift
+    printf '%s\n' "$msg"
+    out="$("$@" 2>&1 3>&-)" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        [ -z "$out" ] || printf '%s\n' "$out" | sanitize
+        return "$rc"
+    fi
+    [ -z "$out" ] || printf '%s\n' "$out" | sanitize >&3
+}
+
 create_body() {
     if vm_exists; then
         printf 'VM %s already exists; doing nothing.\n' "$VM_NAME"
@@ -204,7 +217,7 @@ create_body() {
         check_no_mounts
         return 0
     fi
-    multipass launch "$VM_IMAGE" --name "$VM_NAME" --cpus "$VM_CPUS" --memory "$VM_MEMORY" --disk "$VM_DISK"
+    run_quiet "creating VM $VM_NAME (about two minutes; longer if the image must be downloaded)..." multipass launch "$VM_IMAGE" --name "$VM_NAME" --cpus "$VM_CPUS" --memory "$VM_MEMORY" --disk "$VM_DISK"
     vm_exists || die "multipass launch returned but $VM_NAME does not exist"
     printf '%s\n' "$VM_INFO" | sanitize
     check_no_mounts
@@ -323,7 +336,7 @@ cmd_info() {
 
 cmd_stop() {
     require_multipass
-    multipass stop "$VM_NAME"
+    run_quiet "stopping VM $VM_NAME..." multipass stop "$VM_NAME"
 }
 
 cmd_destroy() {
@@ -338,7 +351,7 @@ cmd_destroy() {
         die "set SHELLCUE_VM_CONFIRM=destroy to proceed"
     fi
     printf 'This deletes the Multipass instance "%s" and everything inside it (tools, checkout, build output).\n' "$VM_NAME"
-    multipass delete "$VM_NAME" 2>&1 | sanitize
+    run_quiet "deleting VM $VM_NAME..." multipass delete "$VM_NAME" 3>/dev/null
     printf 'Deleted %s. Its name stays taken, and Multipass may keep its disk, until you run "multipass purge" yourself;\n' "$VM_NAME"
     printf 'purge removes ALL deleted instances, which is why this script does not run it.\n'
 }

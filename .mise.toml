@@ -1,7 +1,6 @@
-# Keep in step: node and pnpm with package.json, rust with rust-toolchain.toml, all four tools with scripts/vm/guest.sh.
+# Keep in step: node and pnpm with package.json; node, pnpm and protoc with scripts/vm/guest.sh.
 [tools]
 node = "26.13.0"
 pnpm = "12.17.0"
 protoc = "36.2"
 python = "3.11"
-rust = "1.87.0"

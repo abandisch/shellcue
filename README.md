@@ -135,7 +135,7 @@ echo 'mise activate fish | source' >> ~/.config/fish/config.fish
 
 Do not install pnpm separately: the repo refuses to run with any pnpm version other than the one pinned in `package.json`.
 
-Install the pinned Node, pnpm, protoc, Python and Rust versions using:
+Install the pinned Node, pnpm, protoc and Python versions (Rust is pinned by `rust-toolchain.toml` and installed by rustup) using:
 
 ```shell
 mise trust

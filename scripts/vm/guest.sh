@@ -12,7 +12,7 @@ DL="$TOOLS/dl"
 ENV_FILE="$TOOLS/env.sh"
 SRC="$HOME/shellcue"
 
-# Change together with .mise.toml, package.json (packageManager) and rust-toolchain.toml; enter_src enforces it.
+# Change together with .mise.toml (node, pnpm, protoc), package.json (packageManager) and rust-toolchain.toml (Rust); enter_src enforces it.
 NODE_VERSION="26.13.0"
 PNPM_VERSION="12.17.0"
 PROTOC_VERSION="36.2"
@@ -26,7 +26,7 @@ APT_PACKAGES=(
     build-essential pkg-config jq curl wget zstd cmake clang libssl-dev libgtk-3-dev
     libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev libwebkit2gtk-4.1-dev
     libjavascriptcoregtk-4.1-dev valac libibus-1.0-dev libglib2.0-dev sqlite3 libxdo-dev
-    libfuse2t64 git ca-certificates xz-utils unzip gpgv zsh fish shellcheck
+    libfuse2t64 git ca-certificates xz-utils zip unzip gpgv zsh fish shellcheck
 )
 
 STEPS="tools clone lock fetch web rust-check rust-test info"
@@ -42,7 +42,8 @@ Runs inside the ShellCue build VM. Steps:
   fetch                    cargo fetch --locked and pnpm install --frozen-lockfile --ignore-scripts
   web                      pnpm run build, then pnpm run test:ci
   rust-check               cargo check --locked --workspace --all-targets --exclude fig_desktop-fuzz
-  rust-test                cargo test --locked --no-fail-fast --workspace --lib --bins --test '*' --exclude fig_desktop-fuzz
+  rust-test                cargo test --locked --no-fail-fast --workspace --lib --bins --test '*' --exclude fig_desktop-fuzz,
+                           with SSH_CLIENT, SSH_CONNECTION and SSH_TTY unset
   info                     OS, arch, tool versions, disk free, checked-out commit, git status
 
 Each step prints "==> step: <name>" first and, as its last line, "==> ok: <name> (<N>s)" on success
@@ -317,7 +318,6 @@ check_pins() {
     require_pin .mise.toml 'node = ' "\"$NODE_VERSION\""
     require_pin .mise.toml 'pnpm = ' "\"$PNPM_VERSION\""
     require_pin .mise.toml 'protoc = ' "\"$PROTOC_VERSION\""
-    require_pin .mise.toml 'rust = ' "\"$RUST_TOOLCHAIN\""
 }
 
 enter_src() {
@@ -591,8 +591,13 @@ step_rust_test() {
     require_no_args "$@"
     load_env
     enter_src
-    local rc=0
-    timeout --kill-after=60 5400 \
+    local rc=0 v set_vars=()
+    # fig_os_shim Env::in_ssh treats any of these as a remote session, which breaks directories::linux_tests::all_paths.
+    for v in SSH_CLIENT SSH_CONNECTION SSH_TTY; do
+        [[ -z "${!v+x}" ]] || set_vars+=("$v")
+    done
+    printf '    SSH session variables set (unset for cargo test): %s\n' "${set_vars[*]:-none}"
+    timeout --kill-after=60 5400 env -u SSH_CLIENT -u SSH_CONNECTION -u SSH_TTY \
         cargo test --locked --no-fail-fast --workspace --lib --bins --test '*' --exclude fig_desktop-fuzz || rc=$?
     if [[ $rc -eq 124 || $rc -eq 137 ]]; then
         printf '    the test run exceeded 90 minutes and was stopped (timeout exit status %s)\n' "$rc"
