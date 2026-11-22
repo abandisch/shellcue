@@ -180,8 +180,6 @@ pub struct CurrentEnvironment {
     pub in_ssh: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub in_ci: bool,
-    #[serde(skip_serializing_if = "is_false")]
-    pub in_wsl: bool,
 }
 
 impl CurrentEnvironment {
@@ -218,7 +216,6 @@ impl CurrentEnvironment {
 
         let in_ssh = fig_util::system_info::in_ssh();
         let in_ci = fig_util::system_info::in_ci();
-        let in_wsl = fig_util::system_info::in_wsl();
 
         CurrentEnvironment {
             shell_path,
@@ -230,7 +227,6 @@ impl CurrentEnvironment {
             install_method,
             in_ssh,
             in_ci,
-            in_wsl,
         }
     }
 }

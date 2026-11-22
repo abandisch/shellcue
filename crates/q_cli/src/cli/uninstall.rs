@@ -81,11 +81,6 @@ async fn uninstall_linux_full(ctx: std::sync::Arc<fig_os_shim::Context>) -> Resu
     Ok(())
 }
 
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "linux"))))]
-async fn uninstall() -> Result<()> {
-    eyre::bail!("Guided uninstallation is not supported on this platform. Please uninstall manually.");
-}
-
 // #[cfg(target_os = "linux")]
 // mod linux {
 //     use eyre::Result;

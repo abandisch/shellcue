@@ -529,9 +529,6 @@ pub fn build_autocomplete(
         } else if #[cfg(target_os = "macos")] {
             use tao::platform::macos::WindowBuilderExtMacOS;
             window_builder = window_builder.with_resizable(false).with_has_shadow(false).with_visible(false);
-        } else if #[cfg(target_os = "windows")] {
-            use tao::platform::windows::WindowBuilderExtWindows;
-            window_builder = window_builder.with_resizable(false).with_skip_taskbar(true).with_visible(false);
         }
     );
 

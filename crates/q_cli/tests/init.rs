@@ -1,13 +1,10 @@
-#[cfg(not(windows))]
 use std::io::Write;
-#[cfg(not(windows))]
 use std::process::{
     Command,
     Stdio,
 };
 
 use anstream::println;
-#[cfg(not(windows))]
 use assert_cmd::prelude::*;
 use eyre::Context;
 use fig_util::consts::CLI_CRATE_NAME;
@@ -17,7 +14,6 @@ use paste::paste;
 macro_rules! init_test {
     ($shell:expr, $stage:expr, $file:expr, [$exe:expr, $($arg:expr),*]) => {
         paste! {
-            #[cfg(not(windows))]
             fn [<init_output_ $shell _ $stage _ $file>]() -> Result<String, Box<dyn std::error::Error>> {
                 let mut cmd = Command::cargo_bin("q_cli").unwrap();
                 cmd.arg("init").arg($shell).arg($stage).arg("--rcfile").arg($file);
@@ -27,7 +23,6 @@ macro_rules! init_test {
             }
 
             #[test]
-            #[cfg(not(windows))]
             fn [<init_snapshot_ $shell _ $stage _ $file>]() -> Result<(), Box<dyn std::error::Error>> {
                 let init = [<init_output_ $shell _ $stage _ $file>]()?;
 
@@ -37,7 +32,6 @@ macro_rules! init_test {
             }
 
             #[test]
-            #[cfg(not(windows))]
             fn [<init_lint_ $shell _ $stage _ $file>]() -> Result<(), Box<dyn std::error::Error>> {
                 if $exe == "shellcheck" && SKIP_SHELLCHECK_TESTS {
                     return Ok(());

@@ -38,7 +38,6 @@ use anyhow::{
     anyhow,
 };
 use bytes::BytesMut;
-use cfg_if::cfg_if;
 use clap::Parser;
 use cli::Cli;
 use fig_log::{
@@ -116,8 +115,6 @@ use crate::message::{
 };
 #[cfg(unix)]
 use crate::pty::unix::open_pty;
-#[cfg(windows)]
-use crate::pty::win::open_pty;
 use crate::pty::{
     AsyncMasterPtyExt,
     CommandBuilder,
@@ -166,7 +163,6 @@ fn shell_state_to_context(shell_state: &ShellState) -> local::ShellContext {
             .shell_path
             .clone()
             .map(|path| path.display().to_string()),
-        wsl_distro: shell_state.local_context.wsl_distro.clone(),
         current_working_directory: shell_state
             .local_context
             .current_working_directory
@@ -184,27 +180,6 @@ fn shell_state_to_context(shell_state: &ShellState) -> local::ShellContext {
         preexec: Some(shell_state.preexec),
         osc_lock: Some(shell_state.osc_lock),
         alias: SHELL_ALIAS.lock().unwrap().clone(),
-    }
-}
-
-#[allow(clippy::needless_return)]
-fn get_cursor_coordinates(terminal: &dyn Terminal) -> Option<TerminalCursorCoordinates> {
-    cfg_if! {
-        if #[cfg(target_os = "windows")] {
-            use term::cast;
-
-            let coordinate = terminal.get_cursor_coordinate().ok()?;
-            let screen_size = terminal.get_screen_size().ok()?;
-            return Some(TerminalCursorCoordinates {
-                x: cast(coordinate.cols).ok()?,
-                y: cast(coordinate.rows).ok()?,
-                xpixel: cast(screen_size.xpixel).ok()?,
-                ypixel: cast(screen_size.ypixel).ok()?,
-            });
-        } else {
-            let _terminal = terminal;
-            return None;
-        }
     }
 }
 
@@ -477,9 +452,6 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
         let event_sender = EventHandler::new(remote_sender.clone(), history_sender, main_loop_tx.clone());
         let mut term = alacritty_terminal::Term::new(size, event_sender, 1, session_id.clone());
 
-        #[cfg(target_os = "windows")]
-        term.set_windows_delay_end_prompt(true);
-
         let mut write_buffer: Vec<u8> = vec![0; BUFFER_SIZE];
 
         let mut key_interceptor = KeyInterceptor::new();
@@ -494,8 +466,6 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
         let key_code_encode_mode = KeyCodeEncodeModes {
             #[cfg(unix)]
             encoding: KeyboardEncoding::Xterm,
-            #[cfg(windows)]
-            encoding: KeyboardEncoding::Win32,
             application_cursor_keys: false,
             newline_mode: false,
         };
@@ -696,17 +666,8 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                         Ok(size) => {
                             trace!("Read {size} bytes from master");
 
-                            let old_delayed_count = term.get_delayed_events_count();
                             for byte in &write_buffer[..size] {
                                 processor.advance(&mut term, *byte);
-                            }
-
-                            let delayed_count = term.get_delayed_events_count();
-
-                            // We have delayed events and did not receive delayed events. Flush all
-                            // delayed events now.
-                            if delayed_count > 0 && delayed_count == old_delayed_count {
-                                term.flush_delayed_events();
                             }
 
                             stdout.write_all(&write_buffer[..size]).await?;
@@ -717,8 +678,7 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                             }
 
                             if can_send_edit_buffer(&term) {
-                                let cursor_coordinates = get_cursor_coordinates(&terminal);
-                                if let Err(err) = send_edit_buffer(&term, &remote_sender, cursor_coordinates).await {
+                                if let Err(err) = send_edit_buffer(&term, &remote_sender, None).await {
                                     warn!("Failed to send edit buffer: {err}");
                                 }
                             }
@@ -773,8 +733,7 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                 _ = edit_buffer_interval.tick() => {
                     let send_eb = INSERTION_LOCKED_AT.read().unwrap().is_some();
                     if send_eb && can_send_edit_buffer(&term) {
-                        let cursor_coordinates = get_cursor_coordinates(&terminal);
-                        if let Err(err) = send_edit_buffer(&term, &remote_sender, cursor_coordinates).await {
+                        if let Err(err) = send_edit_buffer(&term, &remote_sender, None).await {
                             warn!(%err, "Failed to send edit buffer");
                         }
                     }

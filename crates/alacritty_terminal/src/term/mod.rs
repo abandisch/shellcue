@@ -40,7 +40,6 @@ use crate::ansi::{
     StandardCharset,
 };
 use crate::event::{
-    DelayedEvent,
     Event,
     EventListener,
 };
@@ -181,8 +180,6 @@ pub struct ShellContext {
     pub shell: Option<String>,
     /// The full path of the current shell's executable
     pub shell_path: Option<PathBuf>,
-    /// Current wsl distro
-    pub wsl_distro: Option<String>,
     /// Current working directory
     pub current_working_directory: Option<PathBuf>,
     /// The current session id
@@ -283,12 +280,6 @@ pub struct Term<T> {
 
     /// State tracked by figterm to determine the current state of the shell
     shell_state: ShellState,
-
-    /// Delay and manually trigger end_prompt/new_cmd on windows.
-    windows_delay_end_prompt: bool,
-
-    /// Delayed events that should eventually be manually triggered.
-    delayed_events: Vec<DelayedEvent>,
 }
 
 impl<T> Term<T> {
@@ -328,8 +319,6 @@ impl<T> Term<T> {
             title: None,
             title_stack: Vec::new(),
             shell_state,
-            windows_delay_end_prompt: false,
-            delayed_events: Vec::new(),
         }
     }
 
@@ -785,21 +774,12 @@ impl<T> Term<T> {
         }
     }
 
-    pub fn set_windows_delay_end_prompt(&mut self, delay_end_prompt: bool) {
-        self.windows_delay_end_prompt = delay_end_prompt;
-    }
-
-    fn end_prompt_internal(&mut self, force: bool) {
-        if self.windows_delay_end_prompt && !force {
-            self.delayed_events.push(DelayedEvent::EndPrompt);
-            return;
-        }
-
+    fn end_prompt_internal(&mut self) {
         trace!("Fig end prompt");
         self.grid.cursor.template.fig_flags.remove(FigFlags::IN_PROMPT);
     }
 
-    fn new_cmd_internal(&mut self, force: bool, session_id: Option<&str>)
+    fn new_cmd_internal(&mut self, session_id: Option<&str>)
     where
         T: EventListener,
     {
@@ -816,11 +796,6 @@ impl<T> Term<T> {
                     return;
                 }
             }
-        }
-
-        if self.windows_delay_end_prompt && !force {
-            self.delayed_events.push(DelayedEvent::NewCmd);
-            return;
         }
 
         trace!("Fig new command");
@@ -853,27 +828,6 @@ impl<T> Term<T> {
                 .send_event(Event::CommandInfo(&command), &self.shell_state);
             trace!("Command info event sent");
         }
-    }
-
-    pub fn get_delayed_events_count(&self) -> usize {
-        self.delayed_events.len()
-    }
-
-    pub fn flush_delayed_events(&mut self) -> Vec<DelayedEvent>
-    where
-        T: EventListener,
-    {
-        while let Some(event) = self.delayed_events.pop() {
-            match event {
-                DelayedEvent::EndPrompt => {
-                    self.end_prompt_internal(true);
-                },
-                DelayedEvent::NewCmd => {
-                    self.new_cmd_internal(true, None);
-                },
-            }
-        }
-        self.delayed_events.clone()
     }
 }
 
@@ -1717,7 +1671,7 @@ impl<T: EventListener> Handler for Term<T> {
 
     #[inline]
     fn new_cmd(&mut self, session_id: &str) {
-        self.new_cmd_internal(false, Some(session_id));
+        self.new_cmd_internal(Some(session_id));
     }
 
     #[inline]
@@ -1736,7 +1690,7 @@ impl<T: EventListener> Handler for Term<T> {
         if self.shell_state.osc_lock {
             return;
         }
-        self.end_prompt_internal(false);
+        self.end_prompt_internal();
     }
 
     #[inline]
@@ -1784,14 +1738,6 @@ impl<T: EventListener> Handler for Term<T> {
             return;
         }
         self.shell_state.get_mut_context().shell_path = Some(path.to_path_buf());
-    }
-
-    #[inline]
-    fn wsl_distro(&mut self, distro: &str) {
-        if self.shell_state.osc_lock {
-            return;
-        }
-        self.shell_state.get_mut_context().wsl_distro = Some(distro.trim().into());
     }
 
     #[inline]

@@ -39,9 +39,6 @@ target_triple_uname() {
         *darwin*)
             echo "Darwin"
             ;;
-        *windows*)
-            echo "Windows"
-            ;;
         *)
             log_error "Could not determine OS."
             return 1

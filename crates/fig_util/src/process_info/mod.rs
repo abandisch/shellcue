@@ -4,7 +4,7 @@ use std::{
     str,
 };
 
-use cfg_if::cfg_if;
+use nix::libc::pid_t;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -15,14 +15,6 @@ pub use linux::*;
 mod macos;
 // #[cfg(target_os = "macos")]
 // pub use macos::*;
-
-#[cfg(target_os = "windows")]
-mod windows;
-
-#[cfg(target_os = "freebsd")]
-mod freebsd;
-#[cfg(target_os = "freebsd")]
-pub use self::freebsd::*;
 
 macro_rules! pid_decl {
     ($typ:ty) => {
@@ -55,25 +47,17 @@ macro_rules! pid_decl {
     };
 }
 
-cfg_if! {
-    if #[cfg(unix)] {
-        use nix::libc::pid_t;
+pid_decl!(pid_t);
 
-        pid_decl!(pid_t);
+impl From<nix::unistd::Pid> for Pid {
+    fn from(pid: nix::unistd::Pid) -> Self {
+        Pid(pid.as_raw())
+    }
+}
 
-        impl From<nix::unistd::Pid> for Pid {
-            fn from(pid: nix::unistd::Pid) -> Self {
-                Pid(pid.as_raw())
-            }
-        }
-
-        impl From<Pid> for nix::unistd::Pid {
-            fn from(pid: Pid) -> Self {
-                nix::unistd::Pid::from_raw(pid.0)
-            }
-        }
-    } else if #[cfg(windows)] {
-        pid_decl!(u32);
+impl From<Pid> for nix::unistd::Pid {
+    fn from(pid: Pid) -> Self {
+        nix::unistd::Pid::from_raw(pid.0)
     }
 }
 

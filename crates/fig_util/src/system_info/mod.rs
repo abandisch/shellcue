@@ -43,13 +43,6 @@ pub enum OSVersion {
         #[serde(flatten)]
         os_release: Option<linux::OsRelease>,
     },
-    Windows {
-        name: String,
-        build: u32,
-    },
-    FreeBsd {
-        version: String,
-    },
 }
 
 impl OSVersion {
@@ -64,22 +57,6 @@ impl OSVersion {
                 }
             },
             OSVersion::Linux { .. } => SupportLevel::Supported,
-            OSVersion::Windows { build, .. } => match build {
-                // Only Windows 11 is fully supported at the moment
-                build if *build >= 22000 => SupportLevel::Supported,
-                // Windows 10 development has known issues
-                build if *build >= 10240 => SupportLevel::InDevelopment {
-                    info: Some(
-                        "Since support for Windows 10 is still in progress,\
-Autocomplete only works in Git Bash with the default prompt.\
-Please upgrade to Windows 11 or wait for a fix while we work this issue out."
-                            .into(),
-                    ),
-                },
-                // Earlier versions of Windows are not supported
-                _ => SupportLevel::Unsupported,
-            },
-            OSVersion::FreeBsd { .. } => SupportLevel::InDevelopment { info: None },
         }
     }
 
@@ -142,8 +119,6 @@ impl std::fmt::Display for OSVersion {
                 Some(distro_name) => write!(f, "Linux {kernel_version} - {distro_name}"),
                 None => write!(f, "Linux {kernel_version}"),
             },
-            OSVersion::Windows { name, build } => write!(f, "{name} (or newer) - build {build}"),
-            OSVersion::FreeBsd { version } => write!(f, "FreeBSD {version}"),
         }
     }
 }
@@ -204,26 +179,6 @@ pub fn os_version() -> Option<&'static OSVersion> {
                     kernel_version,
                     os_release,
                 })
-            } else if #[cfg(target_os = "windows")] {
-                use winreg::enums::HKEY_LOCAL_MACHINE;
-                use winreg::RegKey;
-
-                let rkey = RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion").ok()?;
-                let build: String = rkey.get_value("CurrentBuild").ok()?;
-
-                Some(OSVersion::Windows {
-                    name: rkey.get_value("ProductName").ok()?,
-                    build: build.parse::<u32>().ok()?,
-                })
-            } else if #[cfg(target_os = "freebsd")] {
-                use nix::sys::utsname::uname;
-
-                let version = uname().ok()?.release().to_string_lossy().into();
-
-                Some(OSVersion::FreeBsd {
-                    version,
-                })
-
             }
         }
     }).as_ref()
@@ -234,30 +189,10 @@ pub fn in_ssh() -> bool {
     *IN_SSH.get_or_init(|| Env::new().in_ssh())
 }
 
-/// Test if the program is running under WSL
-pub fn in_wsl() -> bool {
-    cfg_if! {
-        if #[cfg(target_os = "linux")] {
-            static IN_WSL: OnceLock<bool> = OnceLock::new();
-            *IN_WSL.get_or_init(|| {
-                if let Ok(b) = std::fs::read("/proc/sys/kernel/osrelease") {
-                    if let Ok(s) = std::str::from_utf8(&b) {
-                        let a = s.to_ascii_lowercase();
-                        return a.contains("microsoft") || a.contains("wsl");
-                    }
-                }
-                false
-            })
-        } else {
-            false
-        }
-    }
-}
-
 /// Is the calling binary running on a remote instance
 pub fn is_remote() -> bool {
     // TODO(chay): Add detection for inside docker container
-    in_ssh() || in_wsl()
+    in_ssh()
 }
 
 pub fn in_ci() -> bool {
@@ -295,22 +230,6 @@ fn raw_system_id() -> Result<String, Error> {
             return Ok(std::fs::read_to_string(path)?);
         }
     }
-    Err(Error::HwidNotFound)
-}
-
-#[cfg(target_os = "windows")]
-fn raw_system_id() -> Result<String, Error> {
-    use winreg::RegKey;
-    use winreg::enums::HKEY_LOCAL_MACHINE;
-
-    let rkey = RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey(r"SOFTWARE\Microsoft\Cryptography")?;
-    let id: String = rkey.get_value("MachineGuid")?;
-
-    Ok(id)
-}
-
-#[cfg(target_os = "freebsd")]
-fn raw_system_id() -> Result<String, Error> {
     Err(Error::HwidNotFound)
 }
 

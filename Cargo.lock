@@ -1876,7 +1876,6 @@ dependencies = [
  "url",
  "uuid",
  "whoami",
- "windows 0.58.0",
  "wry",
  "x11rb",
  "zbus 4.4.0",
@@ -2151,8 +2150,6 @@ dependencies = [
  "tracing",
  "uuid",
  "whoami",
- "windows 0.58.0",
- "winreg 0.55.0",
 ]
 
 [[package]]
@@ -2180,18 +2177,15 @@ dependencies = [
  "flume",
  "fnv",
  "indoc",
- "lazy_static",
  "memmem",
  "mimalloc",
  "nix 0.29.0",
  "num-traits",
  "parking_lot",
- "pin-project",
  "portable-pty",
  "predicates",
  "serde",
  "serde_json",
- "shared_library",
  "shell-color",
  "shell-words",
  "shlex",
@@ -2203,9 +2197,6 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "which",
- "winapi",
- "windows 0.58.0",
- "winreg 0.55.0",
 ]
 
 [[package]]
@@ -5002,7 +4993,7 @@ dependencies = [
  "shared_library",
  "shell-words",
  "winapi",
- "winreg 0.10.1",
+ "winreg",
 ]
 
 [[package]]
@@ -5368,8 +5359,6 @@ dependencies = [
  "uuid",
  "walkdir",
  "whoami",
- "winapi",
- "windows 0.58.0",
 ]
 
 [[package]]
@@ -8111,16 +8100,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "80d0f4e272c85def139476380b12f9ac60926689dd2e01d4923222f40580869d"
 dependencies = [
  "winapi",
-]
-
-[[package]]
-name = "winreg"
-version = "0.55.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb5a765337c50e9ec252c2069be9bf91c7df47afb103b642ba3a53bf8101be97"
-dependencies = [
- "cfg-if",
- "windows-sys 0.59.0",
 ]
 
 [[package]]
