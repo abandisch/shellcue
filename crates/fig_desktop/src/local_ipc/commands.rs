@@ -1,14 +1,12 @@
 use std::sync::Mutex;
 
 use fig_os_shim::{
-    Context,
     ContextArcProvider,
     ContextProvider,
 };
 use fig_proto::local::command_response::Response as CommandResponseTypes;
 use fig_proto::local::dump_state_command::Type as DumpStateType;
 use fig_proto::local::{
-    BundleMetadataResponse,
     DebugModeCommand,
     DiagnosticsCommand,
     DiagnosticsResponse,
@@ -16,7 +14,6 @@ use fig_proto::local::{
     DumpStateResponse,
     LogLevelCommand,
     LogLevelResponse,
-    OpenBrowserCommand,
     OpenUiElementCommand,
     QuitCommand,
     UiElement,
@@ -159,13 +156,6 @@ pub async fn open_ui_element(command: OpenUiElementCommand, proxy: &EventLoopPro
     Ok(LocalResponse::Success(None))
 }
 
-pub async fn open_browser(command: OpenBrowserCommand) -> LocalResult {
-    if let Err(err) = fig_util::open_url(command.url) {
-        error!(%err, "Error opening browser");
-    }
-    Ok(LocalResponse::Success(None))
-}
-
 #[allow(unused_variables)]
 pub async fn prompt_for_accessibility_permission<Ctx>(ctx: &Ctx) -> LocalResult
 where
@@ -248,17 +238,5 @@ pub async fn connect_to_ibus(proxy: EventLoopProxy, platform_state: &PlatformSta
                 message: Some("Connecting to IBus is only supported on Linux".to_owned()),
             })
         }
-    }
-}
-
-pub async fn bundle_metadata(ctx: &Context) -> LocalResult {
-    match fig_util::manifest::bundle_metadata_json(ctx).await {
-        Ok(json) => Ok(LocalResponse::Message(Box::new(CommandResponseTypes::BundleMetadata(
-            BundleMetadataResponse { json },
-        )))),
-        Err(err) => Err(LocalResponse::Error {
-            code: None,
-            message: Some(format!("Failed to get the bundled metadata: {:?}", err)),
-        }),
     }
 }

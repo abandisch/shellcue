@@ -3,8 +3,6 @@ use std::time::Duration;
 use async_trait::async_trait;
 use fig_proto::local::{
     self,
-    BundleMetadataCommand,
-    BundleMetadataResponse,
     CommandResponse,
     DebugModeCommand,
     DevtoolsCommand,
@@ -20,7 +18,6 @@ use fig_proto::local::{
     RestartCommand,
     RestartSettingsListenerCommand,
     UiElement,
-    UpdateCommand,
     command,
     command_response,
     devtools_command,
@@ -94,19 +91,6 @@ pub async fn dump_state_command(component: dump_state_command::Type) -> Result<D
     }
 }
 
-pub async fn bundle_metadata_command() -> Result<BundleMetadataResponse> {
-    let command = command::Command::BundleMetadata(BundleMetadataCommand {});
-    let resp: Option<local::CommandResponse> = send_recv_command_to_socket(command).await?;
-
-    match resp {
-        Some(CommandResponse {
-            response: Some(command_response::Response::BundleMetadata(resp)),
-            ..
-        }) => Ok(resp),
-        _ => Err(RecvError::InvalidMessageType.into()),
-    }
-}
-
 pub async fn input_method_command(action: InputMethodAction) -> Result<()> {
     let command = command::Command::InputMethod(InputMethodCommand {
         actions: Some(action.into()),
@@ -117,11 +101,6 @@ pub async fn input_method_command(action: InputMethodAction) -> Result<()> {
 pub async fn prompt_accessibility_command() -> Result<()> {
     let command = command::Command::PromptAccessibility(PromptAccessibilityCommand {});
     send_command_to_socket(command).await
-}
-
-pub async fn update_command(force: bool) -> Result<Option<CommandResponse>> {
-    let command = command::Command::Update(UpdateCommand { force });
-    send_recv_command_to_socket_with_timeout(command, std::time::Duration::from_secs(120)).await
 }
 
 pub async fn restart_command() -> Result<()> {

@@ -1335,10 +1335,7 @@ impl DoctorCheck<SupportedTerminalCheckContext> for SupportedTerminalCheck {
                 ))
             } else {
                 Err(DoctorError::Error {
-                    reason: format!(
-                        "Unsupported terminal, if you believe this is a mistake or would like to see support for your terminal, run {}", 
-                        format!("{CLI_BINARY_NAME} issue").magenta()
-                    ).into(),
+                    reason: "Unsupported terminal".into(),
                     info: vec![
                         #[cfg(target_os = "macos")]
                         format!(
@@ -1800,36 +1797,6 @@ impl DoctorCheck for DashboardHostCheck {
     }
 }
 
-struct AutocompleteHostCheck;
-
-#[async_trait]
-impl DoctorCheck for AutocompleteHostCheck {
-    fn name(&self) -> Cow<'static, str> {
-        "Autocomplete is loading from the correct URL".into()
-    }
-
-    async fn check(&self, _: &()) -> Result<(), DoctorError> {
-        match fig_settings::settings::get_string("developer.autocomplete.host")
-            .ok()
-            .flatten()
-        {
-            Some(host) => {
-                if host.contains("localhost") {
-                    Err(DoctorError::Warning(
-                        format!(
-                            "developer.autocomplete.host = {host}, delete this setting if Autocomplete fails to load"
-                        )
-                        .into(),
-                    ))
-                } else {
-                    Ok(())
-                }
-            },
-            None => Ok(()),
-        }
-    }
-}
-
 #[cfg(target_os = "macos")]
 struct ToolboxInstalledCheck;
 
@@ -2011,17 +1978,9 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
         })?;
     }
 
-    // Remove update lock on doctor runs to fix bad state if update crashed.
-    if let Ok(update_lock) = fig_util::directories::update_lock_path(&Context::new()) {
-        if update_lock.exists() {
-            std::fs::remove_file(update_lock).ok();
-        }
-    }
-
     launch_fig_desktop(LaunchArgs {
         wait_for_socket: true,
         open_dashboard: false,
-        immediate_update: true,
         verbose: false,
     })
     .ok();
@@ -2084,7 +2043,6 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
                 &AutocompleteDevModeCheck,
                 &PluginDevModeCheck,
                 &DashboardHostCheck,
-                &AutocompleteHostCheck,
             ],
             config,
             &mut spinner,
@@ -2207,21 +2165,11 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
         println!();
         println!("{} Doctor found errors. Please fix them and try again.", CROSS.red());
         println!();
-        println!(
-            "If you are not sure how to fix it, please open an issue with {} to let us know!",
-            format!("{CLI_BINARY_NAME} issue").magenta()
-        );
-        println!();
     } else {
         // If early exit is disabled, no errors are thrown
         if !config.all {
             println!("{} Everything looks good!", CHECKMARK.green());
         }
-        println!();
-        println!(
-            "  {PRODUCT_NAME} still not working? Run {} to let us know!",
-            format!("{CLI_BINARY_NAME} issue").magenta()
-        );
         println!();
     }
 

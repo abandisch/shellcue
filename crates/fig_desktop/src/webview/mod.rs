@@ -1,5 +1,4 @@
 pub mod autocomplete;
-pub mod companion;
 pub mod dashboard;
 pub mod menu;
 pub mod notification;
@@ -66,7 +65,6 @@ use self::notification::WebviewNotificationsState;
 use self::window_id::DashboardId;
 use crate::event::{
     Event,
-    ShowMessageNotification,
     WindowEvent,
 };
 use crate::notification_bus::{
@@ -537,37 +535,6 @@ impl WebviewManager {
                                 debug!(%err, "Failed to handle native event");
                             }
                         },
-                        Event::ShowMessageNotification(ShowMessageNotification {
-                            title,
-                            body,
-                            parent,
-                            buttons,
-                            buttons_result,
-                        }) => {
-                            let mut dialog = rfd::AsyncMessageDialog::new().set_title(title).set_description(body);
-
-                            if let Some(parent) = parent {
-                                if let Some(parent_window) = self.fig_id_map.get(&parent) {
-                                    dialog = dialog.set_parent(&parent_window.window);
-                                }
-                            }
-
-                            let dialog = match (buttons, buttons_result.as_ref()) {
-                                (Some(buttons), Some(_)) => dialog.set_buttons(buttons),
-                                _ => dialog,
-                            };
-
-                            tokio::spawn(async move {
-                                let res = dialog.show().await;
-                                if let Some(buttons_result) = buttons_result {
-                                    buttons_result
-                                        .send(res)
-                                        .await
-                                        .map_err(|err| error!(?err, "Failed to send dialog result"))
-                                        .ok();
-                                }
-                            });
-                        },
                     }
                 },
                 WryEvent::Opened { urls } => {
@@ -987,21 +954,6 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
 
     watcher!(
         settings,
-        "developer.autocomplete.host",
-        |_notification: JsonNotification, proxy: &EventLoopProxy| {
-            let url = autocomplete::url();
-            debug!(%url, "Autocomplete host");
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: AUTOCOMPLETE_ID,
-                    window_event: WindowEvent::NavigateAbsolute { url },
-                })
-                .unwrap();
-        }
-    );
-
-    watcher!(
-        settings,
         "developer.autocomplete.build",
         |_notification: JsonNotification, proxy: &EventLoopProxy| {
             let url = autocomplete::url();
@@ -1014,25 +966,4 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
                 .unwrap();
         }
     );
-
-    // I don't think this is meant to be here anymore
-    // watcher!(settings, "app.beta", |_: JsonNotification, proxy: &EventLoopProxy| {
-    //     let proxy = proxy.clone();
-    //     tokio::spawn(fig_install::update(
-    //         Some(Box::new(move |_| {
-    //             proxy
-    //                 .send_event(Event::ShowMessageNotification {
-    //                     title: "Fig Update".into(),
-    //                     body: "Fig is updating in the background. You can continue to use Fig while
-    // it updates.".into(),                     parent: None,
-    //                 })
-    //                 .unwrap();
-    //         })),
-    //         fig_install::UpdateOptions {
-    //             ignore_rollout: true,
-    //             interactive: true,
-    //             relaunch_dashboard: true,
-    //         },
-    //     ));
-    // });
 }

@@ -30,29 +30,12 @@ pub enum Event {
 
     ReloadCredentials,
     ReloadAccessibility,
-
-    ShowMessageNotification(ShowMessageNotification),
 }
 
 impl From<PlatformBoundEvent> for Event {
     fn from(event: PlatformBoundEvent) -> Self {
         Self::PlatformBoundEvent(event)
     }
-}
-
-impl From<ShowMessageNotification> for Event {
-    fn from(event: ShowMessageNotification) -> Self {
-        Self::ShowMessageNotification(event)
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct ShowMessageNotification {
-    pub title: Cow<'static, str>,
-    pub body: Cow<'static, str>,
-    pub parent: Option<WindowId>,
-    pub buttons: Option<rfd::MessageButtons>,
-    pub buttons_result: Option<tokio::sync::mpsc::Sender<rfd::MessageDialogResult>>,
 }
 
 #[derive(Debug, Clone)]

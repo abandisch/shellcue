@@ -5,9 +5,6 @@
 import {
   AppendToFileRequest,
   AppendToFileRequestSchema,
-  CheckForUpdatesRequest,
-  CheckForUpdatesRequestSchema,
-  CheckForUpdatesResponse,
   ContentsOfDirectoryRequest,
   ContentsOfDirectoryRequestSchema,
   ContentsOfDirectoryResponse,
@@ -55,8 +52,6 @@ import {
   RunProcessResponse,
   UpdateApplicationPropertiesRequest,
   UpdateApplicationPropertiesRequestSchema,
-  UpdateApplicationRequest,
-  UpdateApplicationRequestSchema,
   UpdateLocalStateRequest,
   UpdateLocalStateRequestSchema,
   UpdateSettingsPropertyRequest,
@@ -290,35 +285,6 @@ export async function sendInstallRequest(
             reject(
               Error(
                 `Invalid response '${response?.case}' for 'InstallRequest'`,
-              ),
-            );
-        }
-      },
-    );
-  });
-}
-
-export async function sendCheckForUpdatesRequest(
-  request: Omit<CheckForUpdatesRequest, "$typeName" | "$unknown">,
-): Promise<CheckForUpdatesResponse> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      {
-        case: "checkForUpdatesRequest",
-        value: create(CheckForUpdatesRequestSchema, request),
-      },
-      (response) => {
-        switch (response?.case) {
-          case "checkForUpdatesResponse":
-            resolve(response.value);
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'CheckForUpdatesRequest'`,
               ),
             );
         }
@@ -720,35 +686,6 @@ export async function sendCreateDirectoryRequest(
             reject(
               Error(
                 `Invalid response '${response?.case}' for 'CreateDirectoryRequest'`,
-              ),
-            );
-        }
-      },
-    );
-  });
-}
-
-export async function sendUpdateApplicationRequest(
-  request: Omit<UpdateApplicationRequest, "$typeName" | "$unknown">,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      {
-        case: "updateApplicationRequest",
-        value: create(UpdateApplicationRequestSchema, request),
-      },
-      (response) => {
-        switch (response?.case) {
-          case "success":
-            resolve();
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'UpdateApplicationRequest'`,
               ),
             );
         }

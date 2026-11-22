@@ -1,7 +1,6 @@
 mod cli_context;
 pub mod desktop;
 pub mod pid_file;
-pub mod spinner;
 
 use std::env;
 use std::ffi::OsStr;

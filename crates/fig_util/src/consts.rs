@@ -38,16 +38,6 @@ pub const OLD_PRODUCT_NAME: &str = "CodeWhisperer";
 pub const OLD_CLI_BINARY_NAMES: &[&str] = &["cw"];
 pub const OLD_PTY_BINARY_NAMES: &[&str] = &["cwterm"];
 
-pub const GITHUB_REPO_NAME: &str = "aws/amazon-q-developer-cli";
-
-pub mod url {
-    pub const USER_MANUAL: &str = "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line.html";
-    pub const AUTOCOMPLETE_WIKI: &str =
-        "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-autocomplete.html";
-    pub const AUTOCOMPLETE_SSH_WIKI: &str =
-        "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-autocomplete-ssh.html";
-}
-
 /// Build time env vars
 pub mod build {
     /// The target of the current build, e.g. "aarch64-unknown-linux-musl"
@@ -128,10 +118,7 @@ pub mod env_var {
         Q_SHELL = "Q_SHELL",
 
         /// Indicates the user is debugging the shell
-        Q_DEBUG_SHELL = "Q_DEBUG_SHELL",
-
-        /// Overrides the path to the bundle metadata released with certain desktop builds.
-        Q_BUNDLE_METADATA_PATH = "Q_BUNDLE_METADATA_PATH"
+        Q_DEBUG_SHELL = "Q_DEBUG_SHELL"
     }
 }
 

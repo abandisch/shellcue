@@ -17,10 +17,7 @@ use fig_proto::local::{
     ConnectToIBusCommand,
 };
 use fig_util::Terminal;
-use fig_util::consts::{
-    CLI_BINARY_NAME,
-    PRODUCT_NAME,
-};
+use fig_util::consts::PRODUCT_NAME;
 use fig_util::system_info::linux::{
     DesktopEnvironment,
     DisplayServer,
@@ -28,7 +25,6 @@ use fig_util::system_info::linux::{
     get_display_server,
 };
 use futures::FutureExt;
-use owo_colors::OwoColorize;
 
 use crate::cli::doctor::{
     DoctorCheck,
@@ -230,10 +226,7 @@ impl DoctorCheck<LinuxContext> for GnomeExtensionCheck {
             DisplayServer::X11 => Ok(()),
             DisplayServer::Wayland => match get_extension_status(&ctx, &shell_extensions, None).await.map_err(eyre::Report::from)? {
                 ExtensionInstallationStatus::GnomeShellNotRunning => Err(DoctorError::Error {
-                    reason: format!(
-                        "The gnome-shell process doesn't appear to be running. If you believe this is an error, please file an issue by running {}",
-                        format!("{CLI_BINARY_NAME} issue").magenta()
-                    ).into(),
+                    reason: "The gnome-shell process doesn't appear to be running.".into(),
                     info: vec![],
                     fix: None,
                     error: None,

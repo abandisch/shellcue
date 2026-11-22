@@ -1,5 +1,7 @@
 use std::fmt::Write;
 use std::fs;
+use std::io::ErrorKind;
+use std::path::Path;
 use std::process::ExitCode;
 
 use anstream::println;
@@ -57,12 +59,8 @@ impl ThemeArgs {
         }
 
         if self.list {
-            for theme_entry in std::fs::read_dir(&theme_dir)? {
-                if let Ok(theme_file_name) = theme_entry.map(|s| s.file_name()) {
-                    if let Some(theme) = theme_file_name.to_str() {
-                        println!("{}", theme.trim_end_matches(".json"));
-                    }
-                }
+            for theme in theme_names(&theme_dir)? {
+                println!("{theme}");
             }
             return Ok(ExitCode::SUCCESS);
         }
@@ -107,7 +105,7 @@ impl ThemeArgs {
                             fig_settings::settings::set_value("autocomplete.theme", theme_str)?;
                             Ok(ExitCode::SUCCESS)
                         } else {
-                            eyre::bail!("'{theme_str}' does not exist in {}", theme_dir.display())
+                            eyre::bail!("'{theme_str}' is not a known theme")
                         }
                     },
                 }
@@ -125,5 +123,42 @@ impl ThemeArgs {
                 Ok(ExitCode::SUCCESS)
             },
         }
+    }
+}
+
+fn theme_names(dir: &Path) -> std::io::Result<Vec<String>> {
+    let mut names: Vec<String> = BUILT_IN_THEMES.map(String::from).into();
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(names),
+        Err(err) => return Err(err),
+    };
+    for entry in entries.flatten() {
+        if let Some(file_name) = entry.file_name().to_str() {
+            let name = file_name.trim_end_matches(".json");
+            if !BUILT_IN_THEMES.contains(&name) {
+                names.push(name.to_owned());
+            }
+        }
+    }
+    Ok(names)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn theme_names_missing_dir_lists_built_ins() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(theme_names(&dir.path().join("themes")).unwrap(), BUILT_IN_THEMES);
+    }
+
+    #[test]
+    fn theme_names_skips_built_ins_in_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("dark.json"), "{}").unwrap();
+        fs::write(dir.path().join("nord.json"), "{}").unwrap();
+        assert_eq!(theme_names(dir.path()).unwrap(), ["dark", "light", "system", "nord"]);
     }
 }

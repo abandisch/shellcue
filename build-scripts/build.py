@@ -1,5 +1,3 @@
-import boto3
-
 from dataclasses import dataclass
 from functools import cache
 import os
@@ -18,27 +16,15 @@ from util import (
     run_cmd,
     run_cmd_output,
     info,
-    warn,
     set_executable,
     version,
     tauri_product_name,
 )
 from rust import build_hash, build_datetime, cargo_cmd_name, rust_targets, rust_env, get_target_triple
 from test import run_cargo_tests, run_clippy
-from signing import (
-    CdSigningData,
-    CdSigningType,
-    load_gpg_signer,
-    rebundle_dmg,
-    cd_sign_file,
-    apple_notarize_file,
-)
 from importlib import import_module
 from const import (
     APP_NAME,
-    CHAT_BINARY_BRANCH,
-    CHAT_BINARY_NAME,
-    CHAT_PACKAGE_NAME,
     CLI_BINARY_NAME,
     CLI_PACKAGE_NAME,
     DESKTOP_BINARY_NAME,
@@ -172,66 +158,6 @@ def build_cargo_bin(
         return out_path
 
 
-def fetch_chat_bin(chat_build_bucket_name: str | None, chat_download_role_arn: str | None) -> pathlib.Path:
-    """
-    Downloads the chat binary from the provided bucket (using the IAM role to authenticate as).
-    If the build bucket or role is not provided, then a dummy script is created and returned instead.
-
-    The returned path follows the convention: `{binary_name}-{target_triple}`
-    """
-    info(f"Chat build bucket name: {chat_build_bucket_name}")
-    info(f"IAM Role to assume: {chat_download_role_arn}")
-
-    # To prevent requiring a network request and S3 bucket for downloading the chat
-    # binary (e.g. for local dev testing), we create a dummy script to bundle instead.
-    if not chat_build_bucket_name or not chat_download_role_arn:
-        warn("missing required chat arguments, creating dummy binary")
-        dummy_dir = BUILD_DIR / "dummy_chat"
-        dummy_dir.mkdir(exist_ok=True)
-        dummy_path = dummy_dir / f"{CHAT_BINARY_NAME}-{get_target_triple()}"
-        dummy_path.write_text("#!/usr/bin/env sh\n\necho dummy chat binary\n")
-        set_executable(dummy_path)
-        return dummy_path
-
-    """Get S3 client with cross-account role credentials"""
-    if profile_name := os.getenv("CHAT_BUILD_BUCKET_ACCESS_AWS_PROFILE"):
-        info(f"Using AWS_PROFILE override {profile_name} for accessing the chat build bucket")
-        session = boto3.Session(profile_name=profile_name)
-        sts = session.client("sts")
-    else:
-        sts = boto3.client("sts")
-
-    # Assume the cross-account role
-    response = sts.assume_role(RoleArn=chat_download_role_arn, RoleSessionName="QChatBuildBucketS3Access")
-    creds = response["Credentials"]
-
-    # Return S3 client with assumed role credentials
-    s3 = boto3.client(
-        "s3",
-        aws_access_key_id=creds["AccessKeyId"],
-        aws_secret_access_key=creds["SecretAccessKey"],
-        aws_session_token=creds["SessionToken"],
-    )
-
-    # The path to the download should be:
-    # BUILD_BUCKET/{CHAT_BINARY_BRANCH}/latest/{target}/{CHAT_BINARY_NAME}.zip
-    target = get_target_triple()
-    chat_bucket_path = f"{CHAT_BINARY_BRANCH}/latest/{target}/{CHAT_BINARY_NAME}.zip"
-    chat_dl_dir = BUILD_DIR / "chat_download"
-    chat_dl_dir.mkdir(exist_ok=True)
-    chat_dl_path = chat_dl_dir / f"{CHAT_BINARY_NAME}.zip"
-    info(f"Downloading {CHAT_BINARY_NAME} zip from bucket: {chat_bucket_path} and path: {chat_bucket_path}")
-    s3.download_file(chat_build_bucket_name, chat_bucket_path, chat_dl_path)
-
-    # unzip and return the path to the contained binary
-    run_cmd(["unzip", "-o", chat_dl_path, "-d", chat_dl_dir])
-
-    # Append target triple, as expected by tauri cli.
-    chat_path = chat_dl_dir / f"{CHAT_BINARY_NAME}-{target}"
-    (chat_dl_dir / CHAT_BINARY_NAME).rename(chat_path)
-    return chat_path
-
-
 @cache
 def gen_manifest() -> str:
     return json.dumps(
@@ -249,8 +175,6 @@ def gen_manifest() -> str:
 
 def build_macos_ime(
     release: bool,
-    is_prod: bool,
-    signing_data: CdSigningData | None,
     targets: Sequence[str] = [],
 ) -> pathlib.Path:
     fig_input_method_bin = build_cargo_bin(
@@ -274,15 +198,10 @@ def build_macos_ime(
         dirs_exist_ok=True,
     )
 
-    if signing_data:
-        info("Signing macos ime")
-        cd_sign_file(input_method_app, CdSigningType.IME, signing_data, is_prod=is_prod)
-        apple_notarize_file(input_method_app, signing_data)
-
     return input_method_app
 
 
-def macos_tauri_config(cli_path: pathlib.Path, chat_path: pathlib.Path, pty_path: pathlib.Path, target: str) -> str:
+def macos_tauri_config(cli_path: pathlib.Path, pty_path: pathlib.Path, target: str) -> str:
     config = {
         "tauri": {
             "bundle": {
@@ -290,7 +209,6 @@ def macos_tauri_config(cli_path: pathlib.Path, chat_path: pathlib.Path, pty_path
                     # Note that tauri bundling expects the target triple to be appended to each binary,
                     # but in the config it must be strippled.
                     str(cli_path).removesuffix(f"-{target}"),
-                    str(chat_path).removesuffix(f"-{target}"),
                     str(pty_path).removesuffix(f"-{target}"),
                 ],
                 "resources": ["manifest.json"],
@@ -304,17 +222,14 @@ def build_macos_desktop_app(
     release: bool,
     pty_path: pathlib.Path,
     cli_path: pathlib.Path,
-    chat_path: pathlib.Path,
     npm_packages: NpmBuildOutput,
-    is_prod: bool,
-    signing_data: CdSigningData | None,
     features: Mapping[str, Sequence[str]] | None = None,
     targets: Sequence[str] = [],
 ) -> MacOSBuildOutput:
     target = get_target_triple()
 
     info("Building macos ime")
-    ime_app = build_macos_ime(release=release, signing_data=signing_data, targets=targets, is_prod=is_prod)
+    ime_app = build_macos_ime(release=release, targets=targets)
 
     info("Writing manifest")
     manifest_path = pathlib.Path(DESKTOP_PACKAGE_PATH) / "manifest.json"
@@ -322,9 +237,7 @@ def build_macos_desktop_app(
 
     info("Building tauri config")
     tauri_config_path = pathlib.Path(DESKTOP_PACKAGE_PATH) / "build-config.json"
-    tauri_config_path.write_text(
-        macos_tauri_config(cli_path=cli_path, chat_path=chat_path, pty_path=pty_path, target=target)
-    )
+    tauri_config_path.write_text(macos_tauri_config(cli_path=cli_path, pty_path=pty_path, target=target))
 
     info("Building", DESKTOP_PACKAGE_NAME)
 
@@ -391,12 +304,6 @@ def build_macos_desktop_app(
     helpers_dir.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ime_app, helpers_dir.joinpath("CodeWhispererInputMethod.app"))
 
-    info("Grabbing themes")
-    theme_repo = BUILD_DIR / "themes"
-    shutil.rmtree(theme_repo, ignore_errors=True)
-    run_cmd(["git", "clone", "https://github.com/withfig/themes.git", theme_repo])
-    shutil.copytree(theme_repo / "themes", app_path / "Contents/Resources/themes")
-
     info("Copying dashboard into bundle")
     shutil.copytree(npm_packages.dashboard_path, app_path / "Contents/Resources/dashboard")
 
@@ -442,45 +349,19 @@ def build_macos_desktop_app(
 
     info(f"Created dmg at {dmg_path}")
 
-    if signing_data:
-        sign_and_rebundle_macos(app_path=app_path, dmg_path=dmg_path, signing_data=signing_data, is_prod=is_prod)
-
     app_gztar_path = shutil.make_archive(str(BUILD_DIR / APP_NAME), "gztar", app_path.parent, app_path.name)
     info(f"Created app tar.gz at {app_gztar_path}")
 
     return MacOSBuildOutput(dmg_path=dmg_path, app_gztar_path=pathlib.Path(app_gztar_path))
 
 
-def sign_and_rebundle_macos(app_path: pathlib.Path, dmg_path: pathlib.Path, signing_data: CdSigningData, is_prod: bool):
-    info("Signing app and dmg")
-
-    # Sign the application
-    cd_sign_file(app_path, CdSigningType.APP, signing_data, is_prod=is_prod)
-
-    # Notarize the application
-
-    apple_notarize_file(app_path, signing_data)
-
-    # Rebundle the dmg file with the signed and notarized application
-    rebundle_dmg(app_path=app_path, dmg_path=dmg_path)
-
-    # Sign the dmg
-    cd_sign_file(dmg_path, CdSigningType.DMG, signing_data, is_prod=is_prod)
-
-    # Notarize the dmg
-    apple_notarize_file(dmg_path, signing_data)
-
-    info("Done signing!!")
-
-
-def build_linux_minimal(cli_path: pathlib.Path, pty_path: pathlib.Path, chat_path: pathlib.Path):
+def build_linux_minimal(cli_path: pathlib.Path, pty_path: pathlib.Path):
     """
     Creates tar.gz, tar.xz, tar.zst, and zip archives under `BUILD_DIR`.
 
     Each archive has the following structure:
     - archive/bin/{cli_binary}
     - archive/bin/{pty_binary}
-    - archive/bin/{chat_binary}
     - archive/install.sh
     - archive/README
     - archive/BUILD-INFO
@@ -511,53 +392,38 @@ def build_linux_minimal(cli_path: pathlib.Path, pty_path: pathlib.Path, chat_pat
 
     shutil.copy2(cli_path, archive_bin_path / CLI_BINARY_NAME)
     shutil.copy2(pty_path, archive_bin_path / PTY_BINARY_NAME)
-    shutil.copy2(chat_path, archive_bin_path / CHAT_BINARY_NAME)
-
-    signer = load_gpg_signer()
 
     info(f"Building {archive_name}.tar.gz")
     tar_gz_path = BUILD_DIR / f"{archive_name}.tar.gz"
     run_cmd(["tar", "-czf", tar_gz_path, archive_path])
     generate_sha(tar_gz_path)
-    if signer:
-        signer.sign_file(tar_gz_path)
 
     info(f"Building {archive_name}.tar.xz")
     tar_xz_path = BUILD_DIR / f"{archive_name}.tar.xz"
     run_cmd(["tar", "-cJf", tar_xz_path, archive_path])
     generate_sha(tar_xz_path)
-    if signer:
-        signer.sign_file(tar_xz_path)
 
     info(f"Building {archive_name}.tar.zst")
     tar_zst_path = BUILD_DIR / f"{archive_name}.tar.zst"
     run_cmd(["tar", "-I", "zstd", "-cf", tar_zst_path, archive_path], {"ZSTD_CLEVEL": "19"})
     generate_sha(tar_zst_path)
-    if signer:
-        signer.sign_file(tar_zst_path)
 
     info(f"Building {archive_name}.zip")
     zip_path = BUILD_DIR / f"{archive_name}.zip"
     run_cmd(["zip", "-r", zip_path, archive_path])
     generate_sha(zip_path)
-    if signer:
-        signer.sign_file(zip_path)
 
     # clean up
     shutil.rmtree(archive_path)
-    if signer:
-        signer.clean()
 
 
 def linux_tauri_config(
     cli_path: pathlib.Path,
     pty_path: pathlib.Path,
-    chat_path: pathlib.Path,
     dashboard_path: pathlib.Path,
     autocomplete_path: pathlib.Path,
     specs_path: pathlib.Path,
     vscode_path: pathlib.Path,
-    themes_path: pathlib.Path,
     legacy_extension_dir_path: pathlib.Path,
     modern_extension_dir_path: pathlib.Path,
     bundle_metadata_path: pathlib.Path,
@@ -570,7 +436,6 @@ def linux_tauri_config(
                 "externalBin": [
                     str(cli_path).removesuffix(f"-{target}"),
                     str(pty_path).removesuffix(f"-{target}"),
-                    str(chat_path).removesuffix(f"-{target}"),
                 ],
                 "targets": ["appimage"],
                 "icon": ["icons/128x128.png"],
@@ -579,7 +444,6 @@ def linux_tauri_config(
                     autocomplete_path.absolute().as_posix(): "autocomplete",
                     specs_path.absolute().as_posix(): "specs",
                     vscode_path.absolute().as_posix(): "vscode",
-                    themes_path.absolute().as_posix(): "themes",
                     legacy_extension_dir_path.absolute().as_posix(): LINUX_LEGACY_GNOME_EXTENSION_UUID,
                     modern_extension_dir_path.absolute().as_posix(): LINUX_MODERN_GNOME_EXTENSION_UUID,
                     bundle_metadata_path.absolute().as_posix(): "bundle-metadata",
@@ -624,10 +488,8 @@ def make_linux_bundle_metadata(packaged_as: Package) -> pathlib.Path:
 class LinuxDebResources:
     cli_path: pathlib.Path
     pty_path: pathlib.Path
-    chat_path: pathlib.Path
     desktop_path: pathlib.Path
     specs_path: pathlib.Path
-    themes_path: pathlib.Path
     legacy_extension_dir_path: pathlib.Path
     modern_extension_dir_path: pathlib.Path
     bundle_metadata_path: pathlib.Path
@@ -664,7 +526,6 @@ def build_linux_deb(
     bin_path.mkdir(parents=True)
     shutil.copy(resources.cli_path, bin_path / CLI_BINARY_NAME)
     shutil.copy(resources.pty_path, bin_path / PTY_BINARY_NAME)
-    shutil.copy(resources.chat_path, bin_path / CHAT_BINARY_NAME)
     shutil.copy(resources.desktop_path, bin_path / DESKTOP_BINARY_NAME)
 
     info("Copying /usr/share resources")
@@ -681,7 +542,6 @@ def build_linux_deb(
     shutil.copytree(resources.npm_packages.autocomplete_path, share_path / "autocomplete")
     shutil.copytree(resources.specs_path, share_path / "specs")
     shutil.copytree(resources.npm_packages.dashboard_path, share_path / "dashboard")
-    shutil.copytree(resources.themes_path, share_path / "themes")
     # TODO: Support vscode
     # vscode_path = share_path / 'vscode/vscode-plugin.vsix'
     # vscode_path.parent.mkdir(parents=True)
@@ -722,17 +582,11 @@ def build_linux_full(
     release: bool,
     cli_path: pathlib.Path,
     pty_path: pathlib.Path,
-    chat_path: pathlib.Path,
     npm_packages: NpmBuildOutput,
     features: Mapping[str, Sequence[str]] | None = None,
 ):
     target = get_target_triple()
 
-    info("Grabbing themes")
-    theme_repo = BUILD_DIR / "themes"
-    shutil.rmtree(theme_repo, ignore_errors=True)
-    run_cmd(["git", "clone", "https://github.com/withfig/themes.git", theme_repo])
-    themes_path = theme_repo / "themes"
     specs_path = compiled_specs_path()
 
     info("Grabbing GNOME extensions")
@@ -763,12 +617,10 @@ def build_linux_full(
         linux_tauri_config(
             cli_path=cli_path,
             pty_path=pty_path,
-            chat_path=chat_path,
             dashboard_path=npm_packages.dashboard_path,
             autocomplete_path=npm_packages.autocomplete_path,
             specs_path=specs_path,
             vscode_path=npm_packages.vscode_path,
-            themes_path=themes_path,
             legacy_extension_dir_path=legacy_extension_dir_path,
             modern_extension_dir_path=modern_extension_dir_path,
             bundle_metadata_path=make_linux_bundle_metadata(Package.APPIMAGE),
@@ -800,16 +652,14 @@ def build_linux_full(
     deb_resources = LinuxDebResources(
         cli_path=cli_path,
         pty_path=pty_path,
-        chat_path=chat_path,
         desktop_path=desktop_path,
         specs_path=specs_path,
-        themes_path=themes_path,
         legacy_extension_dir_path=legacy_extension_dir_path,
         modern_extension_dir_path=modern_extension_dir_path,
         bundle_metadata_path=make_linux_bundle_metadata(Package.DEB),
         npm_packages=npm_packages,
     )
-    deb_output = build_linux_deb(
+    build_linux_deb(
         resources=deb_resources,
         control_path=pathlib.Path("bundle/deb/control"),
         deb_suffix="",
@@ -830,22 +680,6 @@ def build_linux_full(
         appimage_path,
     )
     generate_sha(appimage_path)
-
-    signer = load_gpg_signer()
-    if signer:
-        info("Signing AppImage")
-        signatures = signer.sign_file(appimage_path)
-        run_cmd(["gpg", "--verify", signatures[0], appimage_path], env=signer.gpg_env())
-
-        info("Signing deb:", deb_output.deb_path)
-        run_cmd(["dpkg-sig", "-k", signer.gpg_id, "-s", "builder", deb_output.deb_path], env=signer.gpg_env())
-        run_cmd(["dpkg-sig", "-l", deb_output.deb_path], env=signer.gpg_env())
-        run_cmd(["gpg", "--verify", deb_output.deb_path], env=signer.gpg_env())
-        deb_output.sha_path = generate_sha(
-            deb_output.deb_path
-        )  # Need to regenerate the sha since the signature is embedded inside the deb
-
-        signer.clean()
 
 
 def generate_sha(path: pathlib.Path) -> pathlib.Path:
@@ -875,42 +709,15 @@ BuildOutput = Dict[Variant, BinaryPaths]
 def build(
     release: bool,
     variants: List[Variant] | None = None,
-    output_bucket: str | None = None,
-    signing_bucket: str | None = None,
-    aws_account_id: str | None = None,
-    chat_build_bucket_name: str | None = None,
-    chat_download_role_arn: str | None = None,
-    apple_id_secret: str | None = None,
-    signing_role_name: str | None = None,
-    stage_name: str | None = None,
     run_lints: bool = True,
     run_test: bool = True,
 ) -> BuildOutput:
     variants = variants or get_variants()
 
-    if signing_bucket and aws_account_id and apple_id_secret and signing_role_name:
-        signing_data = CdSigningData(
-            bucket_name=signing_bucket,
-            aws_account_id=aws_account_id,
-            notarizing_secret_id=apple_id_secret,
-            signing_role_name=signing_role_name,
-        )
-    else:
-        signing_data = None
-
     cargo_features: Mapping[str, Sequence[str]] = {}
-
-    match stage_name:
-        case "prod" | None:
-            info("Building for prod")
-        case "gamma":
-            info("Building for gamma")
-        case _:
-            raise ValueError(f"Unknown stage name: {stage_name}")
 
     info(f"Release: {release}")
     info(f"Cargo features: {cargo_features}")
-    info(f"Signing app: {signing_data is not None}")
     info(f"Variants: {[variant.name for variant in variants]}")
 
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
@@ -936,11 +743,6 @@ def build(
     build_output: BuildOutput = {}
     for variant in variants:
         info(f"Building variant: {variant.name}")
-
-        info("Fetching", CHAT_PACKAGE_NAME)
-        chat_path = fetch_chat_bin(
-            chat_build_bucket_name=chat_build_bucket_name, chat_download_role_arn=chat_download_role_arn
-        )
 
         info("Building", CLI_PACKAGE_NAME)
         cli_path = build_cargo_bin(
@@ -970,24 +772,13 @@ def build(
             build_paths = build_macos_desktop_app(
                 release=release,
                 cli_path=cli_path,
-                chat_path=chat_path,
                 pty_path=pty_path,
                 npm_packages=npm_packages,
-                signing_data=signing_data,
                 features=cargo_features,
                 targets=targets,
-                is_prod=stage_name == "prod" or stage_name is None,
             )
 
-            sha_path = generate_sha(build_paths.dmg_path)
-
-            if output_bucket:
-                staging_location = f"s3://{output_bucket}/staging/"
-                info(f"Build complete, sending to {staging_location}")
-
-                run_cmd(["aws", "s3", "cp", build_paths.dmg_path, staging_location])
-                run_cmd(["aws", "s3", "cp", build_paths.app_gztar_path, staging_location])
-                run_cmd(["aws", "s3", "cp", sha_path, staging_location])
+            generate_sha(build_paths.dmg_path)
         elif isLinux():
             if variant == Variant.FULL:
                 if not npm_packages:
@@ -996,13 +787,12 @@ def build(
                     release=release,
                     cli_path=cli_path,
                     pty_path=pty_path,
-                    chat_path=chat_path,
                     npm_packages=npm_packages,
                     features=cargo_features,
                 )
                 build_output[variant] = BinaryPaths(cli_path=cli_path, pty_path=pty_path)
             else:
-                build_linux_minimal(cli_path=cli_path, pty_path=pty_path, chat_path=chat_path)
+                build_linux_minimal(cli_path=cli_path, pty_path=pty_path)
                 build_output[variant] = BinaryPaths(cli_path=cli_path, pty_path=pty_path)
 
     return build_output
