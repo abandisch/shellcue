@@ -31,7 +31,6 @@ use dialoguer::theme::ColorfulTheme;
 use eyre::{
     Context,
     ContextCompat,
-    Error,
     Result,
     bail,
 };
@@ -203,14 +202,6 @@ pub fn app_not_running_message() -> String {
     )
 }
 
-pub fn login_message() -> String {
-    format!(
-        "{}\nLooks like you aren't logged in to {PRODUCT_NAME}, to login run: {}",
-        "Not logged in".bold(),
-        format!("{CLI_BINARY_NAME} login").magenta()
-    )
-}
-
 pub fn match_regex(regex: impl AsRef<str>, input: impl AsRef<str>) -> Option<String> {
     Some(
         Regex::new(regex.as_ref())
@@ -244,22 +235,6 @@ pub fn choose(prompt: impl Display, options: &[impl ToString]) -> Result<Option<
     }
 }
 
-pub fn input(prompt: &str, initial_text: Option<&str>) -> Result<String> {
-    if !stdout().is_terminal() {
-        warn!("called input while stdout is not a terminal");
-        return Ok(String::new());
-    }
-
-    let theme = dialoguer_theme();
-    let mut input = dialoguer::Input::with_theme(&theme).with_prompt(prompt);
-
-    if let Some(initial_text) = initial_text {
-        input = input.with_initial_text(initial_text);
-    }
-
-    Ok(input.interact_text()?)
-}
-
 pub fn get_running_app_info(bundle_id: impl AsRef<str>, field: impl AsRef<str>) -> Result<String> {
     let info = Command::new("lsappinfo")
         .args(["info", "-only", field.as_ref(), "-app", bundle_id.as_ref()])
@@ -286,17 +261,6 @@ pub fn dialoguer_theme() -> ColorfulTheme {
         prompt_prefix: dialoguer::console::style("?".into()).for_stderr().magenta(),
         ..ColorfulTheme::default()
     }
-}
-
-pub async fn assert_logged_in() -> Result<(), Error> {
-    if !(fig_os_shim::Env::new().amazon_q_sigv4() || fig_auth::is_logged_in().await) {
-        bail!(
-            "You are not logged in, please log in with {}",
-            format!("{CLI_BINARY_NAME} login",).bold()
-        );
-    }
-
-    Ok(())
 }
 
 #[cfg(target_os = "macos")]

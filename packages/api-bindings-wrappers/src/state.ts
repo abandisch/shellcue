@@ -3,15 +3,12 @@ import { State as DefaultState } from "@aws/amazon-q-developer-cli-api-bindings"
 export enum States {
   DEVELOPER_API_HOST = "developer.apiHost",
   DEVELOPER_AE_API_HOST = "developer.autocomplete-engine.apiHost",
-
-  IS_FIG_PRO = "user.account.is-fig-pro",
 }
 
 export type LocalStateMap = Partial<
   {
     [States.DEVELOPER_API_HOST]: string;
     [States.DEVELOPER_AE_API_HOST]: string;
-    [States.IS_FIG_PRO]: boolean;
   } & { [key in States]: unknown }
 >;
 

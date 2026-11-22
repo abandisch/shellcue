@@ -26,7 +26,6 @@ use async_trait::async_trait;
 use checks::{
     BashVersionCheck,
     FishVersionCheck,
-    MidwayCheck,
     SshdConfigCheck,
 };
 use clap::Args;
@@ -2086,7 +2085,6 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
                 &PluginDevModeCheck,
                 &DashboardHostCheck,
                 &AutocompleteHostCheck,
-                &MidwayCheck,
             ],
             config,
             &mut spinner,

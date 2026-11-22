@@ -16,7 +16,6 @@ mod settings;
 mod theme;
 mod uninstall;
 mod update;
-mod user;
 
 use std::io::{
     Write as _,
@@ -137,12 +136,6 @@ pub enum CliRootCommands {
     Theme(theme::ThemeArgs),
     /// Create a new Github issue
     Issue(issue::IssueArgs),
-    /// Root level user subcommands
-    #[command(flatten)]
-    RootUser(user::RootUserSubcommand),
-    /// Manage your account
-    #[command(subcommand)]
-    User(user::UserSubcommand),
     /// Fix and diagnose common issues
     Doctor(doctor::DoctorArgs),
     /// Generate CLI completion spec
@@ -253,8 +246,6 @@ impl Cli {
                 CliRootCommands::Update(args) => args.execute().await,
                 CliRootCommands::Diagnostic(args) => args.execute().await,
                 CliRootCommands::Init(args) => args.execute().await,
-                CliRootCommands::User(user) => user.execute().await,
-                CliRootCommands::RootUser(root_user) => root_user.execute().await,
                 CliRootCommands::Doctor(args) => args.execute().await,
                 CliRootCommands::Hook(hook_subcommand) => hook_subcommand.execute().await,
                 CliRootCommands::Theme(theme_args) => theme_args.execute().await,
@@ -497,6 +488,21 @@ mod test {
     #[test]
     fn test_removed_telemetry_command() {
         assert!(Cli::try_parse_from([CLI_BINARY_NAME, "telemetry", "status"]).is_err());
+    }
+
+    #[test]
+    fn test_removed_auth_commands() {
+        let removed: &[&[&str]] = &[
+            &[CLI_BINARY_NAME, "login"],
+            &[CLI_BINARY_NAME, "logout"],
+            &[CLI_BINARY_NAME, "whoami"],
+            &[CLI_BINARY_NAME, "profile"],
+            &[CLI_BINARY_NAME, "user", "whoami"],
+            &[CLI_BINARY_NAME, "debug", "refresh-auth-token"],
+        ];
+        for args in removed {
+            assert!(Cli::try_parse_from(*args).is_err(), "{args:?} should not parse");
+        }
     }
 
     #[test]

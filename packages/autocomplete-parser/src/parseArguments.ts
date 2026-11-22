@@ -780,7 +780,6 @@ const getCacheKey = (
 const parseArgumentsCached = async (
   command: Command,
   context: Fig.ShellContext,
-  // authClient: AuthClient,
   specLocations?: Internal.SpecLocation[],
   isParsingHistory?: boolean,
   startIndex = 0,
@@ -871,7 +870,6 @@ const parseArgumentsCached = async (
       state = await parseArgumentsCached(
         currentCommand,
         context,
-        // authClient,
         loadSpecResult,
         isParsingHistory,
         startIndex + index,
@@ -1088,7 +1086,6 @@ const firstTokenSpec: Internal.Subcommand = {
 export const parseArguments = async (
   command: Command | null,
   context: Fig.ShellContext,
-  // authClient: AuthClient,
   isParsingHistory = false,
   localLogger: logger.Logger = logger,
 ): Promise<ArgumentParserResult> => {
@@ -1121,7 +1118,6 @@ export const parseArguments = async (
   let state = await parseArgumentsCached(
     command,
     context,
-    // authClient,
     undefined,
     isParsingHistory,
     0,
