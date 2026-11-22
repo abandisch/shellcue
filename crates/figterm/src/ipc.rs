@@ -143,7 +143,7 @@ async fn get_forwarded_stream() -> Result<(MessageSource, MessageSink, Option<Jo
         ));
     }
 
-    let socket = directories::remote_socket_path()?;
+    let socket = directories::local_remote_socket_path()?;
     let stream = fig_ipc::socket_connect_timeout(&socket, Duration::from_secs(5)).await?;
     let (reader, writer) = tokio::io::split(stream);
     Ok((MessageSource::UnixStream(reader), MessageSink::UnixStream(writer), None))
@@ -237,10 +237,9 @@ pub async fn spawn_figterm_ipc(
     Ok(incoming_rx)
 }
 
-/// Connects to the desktop app and allows for a remote connection from remote hosts
+/// Connects to the desktop app over its local socket
 pub async fn spawn_remote_ipc(
     session_id: String,
-    parent_id: Option<String>,
     main_loop_sender: Sender<MainLoopEvent>,
 ) -> Result<(Sender<Hostbound>, Receiver<Clientbound>, oneshot::Sender<()>)> {
     let (stop_ipc_tx, mut stop_ipc_rx) = oneshot::channel::<()>();
@@ -272,7 +271,7 @@ pub async fn spawn_remote_ipc(
                     if let Err(err) = writer.send_message(Hostbound {
                         packet: Some(hostbound::Packet::Handshake(Handshake {
                             id: session_id.clone(),
-                            parent_id: parent_id.clone(),
+                            parent_id: None,
                             secret: secret.clone(),
                         })),
                     })

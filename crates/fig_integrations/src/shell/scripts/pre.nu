@@ -17,14 +17,6 @@ if "Q_NEW_SESSION" in $env {
   let-env Q_NEW_SESSION = $nothing
 }
 
-if "Q_SET_PARENT_CHECK" not-in $env {
-  if "Q_PARENT" not-in $env and "Q_SET_PARENT" in $env {
-    let-env Q_PARENT = $env.Q_SET_PARENT
-    let-env Q_SET_PARENT = $nothing
-  }
-  let-env Q_SET_PARENT_CHECK = 1
-}
-
 
 let result = (^{{CLI_BINARY_NAME}} _ should-figterm-launch | complete)
 let-env SHOULD_QTERM_LAUNCH = $result.exit_code

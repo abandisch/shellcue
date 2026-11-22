@@ -1,13 +1,12 @@
 import itertools
 import os
-from typing import List, Mapping, Sequence
+from typing import Mapping, Sequence
 from rust import cargo_cmd_name, rust_env
-from util import isLinux, run_cmd, get_variants, Variant
+from util import isLinux, run_cmd
 from const import DESKTOP_FUZZ_PACKAGE_NAME, DESKTOP_PACKAGE_NAME
 
 
 def run_clippy(
-    variants: List[Variant],
     features: Mapping[str, Sequence[str]] | None = None,
     target: str | None = None,
     fail_on_warn: bool = False,
@@ -16,9 +15,6 @@ def run_clippy(
 
     if target:
         args.extend(["--target", target])
-
-    if Variant.FULL not in variants:
-        args.extend(["--exclude", DESKTOP_PACKAGE_NAME, "--exclude", DESKTOP_FUZZ_PACKAGE_NAME])
 
     if features:
         args.extend(
@@ -41,7 +37,6 @@ def run_clippy(
 
 
 def run_cargo_tests(
-    variants: List[Variant],
     features: Mapping[str, Sequence[str]] | None = None,
     target: str | None = None,
 ):
@@ -51,9 +46,6 @@ def run_cargo_tests(
 
     if target:
         args.extend(["--target", target])
-
-    if Variant.FULL not in variants:
-        args.extend(["--exclude", DESKTOP_PACKAGE_NAME])
 
     if features:
         args.extend(
@@ -107,7 +99,6 @@ def lint_install_sh():
 
 
 def all_tests(clippy_fail_on_warn: bool):
-    variants = get_variants()
     lint_install_sh()
-    run_cargo_tests(variants=variants)
-    run_clippy(variants=variants, fail_on_warn=clippy_fail_on_warn)
+    run_cargo_tests()
+    run_clippy(fail_on_warn=clippy_fail_on_warn)

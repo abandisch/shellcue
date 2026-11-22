@@ -26,7 +26,6 @@ use async_trait::async_trait;
 use checks::{
     BashVersionCheck,
     FishVersionCheck,
-    SshdConfigCheck,
 };
 use clap::Args;
 use crossterm::style::Stylize;
@@ -51,7 +50,6 @@ use fig_integrations::shell::{
     ShellExt,
     ShellIntegration,
 };
-use fig_integrations::ssh::SshIntegration;
 use fig_integrations::{
     Error as InstallationError,
     Integration,
@@ -68,13 +66,9 @@ use fig_os_shim::{
 };
 use fig_proto::local::DiagnosticsResponse;
 use fig_settings::JsonStore;
-use fig_util::directories::{
-    remote_socket_path,
-    settings_path,
-};
+use fig_util::directories::settings_path;
 use fig_util::env_var::{
     PROCESS_LAUNCHED_BY_Q,
-    Q_PARENT,
     Q_TERM,
     QTERM_SESSION_ID,
 };
@@ -112,8 +106,6 @@ use crate::util::desktop::{
 };
 use crate::util::{
     app_path_from_bundle_id,
-    glob,
-    glob_dir,
     is_executable_in_path,
     restart_fig,
 };
@@ -495,63 +487,6 @@ impl DoctorCheck for DesktopSocketCheck {
             DoctorCheckType::NormalCheck
         } else {
             DoctorCheckType::NoCheck
-        }
-    }
-}
-
-struct RemoteSocketCheck;
-
-#[async_trait]
-impl DoctorCheck for RemoteSocketCheck {
-    fn name(&self) -> Cow<'static, str> {
-        format!("{PRODUCT_NAME} socket exists").into()
-    }
-
-    async fn get_type(&self, _: &(), _: Platform) -> DoctorCheckType {
-        DoctorCheckType::NormalCheck
-    }
-
-    async fn check(&self, _: &()) -> Result<(), DoctorError> {
-        let q_parent = fig_os_shim::Env::new().q_parent().ok();
-        let remote_socket = remote_socket_path().map_err(|err| DoctorError::Error {
-            reason: "Unable to get remote socket path".into(),
-            info: vec![
-                format!("{Q_PARENT}: {q_parent:?}").into(),
-                format!("Error: {err}").into(),
-            ],
-            fix: None,
-            error: Some(err.into()),
-        })?;
-
-        // Check file exists
-        check_file_exists(&remote_socket).map_err(|err| DoctorError::Error {
-            reason: format!("{PRODUCT_NAME} socket missing").into(),
-            info: vec![
-                format!("Path: {remote_socket:?}").into(),
-                format!("{Q_PARENT}: {q_parent:?}").into(),
-                format!("Error: {err}").into(),
-            ],
-            fix: None,
-            error: Some(err),
-        })?;
-
-        // Check socket permissions
-        check_socket_perms(&remote_socket).await?;
-
-        // Check connecting to socket
-        match tokio::net::UnixStream::connect(&remote_socket).await {
-            Ok(_) => Ok(()),
-            Err(err) => Err(DoctorError::Error {
-                reason: "Failed to connect to remote socket".into(),
-                info: vec![
-                    "Ensure the desktop app is running".into(),
-                    format!("Path: {remote_socket:?}").into(),
-                    format!("{Q_PARENT}: {q_parent:?}").into(),
-                    format!("Error: {err}").into(),
-                ],
-                fix: None,
-                error: Some(err.into()),
-            }),
         }
     }
 }
@@ -1028,41 +963,6 @@ impl DoctorCheck<DiagnosticsResponse> for ShellCompatibilityCheck {
     }
 }
 
-struct SshIntegrationCheck;
-
-#[async_trait]
-impl DoctorCheck<()> for SshIntegrationCheck {
-    fn name(&self) -> Cow<'static, str> {
-        "SSH integration".into()
-    }
-
-    async fn check(&self, _: &()) -> Result<(), DoctorError> {
-        match SshIntegration::new() {
-            Ok(integration) => match integration.is_installed().await {
-                Ok(()) => Ok(()),
-                Err(err) => Err(DoctorError::Error {
-                    reason: err.to_string().into(),
-                    info: vec![],
-                    fix: Some(DoctorFix::Async(
-                        async move {
-                            integration.install().await?;
-                            Ok(())
-                        }
-                        .boxed(),
-                    )),
-                    error: Some(eyre::Report::new(err)),
-                }),
-            },
-            Err(err) => Err(DoctorError::Error {
-                reason: err.to_string().into(),
-                info: vec![],
-                fix: None,
-                error: Some(eyre::Report::new(err)),
-            }),
-        }
-    }
-}
-
 struct BundlePathCheck;
 
 #[async_trait]
@@ -1521,66 +1421,6 @@ impl DoctorCheck for SystemVersionCheck {
     }
 }
 
-struct VSCodeIntegrationCheck;
-
-#[async_trait]
-impl DoctorCheck<Option<Terminal>> for VSCodeIntegrationCheck {
-    fn name(&self) -> Cow<'static, str> {
-        "VSCode integration is enabled".into()
-    }
-
-    async fn get_type(&self, current_terminal: &Option<Terminal>, _platform: Platform) -> DoctorCheckType {
-        if !is_installed(Terminal::VSCode.to_bundle_id().as_deref())
-            && !is_installed(Terminal::VSCodeInsiders.to_bundle_id().as_deref())
-        {
-            return DoctorCheckType::NoCheck;
-        }
-
-        if matches!(
-            current_terminal,
-            Some(Terminal::VSCode | Terminal::VSCodeInsiders | Terminal::Cursor | Terminal::CursorNightly)
-        ) {
-            DoctorCheckType::NormalCheck
-        } else {
-            DoctorCheckType::SoftCheck
-        }
-    }
-
-    async fn check(&self, _: &Option<Terminal>) -> Result<(), DoctorError> {
-        let integration = verify_integration("com.microsoft.VSCode")
-            .await
-            .context("Could not verify VSCode integration")?;
-
-        if integration != "installed!" {
-            let mut missing = true;
-
-            for dir in [".vscode", ".vscode-insiders", ".cursor", ".cursor-nightly"] {
-                // Check if withfig.fig exists
-                let extensions = directories::home_dir()
-                    .context("Could not get home dir")?
-                    .join(dir)
-                    .join("extensions");
-
-                let glob_set = glob([extensions.join("withfig.fig-").to_string_lossy()]).unwrap();
-
-                let extensions = extensions.as_path();
-                if let Ok(fig_extensions) = glob_dir(&glob_set, extensions) {
-                    if fig_extensions.is_empty() {
-                        missing = false;
-                    }
-                }
-            }
-
-            if missing {
-                return Err(doctor_error!("VSCode integration is missing!"));
-            }
-
-            return Err(doctor_error!("Unknown error with VSCode integration!"));
-        }
-        Ok(())
-    }
-}
-
 #[cfg(target_os = "macos")]
 struct ImeStatusCheck;
 
@@ -1765,27 +1605,6 @@ impl DoctorCheck for WindowsConsoleCheck {
                 );
             }
         }
-        Ok(())
-    }
-}
-
-#[cfg(target_os = "macos")]
-struct ToolboxInstalledCheck;
-
-#[cfg(target_os = "macos")]
-#[async_trait]
-impl DoctorCheck for ToolboxInstalledCheck {
-    fn name(&self) -> Cow<'static, str> {
-        "Jetbrains Toolbox Check".into()
-    }
-
-    async fn check(&self, _: &()) -> Result<(), DoctorError> {
-        if Terminal::is_jetbrains_terminal()
-            && macos_utils::url::path_for_application("com.jetbrains.toolbox").is_some()
-        {
-            doctor_warning!("apps install through jetbrains toolbox are not supported");
-        }
-
         Ok(())
     }
 }
@@ -1987,24 +1806,20 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
                 #[cfg(target_os = "windows")]
                 &WindowsConsoleCheck,
                 &SettingsCorruptionCheck,
-                &SshdConfigCheck,
                 &FigIntegrationsCheck,
-                // &SshIntegrationCheck,
             ],
             config,
             &mut spinner,
         )
         .await?;
 
-        if fig_util::manifest::is_full() {
-            run_checks(
-                "Let's make sure the app is running...".into(),
-                vec![&AppRunningCheck, &DesktopSocketCheck],
-                config,
-                &mut spinner,
-            )
-            .await?;
-        }
+        run_checks(
+            "Let's make sure the app is running...".into(),
+            vec![&AppRunningCheck, &DesktopSocketCheck],
+            config,
+            &mut spinner,
+        )
+        .await?;
 
         run_checks(
             "Let's see if the app is in a working state...".into(),
@@ -2021,22 +1836,12 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
 
         run_checks(
             "Let's check if your system is compatible...".into(),
-            vec![
-                &SystemVersionCheck,
-                &BashVersionCheck,
-                &FishVersionCheck,
-                #[cfg(target_os = "macos")]
-                &ToolboxInstalledCheck,
-            ],
+            vec![&SystemVersionCheck, &BashVersionCheck, &FishVersionCheck],
             config,
             &mut spinner,
         )
         .await
         .ok();
-
-        if fig_util::manifest::is_minimal() {
-            return Ok(());
-        }
 
         #[cfg(target_os = "macos")]
         {
@@ -2069,7 +1874,7 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
                 get_linux_context,
             };
             // Linux desktop checks
-            if fig_util::manifest::is_full() && !fig_util::system_info::is_remote() {
+            if !fig_util::system_info::is_remote() {
                 run_checks_with_context(
                     "Let's check Linux integrations",
                     vec![
@@ -2091,7 +1896,7 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
 
         #[cfg(target_os = "linux")]
         {
-            if fig_util::manifest::is_full() && !fig_util::system_info::is_remote() {
+            if !fig_util::system_info::is_remote() {
                 run_checks_with_context(
                     format!("Let's check {}...", format!("{CLI_BINARY_NAME} diagnostic").bold()),
                     vec![&AutocompleteActiveCheck],
@@ -2112,8 +1917,6 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
                 // TODO: re-enable on macos once IME/terminal integrations are sorted
                 // #[cfg(not(target_os = "macos"))]
                 // &HyperIntegrationCheck,
-                // #[cfg(not(target_os = "macos"))]
-                // &VSCodeIntegrationCheck,
                 #[cfg(target_os = "macos")]
                 &ImeStatusCheck,
             ],

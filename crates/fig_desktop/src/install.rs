@@ -1,17 +1,15 @@
 use std::sync::Arc;
 
 use fig_integrations::Integration;
-use fig_integrations::ssh::SshIntegration;
 use fig_os_shim::Context;
 #[cfg(target_os = "macos")]
 use fig_util::directories::fig_data_dir;
 #[cfg(target_os = "macos")]
 use macos_utils::bundle::get_bundle_path_for_executable;
 use semver::Version;
-use tracing::{
-    error,
-    info,
-};
+use tracing::error;
+#[cfg(target_os = "linux")]
+use tracing::info;
 
 #[allow(unused_imports)]
 use crate::utils::is_cargo_debug_build;
@@ -88,47 +86,6 @@ pub async fn run_install(ctx: Arc<Context>) {
 
     if let Err(err) = set_previous_version(current_version()) {
         error!(%err, "Failed to set previous version");
-    }
-
-    // install vscode integration
-    #[cfg(target_os = "macos")]
-    for variant in fig_integrations::vscode::variants_installed() {
-        let integration = fig_integrations::vscode::VSCodeIntegration { variant };
-        if integration.is_installed().await.is_err() {
-            info!(
-                "Attempting to install vscode integration for variant {}",
-                integration.variant.application_name
-            );
-            if let Err(err) = integration.install().await {
-                error!(%err, "Failed installing vscode integration for variant {}", integration.variant.application_name);
-            }
-        }
-    }
-
-    // install intellij integration
-    #[cfg(target_os = "macos")]
-    match fig_integrations::intellij::variants_installed().await {
-        Ok(variants) => {
-            for integration in variants {
-                if integration.is_installed().await.is_err() {
-                    info!(
-                        "Attempting to install intellij integration for variant {}",
-                        integration.variant.application_name()
-                    );
-                    if let Err(err) = integration.install().await {
-                        error!(%err, "Failed installing intellij integration for variant {}", integration.variant.application_name());
-                    }
-                }
-            }
-        },
-        Err(err) => error!(%err, "Failed getting installed intellij variants"),
-    }
-
-    // update ssh integration
-    if let Ok(ssh_integration) = SshIntegration::new() {
-        if let Err(err) = ssh_integration.reinstall().await {
-            error!(%err, "Failed updating ssh integration");
-        }
     }
 }
 

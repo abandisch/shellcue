@@ -212,7 +212,6 @@ async fn handle_local_ipc(
                     IntegrationReady,
                     InterceptedKey,
                     KeyboardFocusChanged,
-                    OpenedSshConnection,
                     PostExec,
                     PreExec,
                     Prompt,
@@ -233,7 +232,6 @@ async fn handle_local_ipc(
                         Init(_)
                         | PostExec(_)
                         | TmuxPaneChanged(_)
-                        | OpenedSshConnection(_)
                         | Callback(_)
                         | IntegrationReady(_)
                         | Hide(_)

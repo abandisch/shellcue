@@ -27,7 +27,6 @@ struct ProcessInfo {
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 enum Status {
-    Launch(Cow<'static, str>),
     DontLaunch(Cow<'static, str>),
     Process(ProcessInfo),
 }
@@ -37,12 +36,6 @@ impl Status {
     fn exit_status(self, quiet: bool) -> Result<ProcessInfo, u8> {
         match self {
             Status::Process(info) => Ok(info),
-            Status::Launch(s) => {
-                if !quiet {
-                    writeln!(stdout(), "✅ {s}").ok();
-                }
-                Err(0)
-            },
             Status::DontLaunch(s) => {
                 if !quiet {
                     writeln!(stdout(), "❌ {s}").ok();
@@ -53,10 +46,7 @@ impl Status {
     }
 }
 
-fn parent_status(ctx: &Context, current_pid: fig_os_shim::process_info::Pid) -> Status {
-    use fig_util::env_var::Q_TERM;
-    let env = ctx.env();
-
+fn parent_status(current_pid: fig_os_shim::process_info::Pid) -> Status {
     let parent_pid = match current_pid.parent() {
         Some(pid) => pid,
         None => return Status::DontLaunch("No parent PID".into()),
@@ -76,17 +66,6 @@ fn parent_status(ctx: &Context, current_pid: fig_os_shim::process_info::Pid) -> 
     };
 
     let valid_parent = ["zsh", "bash", "fish", "nu"].contains(&parent_name);
-
-    if env.in_ssh() && env.get_os(Q_TERM).is_none() {
-        return Status::Launch(format!("In SSH and {Q_TERM} is not set").into());
-    }
-
-    if env.in_codespaces() {
-        return match env.get_os(Q_TERM) {
-            Some(_) => Status::DontLaunch(format!("In Codespaces and {Q_TERM} is set").into()),
-            None => Status::Launch(format!("In Codespaces and {Q_TERM} is not set").into()),
-        };
-    }
 
     Status::Process(ProcessInfo {
         pid: parent_pid,
@@ -168,7 +147,7 @@ fn should_launch(ctx: &Context, quiet: bool) -> u8 {
     let process_info = ctx.process_info();
     let current_pid = process_info.current_pid();
 
-    let parent_info = match parent_status(ctx, current_pid).exit_status(quiet) {
+    let parent_info = match parent_status(current_pid).exit_status(quiet) {
         Ok(info) => info,
         Err(i) => return i,
     };
@@ -204,10 +183,7 @@ fn should_launch(ctx: &Context, quiet: bool) -> u8 {
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn should_figterm_launch_exit_status(ctx: &Context, quiet: bool) -> u8 {
-    use fig_util::env_var::{
-        PROCESS_LAUNCHED_BY_Q,
-        Q_PARENT,
-    };
+    use fig_util::env_var::PROCESS_LAUNCHED_BY_Q;
 
     let env = ctx.env();
 
@@ -276,10 +252,10 @@ pub fn should_figterm_launch_exit_status(ctx: &Context, quiet: bool) -> u8 {
         return 1;
     }
 
-    // If we are in SSH and there is no Q_PARENT dont launch
-    if env.in_ssh() && env.get_os(Q_PARENT).is_none() {
+    // Only local shells are supported
+    if env.in_ssh() {
         if !quiet {
-            writeln!(stdout(), "❌ In SSH without {Q_PARENT}").ok();
+            writeln!(stdout(), "❌ In SSH, remote shells are not supported").ok();
         }
         return 1;
     }
@@ -334,7 +310,6 @@ mod tests {
     };
     use fig_util::env_var::{
         PROCESS_LAUNCHED_BY_Q,
-        Q_PARENT,
         Q_TERM,
     };
 
@@ -454,9 +429,7 @@ mod tests {
             test(WARP_TERMINAL).env(&[(TERM_PROGRAM, WARP_TERMINAL)]).expect(1),
             test(WARP_TERMINAL).env(&[(TERM_PROGRAM, WARP_TERMINAL)]).expect(1),
             test("In CI").env(&[("CI", "1")]).expect(1),
-            test(format!("In ssh without {Q_PARENT}"))
-                .env(&[("SSH_CLIENT", "1")])
-                .expect(1),
+            test("In SSH").env(&[("SSH_CLIENT", "1")]).expect(1),
             test("__PWSH_LOGIN_CHECKED")
                 .env(&[("__PWSH_LOGIN_CHECKED", "1")])
                 .expect(1),
@@ -475,11 +448,6 @@ mod tests {
         let tests = [
             test("no parent id").expect(1),
             test("invalid parent").parent_exe("/usr/bin/invalid").expect(1),
-            test(format!("In Codespaces with {Q_TERM}"))
-                .parent_exe("/usr/bin/zsh")
-                .env(&[("CODESPACES", "1")])
-                .env(&[(Q_TERM, "1")])
-                .expect(1),
         ];
         for test in tests {
             test.run();
@@ -528,14 +496,40 @@ mod tests {
                 .parent_exe("/usr/bin/zsh")
                 .grandparent_exe("/usr/bin/tmux")
                 .expect(0),
-            test(format!("In Codespaces without {Q_TERM}"))
+        ];
+        for test in tests {
+            test.run();
+        }
+    }
+
+    /// Tests that figterm never launches in an SSH session, even when it otherwise would.
+    #[test]
+    fn ssh_session_tests() {
+        let tests = [
+            test(format!("In SSH and {Q_TERM} is not set"))
                 .parent_exe("/usr/bin/zsh")
-                .env(&[("CODESPACES", "1")])
-                .expect(0),
-            test(format!("In ssh and {Q_TERM} is not set"))
+                .env(&[("SSH_CLIENT", "1")])
+                .expect(1),
+            test(format!("In SSH and {Q_TERM} is set"))
                 .parent_exe("/usr/bin/zsh")
-                .env(&[("SSH_CLIENT", "1"), (Q_PARENT, "1")])
-                .expect(0),
+                .env(&[("SSH_CONNECTION", "1"), (Q_TERM, "1")])
+                .expect(1),
+            test("In SSH with Q_PARENT set")
+                .parent_exe("/usr/bin/zsh")
+                .env(&[("SSH_CLIENT", "1"), ("Q_PARENT", "1")])
+                .expect(1),
+            test("on linux in SSH with valid parent and valid grandparent exe")
+                .os(Os::Linux)
+                .parent_exe("/usr/bin/zsh")
+                .grandparent_exe("/usr/bin/wezterm")
+                .env(&[("SSH_TTY", "/dev/pts/0")])
+                .expect(1),
+            test("on mac in SSH with valid parent and special grandparent")
+                .os(Os::Mac)
+                .parent_exe("/usr/bin/zsh")
+                .grandparent_exe("/usr/bin/tmux")
+                .env(&[("SSH_CLIENT", "1")])
+                .expect(1),
         ];
         for test in tests {
             test.run();

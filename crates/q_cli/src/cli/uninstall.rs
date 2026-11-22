@@ -36,13 +36,7 @@ pub async fn uninstall_command(no_confirm: bool) -> Result<ExitCode> {
         if #[cfg(target_os = "macos")] {
             uninstall(ctx).await?;
         } else if #[cfg(target_os = "linux")] {
-            use fig_util::manifest::is_minimal;
-            if is_minimal() {
-                uninstall_linux_minimal(ctx).await?;
-            } else {
-                uninstall_linux_full(ctx).await?;
-            }
-
+            uninstall_linux_full(ctx).await?;
         }
     }
 
@@ -53,34 +47,6 @@ pub async fn uninstall_command(no_confirm: bool) -> Result<ExitCode> {
 async fn uninstall(ctx: std::sync::Arc<fig_os_shim::Context>) -> Result<()> {
     fig_install::uninstall(fig_install::InstallComponents::all(), ctx).await?;
 
-    Ok(())
-}
-
-#[cfg(target_os = "linux")]
-async fn uninstall_linux_minimal(ctx: std::sync::Arc<fig_os_shim::Context>) -> Result<()> {
-    use eyre::bail;
-
-    let exe_path = ctx.fs().canonicalize(ctx.env().current_exe()?.canonicalize()?).await?;
-    let Some(exe_name) = exe_path.file_name().and_then(|s| s.to_str()) else {
-        bail!("Failed to get name of current executable: {exe_path:?}")
-    };
-    let Some(exe_parent) = exe_path.parent() else {
-        bail!("Failed to get parent of current executable: {exe_path:?}")
-    };
-    // canonicalize to handle if the home dir is a symlink (like on Dev Desktops)
-    let local_bin = fig_util::directories::home_local_bin_ctx(&ctx)?.canonicalize()?;
-
-    if exe_parent != local_bin {
-        bail!(
-            "Uninstall is only supported for binaries installed in {local_bin:?}, the current executable is in {exe_parent:?}"
-        );
-    }
-
-    if exe_name != CLI_BINARY_NAME {
-        bail!("Uninstall is only supported for {CLI_BINARY_NAME:?}, the current executable is {exe_name:?}");
-    }
-
-    fig_install::uninstall(fig_install::InstallComponents::all_linux_minimal(), ctx).await?;
     Ok(())
 }
 

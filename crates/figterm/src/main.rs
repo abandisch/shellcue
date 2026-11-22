@@ -1,5 +1,3 @@
-#[cfg(target_os = "linux")]
-mod cleanup;
 pub mod cli;
 mod event_handler;
 pub mod history;
@@ -78,10 +76,7 @@ use fig_util::{
     Terminal as FigTerminal,
     directories,
 };
-use flume::{
-    Receiver,
-    Sender,
-};
+use flume::Sender;
 #[cfg(unix)]
 use nix::unistd::execvp;
 use portable_pty::PtySize;
@@ -162,10 +157,6 @@ pub enum MainLoopEvent {
     },
     UnlockInterception,
     SetImmediateMode(bool),
-    PromptSSH {
-        uuid: String,
-        remote_host: String,
-    },
     SetCsiU,
     UnsetCsiU,
 }
@@ -222,74 +213,6 @@ fn get_cursor_coordinates(terminal: &dyn Terminal) -> Option<TerminalCursorCoord
             return None;
         }
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn _should_install_remote_ssh_integration(
-    uuid: String,
-    remote_host: String,
-    main_loop_tx: Sender<MainLoopEvent>,
-    remote_receiver: Receiver<fig_proto::remote::Clientbound>,
-    remote_sender: Sender<Hostbound>,
-    term: &Term<EventHandler>,
-    pty_master: &mut Box<dyn crate::pty::AsyncMasterPty + Send + Sync>,
-    key_interceptor: &mut KeyInterceptor,
-) -> Option<bool> {
-    use fig_proto::remote::clientbound;
-
-    let remote_install_setting = fig_settings::settings::get_string_or("ssh.remote-prompt", "ask".into());
-    if remote_install_setting == "never" {
-        return Some(false);
-    }
-
-    let key = format!("ssh.remote-prompt.disable-host.{remote_host}");
-    let disable_host = fig_settings::state::get_bool_or(key, false);
-    if disable_host {
-        return Some(false);
-    }
-
-    let prompt_timeout: u64 = fig_settings::settings::get_int_or("ssh.remote-prompt.timeout", 2000)
-        .try_into()
-        .unwrap_or(2000);
-
-    // Wait for child ssh session to connect to local desktop instance.
-    let got_child_connection = tokio::time::timeout(tokio::time::Duration::from_millis(prompt_timeout), async {
-        loop {
-            if let Ok(msg) = remote_receiver.recv_async().await {
-                if let Some(clientbound::Packet::NotifyChildSessionStarted(clientbound::NotifyChildSessionStarted {
-                    parent_id,
-                })) = msg.packet
-                {
-                    if parent_id == uuid {
-                        return true;
-                    }
-                } else {
-                    process_remote_message(
-                        msg,
-                        main_loop_tx.clone(),
-                        remote_sender.clone(),
-                        term,
-                        pty_master,
-                        key_interceptor,
-                    )
-                    .await
-                    .ok();
-                }
-            }
-        }
-    })
-    .await
-    .is_ok();
-
-    if got_child_connection {
-        return Some(false);
-    }
-
-    if remote_install_setting == "always" {
-        return Some(true);
-    }
-
-    None
 }
 
 fn can_send_edit_buffer<T>(term: &Term<T>) -> bool
@@ -482,8 +405,6 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
         std::env::set_var(QTERM_SESSION_ID, &session_id);
     }
 
-    let parent_id = fig_os_shim::Env::new().q_parent().ok();
-
     let mut terminal = SystemTerminal::new_from_stdio()?;
     let screen_size = terminal.get_screen_size()?;
 
@@ -558,7 +479,6 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
         // Spawn thread to handle remote ipc
         let (remote_sender, remote_receiver, stop_ipc_tx) = spawn_remote_ipc(
             session_id.clone(),
-            parent_id,
             main_loop_tx.clone()
         ).await?;
 
@@ -666,36 +586,6 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
                                     stdout.flush().await?;
                                     csi_u_set = false;
                                 },
-                                MainLoopEvent::PromptSSH { uuid: _, remote_host: _ } => {
-                                    // let should_install = should_install_remote_ssh_integration(
-                                    //     uuid,
-                                    //     remote_host.clone(),
-                                    //     main_loop_tx.clone(),
-                                    //     remote_receiver.clone(),
-                                    //     remote_sender.clone(),
-                                    //     &term,
-                                    //     &mut master,
-                                    //     &mut key_interceptor,
-                                    // ).await;
-
-                                    // let should_install = match should_install {
-                                    //     Some(val) => val,
-                                    //     None => {
-                                    //         prompt_remote_integration_install(
-                                    //             remote_host,
-                                    //             console_term.clone(),
-                                    //             console_term_key_tx.clone(),
-                                    //             &mut terminal,
-                                    //             input_rx.clone(),
-                                    //         ).await.unwrap_or(false)
-                                    //     }
-                                    // };
-
-                                    // if should_install {
-                                    //     let installation_command = "curl -fSsL https://fig.io/install-minimal.sh | bash; exec $SHELL\n";
-                                    //     master.write_all(installation_command.as_bytes()).await?;
-                                    // }
-                                }
                             }
                         }
                         Err(err) => warn!("Failed to recv: {err}"),
@@ -925,10 +815,6 @@ fn figterm_main(command: Option<&[String]>) -> Result<()> {
     // We must explicitly shutdown the runtime to exit.
     // This can cause resource leaks if we aren't careful about tasks we spawn.
     runtime.shutdown_background();
-
-    // attempt cleanup
-    #[cfg(target_os = "linux")]
-    cleanup::cleanup()?;
 
     runtime_result
 }

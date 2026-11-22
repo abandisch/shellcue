@@ -1,6 +1,5 @@
 mod cli_context;
 pub mod desktop;
-pub mod pid_file;
 
 use std::env;
 use std::ffi::OsStr;
@@ -121,10 +120,6 @@ pub fn app_path_from_bundle_id(bundle_id: impl AsRef<OsStr>) -> Option<String> {
 }
 
 pub async fn quit_fig(verbose: bool) -> Result<ExitCode> {
-    if fig_util::system_info::in_cloudshell() {
-        bail!("Restarting {PRODUCT_NAME} is not supported in CloudShell");
-    }
-
     if fig_util::system_info::is_remote() {
         bail!("Please restart {PRODUCT_NAME} from your host machine");
     }
@@ -187,10 +182,6 @@ pub async fn quit_fig(verbose: bool) -> Result<ExitCode> {
 }
 
 pub async fn restart_fig() -> Result<()> {
-    if fig_util::system_info::in_cloudshell() {
-        bail!("Restarting {PRODUCT_NAME} is not supported in CloudShell");
-    }
-
     if fig_util::system_info::is_remote() {
         bail!("Please restart {PRODUCT_NAME} from your host machine");
     }

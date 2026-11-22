@@ -13,7 +13,6 @@ pub const APP_PROCESS_NAME: &str = "q_desktop.exe";
 pub const TAURI_PRODUCT_NAME: &str = "q_desktop";
 
 pub const CLI_BINARY_NAME: &str = "q";
-pub const CLI_BINARY_NAME_MINIMAL: &str = "q-minimal";
 pub const PTY_BINARY_NAME: &str = "qterm";
 
 pub const CLI_CRATE_NAME: &str = "q_cli";
@@ -40,9 +39,6 @@ pub const OLD_PTY_BINARY_NAMES: &[&str] = &["cwterm"];
 pub mod build {
     /// The target of the current build, e.g. "aarch64-unknown-linux-musl"
     pub const TARGET_TRIPLE: Option<&str> = option_env!("AMAZON_Q_BUILD_TARGET_TRIPLE");
-
-    /// The variant of the current build
-    pub const VARIANT: Option<&str> = option_env!("AMAZON_Q_BUILD_VARIANT");
 
     /// A git full sha hash of the current build
     pub const HASH: Option<&str> = option_env!("AMAZON_Q_BUILD_HASH");
@@ -91,15 +87,6 @@ pub mod env_var {
         /// The UUID of the current parent qterm instance
         QTERM_SESSION_ID = "QTERM_SESSION_ID",
 
-        /// The current parent socket to connect to
-        Q_PARENT = "Q_PARENT",
-
-        /// Set the [`Q_PARENT`] parent socket to connect to
-        Q_SET_PARENT = "Q_SET_PARENT",
-
-        /// Guard for the [`Q_SET_PARENT`] check
-        Q_SET_PARENT_CHECK = "Q_SET_PARENT_CHECK",
-
         /// Set if qterm is running, contains the version
         Q_TERM = "Q_TERM",
 
@@ -137,11 +124,6 @@ mod tests {
 
     #[test]
     fn test_build_envs() {
-        if let Some(build_variant) = build::VARIANT {
-            println!("build_variant: {build_variant}");
-            assert!(["full", "minimal"].contains(&&*build_variant.to_ascii_lowercase()));
-        }
-
         if let Some(build_hash) = build::HASH {
             println!("build_hash: {build_hash}");
             assert!(!build_hash.is_empty());

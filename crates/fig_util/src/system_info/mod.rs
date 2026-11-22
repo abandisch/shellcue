@@ -15,7 +15,6 @@ use sha2::{
 };
 
 use crate::Error;
-use crate::manifest::is_minimal;
 
 /// The support level for different platforms
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,14 +63,7 @@ impl OSVersion {
                     SupportLevel::Unsupported
                 }
             },
-            OSVersion::Linux { .. } => match (is_remote(), is_minimal()) {
-                (true, true) => SupportLevel::Supported,
-                (false, true) => SupportLevel::SupportedWithCaveat {
-                    info: "Autocomplete is not yet available on Linux, but other products should work as expected."
-                        .into(),
-                },
-                (_, _) => SupportLevel::Supported,
-            },
+            OSVersion::Linux { .. } => SupportLevel::Supported,
             OSVersion::Windows { build, .. } => match build {
                 // Only Windows 11 is fully supported at the moment
                 build if *build >= 22000 => SupportLevel::Supported,
@@ -265,24 +257,7 @@ pub fn in_wsl() -> bool {
 /// Is the calling binary running on a remote instance
 pub fn is_remote() -> bool {
     // TODO(chay): Add detection for inside docker container
-    in_ssh() || in_cloudshell() || in_wsl() || fig_os_shim::Env::new().q_fake_is_remote()
-}
-
-/// Determines if we have an IPC path to a Desktop app from a remote environment
-pub fn has_parent() -> bool {
-    static HAS_PARENT: OnceLock<bool> = OnceLock::new();
-    *HAS_PARENT.get_or_init(|| fig_os_shim::Env::new().has_q_parent())
-}
-
-/// This true if the env var `AWS_EXECUTION_ENV=CloudShell`
-pub fn in_cloudshell() -> bool {
-    static IN_CLOUDSHELL: OnceLock<bool> = OnceLock::new();
-    *IN_CLOUDSHELL.get_or_init(|| Env::new().in_cloudshell())
-}
-
-pub fn in_codespaces() -> bool {
-    static IN_CODESPACES: OnceLock<bool> = OnceLock::new();
-    *IN_CODESPACES.get_or_init(|| fig_os_shim::Env::new().in_codespaces())
+    in_ssh() || in_wsl()
 }
 
 pub fn in_ci() -> bool {

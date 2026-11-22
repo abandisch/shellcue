@@ -7,7 +7,6 @@ use eyre::{
 use fig_util::{
     PRODUCT_NAME,
     directories,
-    manifest,
     system_info,
 };
 
@@ -84,12 +83,6 @@ pub fn desktop_app_running() -> bool {
 }
 
 pub fn launch_fig_desktop(args: LaunchArgs) -> Result<()> {
-    if manifest::is_minimal() {
-        return Err(eyre!(
-            "launching {PRODUCT_NAME} from minimal installs is not yet supported"
-        ));
-    }
-
     if system_info::is_remote() {
         return Err(eyre!(
             "launching {PRODUCT_NAME} from remote installs is not yet supported"

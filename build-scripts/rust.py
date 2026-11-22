@@ -2,8 +2,8 @@ from functools import cache
 from os import environ
 import platform
 import shutil
-from typing import Dict, List, Optional
-from util import info, isDarwin, isLinux, isMusl, run_cmd_output, warn, Variant
+from typing import Dict, List
+from util import info, isDarwin, isLinux, isMusl, run_cmd_output, warn
 from datetime import datetime, timezone
 
 
@@ -44,7 +44,7 @@ def cargo_cmd_name() -> str:
         return "cargo"
 
 
-def rust_env(release: bool, variant: Optional[Variant] = None, linker=None) -> Dict[str, str]:
+def rust_env(release: bool, linker=None) -> Dict[str, str]:
     env = {
         "CARGO_NET_GIT_FETCH_WITH_CLI": "true",
     }
@@ -70,8 +70,6 @@ def rust_env(release: bool, variant: Optional[Variant] = None, linker=None) -> D
     env["AMAZON_Q_BUILD_TARGET_TRIPLE"] = get_target_triple()
     env["AMAZON_Q_BUILD_HASH"] = build_hash()
     env["AMAZON_Q_BUILD_DATETIME"] = build_datetime()
-    if variant:
-        env["AMAZON_Q_BUILD_VARIANT"] = variant.name
 
     # Test related env vars:
     if skip_fish_tests():

@@ -203,10 +203,6 @@ pub enum DebugSubcommand {
     Devtools {
         app: App,
     },
-    /// Lists installed IntelliJ variants
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    #[command(name = "list-intellij-variants")]
-    ListIntelliJVariants,
     /// Disables sourcing of user shell config and instead uses a minimal shell config
     Shell,
     /// Update the shell config permissions to have the correct owner and access rights
@@ -712,14 +708,6 @@ impl DebugSubcommand {
                 })
                 .await
                 .context("Could not open devtools window")?;
-            },
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            DebugSubcommand::ListIntelliJVariants => {
-                for integration in fig_integrations::intellij::variants_installed().await? {
-                    println!("{}", integration.variant.application_name());
-                    #[cfg(target_os = "macos")]
-                    println!("  - {:?}", integration.application_folder());
-                }
             },
             DebugSubcommand::Shell => {
                 let mut profile = NamedTempFile::new()?;
