@@ -65,7 +65,7 @@ fn parent_status(current_pid: fig_os_shim::process_info::Pid) -> Status {
         None => return Status::DontLaunch("No parent name".into()),
     };
 
-    let valid_parent = ["zsh", "bash", "fish", "nu"].contains(&parent_name);
+    let valid_parent = parent_name == "zsh";
 
     Status::Process(ProcessInfo {
         pid: parent_pid,
@@ -451,6 +451,19 @@ mod tests {
         ];
         for test in tests {
             test.run();
+        }
+    }
+
+    /// Tests that only zsh is accepted as the parent shell.
+    #[test]
+    fn removed_shell_parent_tests() {
+        let tests = [
+            test("bash parent").os(Os::Linux).parent_exe("/usr/bin/bash"),
+            test("fish parent").os(Os::Linux).parent_exe("/usr/bin/fish"),
+            test("nu parent").os(Os::Linux).parent_exe("/usr/bin/nu"),
+        ];
+        for test in tests {
+            test.grandparent_exe("/usr/bin/wezterm").expect(1).run();
         }
     }
 

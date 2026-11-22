@@ -11,10 +11,7 @@ use anstream::println;
 use assert_cmd::prelude::*;
 use eyre::Context;
 use fig_util::consts::CLI_CRATE_NAME;
-use fig_util::consts::build::{
-    SKIP_FISH_TESTS,
-    SKIP_SHELLCHECK_TESTS,
-};
+use fig_util::consts::build::SKIP_SHELLCHECK_TESTS;
 use paste::paste;
 
 macro_rules! init_test {
@@ -42,15 +39,6 @@ macro_rules! init_test {
             #[test]
             #[cfg(not(windows))]
             fn [<init_lint_ $shell _ $stage _ $file>]() -> Result<(), Box<dyn std::error::Error>> {
-                // Ignore fish post since idk it doesn't work on CI
-                if $exe == "fish" && $stage == "post" {
-                    return Ok(());
-                }
-
-                if $exe == "fish" && SKIP_FISH_TESTS {
-                    return Ok(());
-                }
-
                 if $exe == "shellcheck" && SKIP_SHELLCHECK_TESTS {
                     return Ok(());
                 }
@@ -88,18 +76,8 @@ macro_rules! init_test {
     };
 }
 
-// bash
-init_test!("bash", "pre", "bashrc", ["shellcheck", "-s", "bash", "-"]);
-init_test!("bash", "pre", "bash_profile", ["shellcheck", "-s", "bash", "-"]);
-init_test!("bash", "post", "bashrc", ["shellcheck", "-s", "bash", "-"]);
-init_test!("bash", "post", "bash_profile", ["shellcheck", "-s", "bash", "-"]);
-
 // zsh
 init_test!("zsh", "pre", "zshrc", ["shellcheck", "-s", "bash", "-"]);
 init_test!("zsh", "pre", "zprofile", ["shellcheck", "-s", "bash", "-"]);
 init_test!("zsh", "post", "zshrc", ["shellcheck", "-s", "bash", "-"]);
 init_test!("zsh", "post", "zprofile", ["shellcheck", "-s", "bash", "-"]);
-
-// fish
-init_test!("fish", "pre", "00_fig_pre", ["fish", "--no-execute"]);
-init_test!("fish", "post", "99_fig_post", ["fish", "--no-execute"]);

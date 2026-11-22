@@ -75,23 +75,21 @@ const getEnvVarsMemoized = memoizeOne(
 );
 
 const getAliasMemoized = memoizeOne(
-  (alias: string, shellPath?: string) => {
-    const separator = shellPath?.includes("fish") ? " " : "=";
+  (alias: string) => {
     return alias
       .replace(/^alias\s/gm, "")
       .split("\n")
       .reduce((acc, a) => {
         try {
-          const [key, ...value] = a.split(separator);
-          acc[key] = value.join(separator).replace(/^'/, "").replace(/'$/, "");
+          const [key, ...value] = a.split("=");
+          acc[key] = value.join("=").replace(/^'/, "").replace(/'$/, "");
         } catch (err) {
           logger.error(`Error parsing alias: ${a}`, err);
         }
         return acc;
       }, {} as AliasMap);
   },
-  ([aliasA, shellPathA], [aliasB, shellPathB]) =>
-    aliasA === aliasB && shellPathA === shellPathB,
+  ([aliasA], [aliasB]) => aliasA === aliasB,
 );
 
 const computeSuggestions = (
@@ -457,10 +455,7 @@ export const useAutocompleteStore = createWithEqualityFn<AutocompleteState>(
               }
 
               if (shellContext.alias) {
-                figState.aliases = getAliasMemoized(
-                  shellContext.alias,
-                  shellContext.shellPath,
-                );
+                figState.aliases = getAliasMemoized(shellContext.alias);
               }
             }
 

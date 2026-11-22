@@ -121,7 +121,7 @@ async fn install(integration: Integration, silent: bool) -> Result<()> {
         Integration::Dotfiles { shell } => {
             let shells = match shell {
                 Some(shell) => vec![shell],
-                None => vec![Shell::Bash, Shell::Zsh, Shell::Fish],
+                None => vec![Shell::Zsh],
             };
 
             let mut errs: Vec<String> = vec![];
@@ -209,7 +209,7 @@ async fn uninstall(integration: Integration, silent: bool) -> Result<()> {
         Integration::Dotfiles { shell } => {
             let shells = match shell {
                 Some(shell) => vec![shell],
-                None => vec![Shell::Bash, Shell::Zsh, Shell::Fish],
+                None => vec![Shell::Zsh],
             };
 
             let mut errs: Vec<String> = vec![];
@@ -308,7 +308,7 @@ async fn status(integration: Integration, format: OutputFormat) -> Result<ExitCo
             let mut all_integrations = vec![];
             let mut errors = vec![];
 
-            for shell in &[Shell::Bash, Shell::Zsh, Shell::Fish] {
+            for shell in Shell::all() {
                 match shell.get_shell_integrations(&Env::new()) {
                     Ok(integrations) => {
                         for integration in integrations {

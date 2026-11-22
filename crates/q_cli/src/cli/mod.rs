@@ -511,6 +511,23 @@ mod test {
     }
 
     #[test]
+    fn removed_shells_are_rejected() {
+        let removed: &[&[&str]] = &[
+            &[CLI_BINARY_NAME, "init", "bash", "pre"],
+            &[CLI_BINARY_NAME, "init", "fish", "pre"],
+            &[CLI_BINARY_NAME, "init", "nu", "pre"],
+            &[CLI_BINARY_NAME, "completion", "bash"],
+            &[CLI_BINARY_NAME, "completion", "fish"],
+        ];
+        for args in removed {
+            assert!(Cli::try_parse_from(*args).is_err(), "{args:?} should not parse");
+        }
+        assert!(Cli::try_parse_from([CLI_BINARY_NAME, "init", "zsh", "pre"]).is_ok());
+        assert!(Cli::try_parse_from([CLI_BINARY_NAME, "completion", "zsh"]).is_ok());
+        assert!(Cli::try_parse_from([CLI_BINARY_NAME, "completion", "fig"]).is_ok());
+    }
+
+    #[test]
     fn test_doctor() {
         assert_parse!(
             ["doctor"],

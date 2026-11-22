@@ -47,10 +47,7 @@ use fig_util::{
     directories,
 };
 use owo_colors::OwoColorize;
-use tempfile::{
-    NamedTempFile,
-    TempDir,
-};
+use tempfile::TempDir;
 use tracing::error;
 
 use crate::cli::launch_fig_desktop;
@@ -710,7 +707,6 @@ impl DebugSubcommand {
                 .context("Could not open devtools window")?;
             },
             DebugSubcommand::Shell => {
-                let mut profile = NamedTempFile::new()?;
                 let tmp_dir = TempDir::new()?;
 
                 let mut command = Command::new(PTY_BINARY_NAME);
@@ -719,13 +715,6 @@ impl DebugSubcommand {
                 match Shell::current_shell() {
                     Some(shell) => {
                         let mut command = match shell {
-                            Shell::Bash => {
-                                writeln!(profile, "eval \"$({CLI_BINARY_NAME} init bash post)\"")?;
-                                command
-                                    .args(["bash", "--noprofile", "--norc", "--rcfile"])
-                                    .arg(profile.path());
-                                command
-                            },
                             Shell::Zsh => {
                                 std::fs::write(
                                     tmp_dir.path().join(".zshrc"),
@@ -736,22 +725,11 @@ impl DebugSubcommand {
                                 command.args(["zsh"]).env("ZDOTDIR", tmp_dir.path());
                                 command
                             },
-                            Shell::Fish => {
-                                command.args([
-                                    "fish",
-                                    "--no-config",
-                                    "-C",
-                                    &format!("{CLI_BINARY_NAME} init fish post | source"),
-                                ]);
-                                command
-                            },
-                            Shell::Nu => eyre::bail!("Unsupported shell for debug"),
                         };
 
                         println!("Starting {PRODUCT_NAME} debug shell");
                         println!();
 
-                        profile.as_file().sync_all()?;
                         let mut output = command.spawn()?;
                         if !output.wait()?.success() {
                             panic!();

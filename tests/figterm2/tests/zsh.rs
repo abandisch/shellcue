@@ -20,18 +20,6 @@ async fn shell(shell: &str) {
 
 #[ignore = "in progress"]
 #[tokio::test]
-async fn bash() {
-    shell("bash").await;
-}
-
-#[ignore = "in progress"]
-#[tokio::test]
 async fn zsh() {
     shell("zsh").await;
-}
-
-#[ignore = "in progress"]
-#[tokio::test]
-async fn fish() {
-    shell("fish").await;
 }

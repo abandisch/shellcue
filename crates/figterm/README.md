@@ -35,7 +35,7 @@ You can verify figterm is running by:
 
 When you spin up a terminal emulator like iTerm, it launches a shell. If our
 [shell integrations](../fig_integrations/src/shell/) are properly installed
-into a user's dotfiles (.zshrc, .bashrc, etc.) then the shell will source the
+into a user's dotfiles (.zshrc, .zprofile) then the shell will source the
 `pre` integration to [exec](../fig_integrations/src/shell/scripts/pre.sh)
 the figterm binary.
 
