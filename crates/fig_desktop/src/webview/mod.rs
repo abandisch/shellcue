@@ -91,8 +91,6 @@ use crate::request::api_request;
 use crate::tray::{
     self,
     build_tray,
-    get_context_menu,
-    get_icon,
 };
 use crate::webview::window_id::AutocompleteId;
 pub use crate::webview::window_id::{
@@ -104,7 +102,6 @@ use crate::{
     EventLoop,
     EventLoopProxy,
     InterceptState,
-    auth_watcher,
     file_watcher,
     local_ipc,
     utils,
@@ -361,7 +358,6 @@ impl WebviewManager {
         }
 
         file_watcher::setup_listeners(self.notifications_state.clone(), self.event_loop.create_proxy()).await;
-        auth_watcher::spawn_auth_watcher();
 
         init_webview_notification_listeners(self.event_loop.create_proxy()).await;
 
@@ -501,20 +497,12 @@ impl WebviewManager {
                         Event::ControlFlow(new_control_flow) => {
                             *control_flow = new_control_flow;
                         },
-                        Event::ReloadTray { is_logged_in } => {
-                            tray.set_icon(Some(get_icon(is_logged_in)))
-                                .map_err(|err| error!(?err))
-                                .ok();
-                            tray.set_icon_as_template(true);
-                            tray.set_menu(Some(Box::new(get_context_menu(is_logged_in))));
-                        },
                         Event::ReloadCredentials => {
                             // tray.set_menu(Some(Box::new(get_context_menu())));
 
                             let autocomplete_enabled =
                                 !fig_settings::settings::get_bool_or("autocomplete.disable", false)
                                     && PlatformState::accessibility_is_enabled().unwrap_or(true);
-                            // && fig_request::fig_auth::is_logged_in();
 
                             proxy
                                 .send_event(Event::WindowEvent {
@@ -529,7 +517,6 @@ impl WebviewManager {
                             let autocomplete_enabled =
                                 !fig_settings::settings::get_bool_or("autocomplete.disable", false)
                                     && PlatformState::accessibility_is_enabled().unwrap_or(true);
-                            // && fig_request::fig_auth::is_logged_in();
 
                             proxy
                                 .send_event(Event::WindowEvent {

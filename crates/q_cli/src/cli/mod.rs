@@ -50,7 +50,6 @@ use fig_auth::builder_id::{
     DeviceRegistration,
 };
 use fig_auth::consts::OIDC_BUILDER_ID_REGION;
-use fig_auth::is_logged_in;
 use fig_auth::pkce::Region;
 use fig_auth::secret_store::SecretStore;
 use fig_ipc::local::open_ui_element;
@@ -584,10 +583,7 @@ async fn launch_dashboard(help_fallback: bool) -> Result<ExitCode> {
         verbose: true,
     })?;
 
-    let route = match is_logged_in().await {
-        true => Some("/".into()),
-        false => None,
-    };
+    let route = Some("/".into());
 
     println!("Opening {PRODUCT_NAME} dashboard");
 
