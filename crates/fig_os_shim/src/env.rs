@@ -142,17 +142,8 @@ impl Env {
         }
     }
 
-    pub fn in_cloudshell(&self) -> bool {
-        self.get("AWS_EXECUTION_ENV")
-            .is_ok_and(|v| v.trim().eq_ignore_ascii_case("cloudshell"))
-    }
-
     pub fn in_ssh(&self) -> bool {
         self.get("SSH_CLIENT").is_ok() || self.get("SSH_CONNECTION").is_ok() || self.get("SSH_TTY").is_ok()
-    }
-
-    pub fn in_codespaces(&self) -> bool {
-        self.get_os("CODESPACES").is_some() || self.get_os("Q_CODESPACES").is_some()
     }
 
     pub fn in_ci(&self) -> bool {
@@ -167,10 +158,6 @@ impl Env {
     }
 
     // Q-specific environment variable methods
-    pub fn q_fake_is_remote(&self) -> bool {
-        self.get_os("Q_FAKE_IS_REMOTE").is_some()
-    }
-
     pub fn q_log_level(&self) -> Result<String, VarError> {
         self.get("Q_LOG_LEVEL")
     }
@@ -181,10 +168,6 @@ impl Env {
 
     pub fn q_cli_client_application(&self) -> Result<String, VarError> {
         self.get("Q_CLI_CLIENT_APPLICATION")
-    }
-
-    pub fn q_parent(&self) -> Result<String, VarError> {
-        self.get("Q_PARENT")
     }
 
     pub fn q_term(&self) -> Result<String, VarError> {
@@ -201,10 +184,6 @@ impl Env {
 
     pub fn q_prompt_offset_workaround(&self) -> Result<String, VarError> {
         self.get("Q_PROMPT_OFFSET_WORKAROUND")
-    }
-
-    pub fn has_q_parent(&self) -> bool {
-        self.q_parent().is_ok()
     }
 }
 
@@ -247,16 +226,10 @@ mod tests {
     #[test]
     fn test_in_envs() {
         let env = Env::from_slice(&[]);
-        assert!(!env.in_cloudshell());
         assert!(!env.in_ssh());
 
-        let env = Env::from_slice(&[("AWS_EXECUTION_ENV", "CloudShell"), ("SSH_CLIENT", "1")]);
-        assert!(env.in_cloudshell());
+        let env = Env::from_slice(&[("SSH_CLIENT", "1")]);
         assert!(env.in_ssh());
-
-        let env = Env::from_slice(&[("AWS_EXECUTION_ENV", "CLOUDSHELL\n")]);
-        assert!(env.in_cloudshell());
-        assert!(!env.in_ssh());
 
         let env = Env::from_slice(&[("APPIMAGE", "/tmp/.mount-asdf/usr")]);
         assert!(env.in_appimage());

@@ -45,10 +45,8 @@ use fig_util::{
     CLI_BINARY_NAME,
     PRODUCT_NAME,
     directories,
-    manifest,
     system_info,
 };
-use internal::InternalSubcommand;
 use serde::Serialize;
 use tracing::{
     Level,
@@ -206,12 +204,9 @@ impl Cli {
                 false => None,
             },
             log_to_stdout: fig_os_shim::Env::new().q_log_stdout() || self.verbose > 0,
-            log_file_path: match self.subcommand {
-                Some(CliRootCommands::Internal(InternalSubcommand::Multiplexer(_))) => Some("mux.log".to_owned()),
-                _ => match fig_log::get_log_level_max() >= Level::DEBUG {
-                    true => Some("cli.log".to_owned()),
-                    false => None,
-                },
+            log_file_path: match fig_log::get_log_level_max() >= Level::DEBUG {
+                true => Some("cli.log".to_owned()),
+                false => None,
             }
             .map(|name| directories::logs_dir().expect("home dir must be set").join(name)),
             delete_old_log_file: false,
@@ -355,8 +350,8 @@ impl Cli {
 }
 
 fn launch_app() -> Result<ExitCode> {
-    if manifest::is_minimal() || system_info::is_remote() {
-        bail!("Launching the app is not supported in minimal mode");
+    if system_info::is_remote() {
+        bail!("Launching the app is not supported over SSH");
     }
 
     if desktop_app_running() {
@@ -492,6 +487,27 @@ mod test {
         assert!(Cli::try_parse_from([CLI_BINARY_NAME, "dashboard"]).is_err());
         assert!(Cli::try_parse_from([CLI_BINARY_NAME, "debug", "devtools", "dashboard"]).is_err());
         assert!(Cli::try_parse_from([CLI_BINARY_NAME, "debug", "devtools", "autocomplete"]).is_ok());
+    }
+
+    #[test]
+    fn removed_ssh_mux_and_ide_commands_are_rejected() {
+        let removed: &[&[&str]] = &[
+            &[CLI_BINARY_NAME, "_", "multiplexer", "--websocket"],
+            &[CLI_BINARY_NAME, "_", "mux"],
+            &[CLI_BINARY_NAME, "_", "generate-ssh"],
+            &[CLI_BINARY_NAME, "_", "ssh-local-command", "host", "uuid"],
+            &[CLI_BINARY_NAME, "_", "prompt-ssh", "host"],
+            &[CLI_BINARY_NAME, "_", "uninstall", "--ssh"],
+            &[CLI_BINARY_NAME, "integrations", "install", "ssh"],
+            &[CLI_BINARY_NAME, "integrations", "install", "vscode"],
+            &[CLI_BINARY_NAME, "integrations", "install", "intellij-plugin"],
+            &[CLI_BINARY_NAME, "hook", "ssh", "1", "tty", "control-path", "host"],
+            &[CLI_BINARY_NAME, "debug", "list-intellij-variants"],
+        ];
+        for args in removed {
+            assert!(Cli::try_parse_from(*args).is_err(), "{args:?} should not parse");
+        }
+        assert!(Cli::try_parse_from([CLI_BINARY_NAME, "integrations", "install", "dotfiles"]).is_ok());
     }
 
     #[test]

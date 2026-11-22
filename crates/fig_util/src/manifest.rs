@@ -13,7 +13,6 @@ use strum::{
     EnumString,
 };
 use crate::build::TARGET_TRIPLE;
-use crate::consts::build::VARIANT;
 
 #[derive(Deserialize)]
 pub struct Manifest {
@@ -21,8 +20,6 @@ pub struct Manifest {
     pub managed_by: ManagedBy,
     #[serde(deserialize_with = "deser_enum_other")]
     pub target_triple: TargetTriple,
-    #[serde(deserialize_with = "deser_enum_other")]
-    pub variant: Variant,
     pub packaged_at: String,
     pub packaged_by: String,
 }
@@ -97,18 +94,6 @@ impl TargetTriple {
 #[derive(EnumString, Display, Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 #[strum(serialize_all = "camelCase")]
-pub enum Variant {
-    Full,
-    #[serde(alias = "headless")]
-    #[strum(to_string = "minimal", serialize = "headless")]
-    Minimal,
-    #[strum(default)]
-    Other(String),
-}
-
-#[derive(EnumString, Display, Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-#[strum(serialize_all = "camelCase")]
 pub enum Os {
     Macos,
     Linux,
@@ -168,53 +153,9 @@ pub fn manifest() -> &'static Manifest {
             Some(target) => TargetTriple::from_str(target).expect("parsing target triple should not fail"),
             _ => TargetTriple::from_system(),
         },
-        variant: match VARIANT.map(|s| s.to_ascii_lowercase()).as_deref() {
-            Some("minimal") => Variant::Minimal,
-            _ => Variant::Full,
-        },
         packaged_at: "unknown".into(),
         packaged_by: "unknown".into(),
     })
-}
-
-/// Checks if this is a full build according to the manifest.
-/// Note that this does not guarantee the value of is_minimal
-pub fn is_full() -> bool {
-    cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            true
-        } else if #[cfg(unix)] {
-            matches!(
-                manifest(),
-                Manifest {
-                    variant: Variant::Full,
-                    ..
-                }
-            )
-        } else if #[cfg(windows)] {
-            true
-        }
-    }
-}
-
-/// Checks if this is a minimal build according to the manifest.
-/// Note that this does not guarantee the value of is_full
-pub fn is_minimal() -> bool {
-    cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            false
-        } else if #[cfg(unix)] {
-            matches!(
-                manifest(),
-                Manifest {
-                    variant: Variant::Minimal,
-                    ..
-                }
-            )
-        } else if #[cfg(windows)] {
-            false
-        }
-    }
 }
 
 /// Gets the version from the manifest
@@ -285,15 +226,5 @@ mod tests {
     #[test]
     fn test_managed_by_serialize_deserialize() {
         test_ser_deser!(ManagedBy, ManagedBy::None, "none");
-    }
-
-    #[test]
-    fn test_variant_serialize_deserialize() {
-        test_ser_deser!(Variant, Variant::Full, "full");
-        test_ser_deser!(Variant, Variant::Minimal, "minimal");
-
-        // headless is a special case that should deserialize to Minimal
-        assert_eq!(Variant::Minimal, from_str("\"headless\"").unwrap());
-        assert_eq!(Variant::Minimal, Variant::from_str("headless").unwrap());
     }
 }

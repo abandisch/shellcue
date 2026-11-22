@@ -48,7 +48,6 @@ message Hook {
     PostExecHook post_exec = 104;
     KeyboardFocusChangedHook keyboard_focus_changed = 105;
     TmuxPaneChangedHook tmux_pane_changed = 106;
-    OpenedSSHConnectionHook opened_ssh_connection = 107;
     CallbackHook callback = 108;
     IntegrationReadyHook integration_ready = 109;
     HideHook hide = 110;
@@ -60,6 +59,8 @@ message Hook {
     FocusedWindowDataHook focused_window_data = 116;
     ClearAutocompleteCacheHook clear_autocomplete_cache = 117;
   }
+
+  reserved 107;
 }
 
 // == Commands ==
@@ -197,13 +198,6 @@ message KeyboardFocusChangedHook {
 
 message TmuxPaneChangedHook {
   int32 pane_identifier = 1;
-}
-
-message OpenedSSHConnectionHook {
-  fig_common.ShellContext context = 1;
-
-  string control_path = 2;
-  string remote_hostname = 3;
 }
 
 message CallbackHook {

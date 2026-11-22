@@ -126,18 +126,6 @@ pub async fn uninstall_terminal_integrations() {
                 .ok();
         }
 
-        // Delete VSCode integration
-        for (folder, prefix) in &[
-            (".vscode/extensions", "withfig.fig-"),
-            (".vscode-insiders/extensions", "withfig.fig-"),
-            (".vscode-oss/extensions", "withfig.fig-"),
-            (".cursor/extensions", "withfig.fig-"),
-            (".cursor-nightly/extensions", "withfig.fig-"),
-        ] {
-            let folder = home.join(folder);
-            remove_in_dir_with_prefix_unless(&folder, prefix, |_| false).await;
-        }
-
         // Remove Hyper integration
         let hyper_path = home.join(".hyper.js");
         if hyper_path.exists() {
@@ -207,6 +195,5 @@ pub async fn uninstall_terminal_integrations() {
                 },
             }
         }
-        // TODO: Add Jetbrains integration
     }
 }

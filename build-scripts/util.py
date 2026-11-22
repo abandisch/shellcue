@@ -1,4 +1,3 @@
-from enum import Enum
 from functools import cache
 import json
 import os
@@ -7,7 +6,7 @@ import stat
 import subprocess
 import pathlib
 import platform
-from typing import List, Mapping, Sequence
+from typing import Mapping, Sequence
 from const import DESKTOP_PACKAGE_NAME, TAURI_PRODUCT_NAME
 
 DEBUG = "\033[94;1m"
@@ -122,23 +121,3 @@ def run_cmd_status(
 def set_executable(path: pathlib.Path):
     st = os.stat(path)
     os.chmod(path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-
-
-class Variant(Enum):
-    FULL = 1
-    MINIMAL = 2
-
-
-@cache
-def get_variants() -> List[Variant]:
-    match platform.system():
-        case "Darwin":
-            return [Variant.FULL]
-        case "Linux":
-            is_ubuntu = "ubuntu" in platform.version().lower()
-            if is_ubuntu:
-                return [Variant.FULL]
-            else:
-                return [Variant.MINIMAL]
-        case other:
-            raise ValueError(f"Unsupported platform {other}")

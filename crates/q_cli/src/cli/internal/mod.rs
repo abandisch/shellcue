@@ -1,6 +1,4 @@
-mod generate_ssh;
 pub mod local_state;
-mod multiplexer;
 pub mod should_figterm_launch;
 
 use std::collections::HashSet;
@@ -49,7 +47,6 @@ use fig_proto::ReflectMessage;
 use fig_proto::figterm::figterm_request_message::Request as FigtermRequest;
 use fig_proto::figterm::{
     FigtermRequestMessage,
-    NotifySshSessionStartedRequest,
     UpdateShellContextRequest,
 };
 use fig_proto::hooks::{
@@ -58,16 +55,12 @@ use fig_proto::hooks::{
 };
 use fig_proto::local::EnvironmentVariable;
 use fig_proto::util::get_shell;
-use fig_util::directories::{
-    figterm_socket_path,
-    logs_dir,
-};
+use fig_util::directories::figterm_socket_path;
 use fig_util::env_var::QTERM_SESSION_ID;
 use fig_util::{
     CLI_BINARY_NAME,
     directories,
 };
-use multiplexer::MultiplexerArgs;
 use rand::distr::{
     Alphanumeric,
     SampleString,
@@ -87,10 +80,6 @@ use tracing::{
 };
 
 use crate::cli::installation::install_cli;
-use crate::util::desktop::{
-    LaunchArgs,
-    launch_fig_desktop,
-};
 
 #[derive(Debug, Args, PartialEq, Eq)]
 #[command(group(
@@ -175,9 +164,6 @@ pub enum InternalSubcommand {
         /// Uninstall only the binary
         #[arg(long)]
         binary: bool,
-        /// Uninstall only the ssh integration
-        #[arg(long)]
-        ssh: bool,
     },
     GetShell,
     Hostname,
@@ -230,15 +216,6 @@ pub enum InternalSubcommand {
     #[cfg(target_os = "linux")]
     /// Checks for sandboxing
     DetectSandbox,
-    /// Displays prompt to install remote shell integrations
-    SshLocalCommand {
-        remote_dest: String,
-        uuid: String,
-    },
-    /// \[Deprecated\] Displays prompt to install remote shell integrations.
-    PromptSsh {
-        remote_dest: String,
-    },
     #[cfg(target_os = "macos")]
     AttemptToFinishInputMethodInstallation {
         bundle_path: Option<PathBuf>,
@@ -251,13 +228,6 @@ pub enum InternalSubcommand {
         #[arg(long)]
         zap: bool,
     },
-    /// Generates an SSH configuration file
-    ///
-    /// This lets us bypass a bug in Include and vdollar_expand that causes environment variables to
-    /// be expanded, even in files that are only referenced in match blocks that resolve to false
-    GenerateSsh(generate_ssh::GenerateSshArgs),
-    #[command(alias = "mux")]
-    Multiplexer(MultiplexerArgs),
 }
 
 const BUFFER_SIZE: usize = 1024;
@@ -276,14 +246,12 @@ impl InternalSubcommand {
                 dotfiles,
                 input_method,
                 binary,
-                ssh,
             } => {
-                let components = if dotfiles || binary || ssh || input_method {
+                let components = if dotfiles || binary || input_method {
                     let mut uninstall_components = InstallComponents::empty();
                     uninstall_components.set(InstallComponents::SHELL_INTEGRATIONS, dotfiles);
                     uninstall_components.set(InstallComponents::INPUT_METHOD, input_method);
                     uninstall_components.set(InstallComponents::BINARY, binary);
-                    uninstall_components.set(InstallComponents::SSH, ssh);
                     uninstall_components
                 } else {
                     InstallComponents::all()
@@ -512,7 +480,7 @@ impl InternalSubcommand {
                 let mut stdout_buf = BytesMut::with_capacity(1024);
                 let mut stream_buf = BytesMut::with_capacity(1024);
 
-                let socket = directories::remote_socket_path()?;
+                let socket = directories::local_remote_socket_path()?;
                 while let Ok(mut stream) = BufferedUnixStream::connect_timeout(&socket, Duration::from_secs(5)).await {
                     loop {
                         select! {
@@ -620,32 +588,6 @@ impl InternalSubcommand {
                 };
                 Ok(ExitCode::from(exit_code))
             },
-            InternalSubcommand::PromptSsh { .. } => Ok(ExitCode::SUCCESS),
-            InternalSubcommand::SshLocalCommand { remote_dest, uuid } => {
-                // Ensure desktop app is running to avoid SSH errors on stdout when local side of
-                // RemoteForward isn't listening
-                launch_fig_desktop(LaunchArgs {
-                    wait_for_socket: true,
-                    verbose: false,
-                })
-                .ok();
-
-                if let Ok(session_id) = std::env::var(QTERM_SESSION_ID) {
-                    let mut conn =
-                        BufferedUnixStream::connect(fig_util::directories::figterm_socket_path(&session_id)?).await?;
-                    conn.send_message(FigtermRequestMessage {
-                        request: Some(FigtermRequest::NotifySshSessionStarted(
-                            NotifySshSessionStartedRequest {
-                                uuid,
-                                remote_host: remote_dest,
-                            },
-                        )),
-                    })
-                    .await?;
-                };
-
-                Ok(ExitCode::SUCCESS)
-            },
             #[cfg(target_os = "macos")]
             InternalSubcommand::AttemptToFinishInputMethodInstallation { bundle_path } => {
                 match InputMethod::finish_input_method_installation(bundle_path) {
@@ -686,22 +628,12 @@ impl InternalSubcommand {
                     // All except the desktop app
                     InstallComponents::all() & !InstallComponents::DESKTOP_APP
                 } else {
-                    InstallComponents::SHELL_INTEGRATIONS | InstallComponents::SSH
+                    InstallComponents::SHELL_INTEGRATIONS
                 };
                 fig_install::uninstall(components, fig_os_shim::Context::new())
                     .await
                     .ok();
                 Ok(ExitCode::SUCCESS)
-            },
-            InternalSubcommand::GenerateSsh(args) => args.execute().await,
-            InternalSubcommand::Multiplexer(args) => match multiplexer::execute(args).await {
-                Ok(()) => Ok(ExitCode::SUCCESS),
-                Err(err) => {
-                    error!("{err}");
-                    let path = logs_dir()?.join("mux-crash.log");
-                    tokio::fs::write(path, format!("{err:?}")).await?;
-                    Err(err)
-                },
             },
         }
     }

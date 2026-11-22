@@ -15,11 +15,6 @@ if not test -z "$Q_NEW_SESSION"
     set --erase Q_NEW_SESSION
 end
 
-# Load parent from env variables
-if test -n "$Q_PARENT"; and test -z "$Q_SET_PARENT"
-    set --export Q_PARENT $Q_SET_PARENT
-end
-
 if test -z "$SHOULD_QTERM_LAUNCH"
     # 0 = Yes, 1 = No, 2 = Fallback to Q_TERM
     q _ should-figterm-launch 1>/dev/null 2>&1
@@ -52,6 +47,6 @@ if test -t 1
 
         # Need to exec bash because we're using 'exec -a <name>'
         # to set argv[0] and fish's exec doesn't have this option
-        exec bash -c "Q_PARENT=$Q_PARENT Q_SHELL=$Q_SHELL Q_IS_LOGIN_SHELL=$Q_IS_LOGIN_SHELL exec -a \"$Q_TERM_NAME\" \"$Q_TERM_PATH\""
+        exec bash -c "Q_SHELL=$Q_SHELL Q_IS_LOGIN_SHELL=$Q_IS_LOGIN_SHELL exec -a \"$Q_TERM_NAME\" \"$Q_TERM_PATH\""
     end
 end

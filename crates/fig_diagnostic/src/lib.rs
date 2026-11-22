@@ -7,7 +7,6 @@ use fig_os_shim::{
     PlatformProvider,
 };
 use fig_util::consts::build::HASH;
-use fig_util::manifest::manifest;
 use fig_util::system_info::{
     OSVersion,
     os_version,
@@ -55,7 +54,6 @@ pub struct BuildDetails {
     pub version: String,
     pub hash: Option<&'static str>,
     pub date: Option<String>,
-    pub variant: String,
 }
 
 impl BuildDetails {
@@ -72,7 +70,6 @@ impl BuildDetails {
             version: env!("CARGO_PKG_VERSION").to_owned(),
             hash: HASH,
             date,
-            variant: manifest().variant.to_string(),
         }
     }
 }
@@ -180,15 +177,11 @@ pub struct CurrentEnvironment {
     #[serde(serialize_with = "serialize_display")]
     pub install_method: InstallMethod,
     #[serde(skip_serializing_if = "is_false")]
-    pub in_cloudshell: bool,
-    #[serde(skip_serializing_if = "is_false")]
     pub in_ssh: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub in_ci: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub in_wsl: bool,
-    #[serde(skip_serializing_if = "is_false")]
-    pub in_codespaces: bool,
 }
 
 impl CurrentEnvironment {
@@ -223,11 +216,9 @@ impl CurrentEnvironment {
         let terminal = Terminal::parent_terminal(&ctx);
         let install_method = fig_util::get_install_method();
 
-        let in_cloudshell = fig_util::system_info::in_cloudshell();
         let in_ssh = fig_util::system_info::in_ssh();
         let in_ci = fig_util::system_info::in_ci();
         let in_wsl = fig_util::system_info::in_wsl();
-        let in_codespaces = fig_util::system_info::in_codespaces();
 
         CurrentEnvironment {
             shell_path,
@@ -237,11 +228,9 @@ impl CurrentEnvironment {
             os,
             terminal,
             install_method,
-            in_cloudshell,
             in_ssh,
             in_ci,
             in_wsl,
-            in_codespaces,
         }
     }
 }

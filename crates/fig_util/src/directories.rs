@@ -16,12 +16,7 @@ use time::OffsetDateTime;
 
 #[cfg(unix)]
 use crate::RUNTIME_DIR_NAME;
-use crate::env_var::Q_PARENT;
 use crate::linux::PACKAGE_NAME;
-use crate::system_info::{
-    in_cloudshell,
-    is_remote,
-};
 use crate::{
     BACKUP_DIR_NAME,
     DATA_DIR_NAME,
@@ -63,8 +58,6 @@ pub enum DirectoryError {
     FromVecWithNul(#[from] std::ffi::FromVecWithNulError),
     #[error(transparent)]
     IntoString(#[from] std::ffi::IntoStringError),
-    #[error("{Q_PARENT} env variable not set")]
-    QParentNotSet,
     #[error("must be ran from an appimage executable")]
     NotAppImage,
 }
@@ -328,26 +321,6 @@ pub fn desktop_socket_path() -> Result<PathBuf> {
     Ok(host_sockets_dir()?.join("desktop.sock"))
 }
 
-/// The path to remote socket
-// - Linux/MacOS on ssh: At the value of `Q_PARENT`
-// - Linux/MacOS not on ssh:
-/// - MacOS: `$TMPDIR/cwrun/remote.sock`
-/// - Linux: `$XDG_RUNTIME_DIR/cwrun/remote.sock`
-/// - Windows: `%TEMP%\sockets\remote.sock`
-pub fn remote_socket_path() -> Result<PathBuf> {
-    // Normal implementation for non-test code
-    // TODO(grant): This is only enabled on Linux for now to prevent public dist
-    if is_remote() && !in_cloudshell() && cfg!(target_os = "linux") {
-        if let Some(parent_socket) = fig_os_shim::Env::new().get_os(Q_PARENT) {
-            Ok(PathBuf::from(parent_socket))
-        } else {
-            Err(DirectoryError::QParentNotSet)
-        }
-    } else {
-        local_remote_socket_path()
-    }
-}
-
 /// The path to local remote socket
 ///
 /// - MacOS: `$TMPDIR/cwrun/remote.sock`
@@ -494,7 +467,6 @@ utf8_dir!(home_dir);
 utf8_dir!(home_local_bin);
 utf8_dir!(fig_data_dir);
 utf8_dir!(sockets_dir);
-utf8_dir!(remote_socket_path);
 utf8_dir!(figterm_socket_path, session_id: impl Display);
 utf8_dir!(manifest_path);
 utf8_dir!(backups_dir);
@@ -512,7 +484,6 @@ mod linux_tests {
         assert!(home_local_bin().is_ok());
         assert!(fig_data_dir().is_ok());
         assert!(sockets_dir().is_ok());
-        assert!(remote_socket_path().is_ok());
         assert!(local_remote_socket_path().is_ok());
         assert!(figterm_socket_path("test").is_ok());
         assert!(resources_path().is_ok());
@@ -674,13 +645,6 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_remote_socket_path() {
-        linux!(remote_socket_path(), @"$XDG_RUNTIME_DIR/cwrun/remote.sock");
-        macos!(remote_socket_path(), @"$TMPDIR/cwrun/remote.sock");
-        windows!(remote_socket_path(), @r"C:\Users\$USER\AppData\Local\Temp\AmazonQ\sockets\remote.sock");
-    }
-
-    #[test]
     fn snapshot_local_remote_socket_path() {
         linux!(local_remote_socket_path(), @"$XDG_RUNTIME_DIR/cwrun/remote.sock");
         macos!(local_remote_socket_path(), @"$TMPDIR/cwrun/remote.sock");
@@ -717,7 +681,7 @@ mod tests {
         let fig_socket_bytes = fig_socket.as_os_str().as_bytes().len();
         assert!(fig_socket_bytes <= MAX_SOCKET_LEN);
 
-        let secure_socket = remote_socket_path().unwrap();
+        let secure_socket = local_remote_socket_path().unwrap();
         let secure_socket_bytes = secure_socket.as_os_str().as_bytes().len();
         assert!(secure_socket_bytes <= MAX_SOCKET_LEN);
     }

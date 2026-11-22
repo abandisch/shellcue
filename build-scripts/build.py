@@ -3,10 +3,8 @@ import os
 import json
 import pathlib
 import shutil
-from typing import Dict, List, Mapping, Sequence
+from typing import Mapping, Sequence
 from util import (
-    Variant,
-    get_variants,
     isDarwin,
     isLinux,
     run_cmd,
@@ -16,7 +14,7 @@ from util import (
     version,
     tauri_product_name,
 )
-from rust import build_hash, build_datetime, cargo_cmd_name, rust_targets, rust_env, get_target_triple
+from rust import cargo_cmd_name, rust_targets, rust_env, get_target_triple
 from test import run_cargo_tests, run_clippy
 from importlib import import_module
 from const import (
@@ -27,7 +25,6 @@ from const import (
     DESKTOP_PACKAGE_NAME,
     DESKTOP_PACKAGE_PATH,
     DMG_NAME,
-    LINUX_ARCHIVE_NAME,
     LINUX_LEGACY_GNOME_EXTENSION_UUID,
     LINUX_MODERN_GNOME_EXTENSION_UUID,
     LINUX_PACKAGE_NAME,
@@ -74,7 +71,6 @@ def compiled_specs_path() -> pathlib.Path:
 
 
 def build_cargo_bin(
-    variant: Variant,
     release: bool,
     package: str,
     output_name: str | None = None,
@@ -96,7 +92,7 @@ def build_cargo_bin(
         args,
         env={
             **os.environ,
-            **rust_env(release=release, variant=variant),
+            **rust_env(release=release),
         },
     )
 
@@ -132,9 +128,7 @@ def build_macos_ime(
     release: bool,
     targets: Sequence[str] = [],
 ) -> pathlib.Path:
-    fig_input_method_bin = build_cargo_bin(
-        release=release, variant=Variant.FULL, package="fig_input_method", targets=targets
-    )
+    fig_input_method_bin = build_cargo_bin(release=release, package="fig_input_method", targets=targets)
     input_method_app = pathlib.Path("build/CodeWhispererInputMethod.app")
 
     (input_method_app / "Contents/MacOS").mkdir(parents=True, exist_ok=True)
@@ -206,7 +200,7 @@ def build_macos_desktop_app(
     run_cmd(
         cargo_tauri_args,
         cwd=DESKTOP_PACKAGE_PATH,
-        env={**os.environ, **rust_env(release=release, variant=Variant.FULL), "BUILD_DIR": BUILD_DIR},
+        env={**os.environ, **rust_env(release=release), "BUILD_DIR": BUILD_DIR},
     )
 
     # clean up
@@ -277,68 +271,6 @@ def build_macos_desktop_app(
     info(f"Created app tar.gz at {app_gztar_path}")
 
     return MacOSBuildOutput(dmg_path=dmg_path, app_gztar_path=pathlib.Path(app_gztar_path))
-
-
-def build_linux_minimal(cli_path: pathlib.Path, pty_path: pathlib.Path):
-    """
-    Creates tar.gz, tar.xz, tar.zst, and zip archives under `BUILD_DIR`.
-
-    Each archive has the following structure:
-    - archive/bin/{cli_binary}
-    - archive/bin/{pty_binary}
-    - archive/install.sh
-    - archive/README
-    - archive/BUILD-INFO
-    """
-    archive_name = LINUX_ARCHIVE_NAME
-
-    archive_path = pathlib.Path(archive_name)
-    archive_path.mkdir(parents=True, exist_ok=True)
-
-    shutil.copy2("bundle/linux/install.sh", archive_path)
-    shutil.copy2("bundle/linux/README", archive_path)
-
-    # write the BUILD-INFO
-    build_info_path = archive_path / "BUILD-INFO"
-    build_info_path.write_text(
-        "\n".join(
-            [
-                f"BUILD_DATE={build_datetime()}",
-                f"BUILD_HASH={build_hash()}",
-                f"BUILD_TARGET_TRIPLE={get_target_triple()}",
-                f"BUILD_VERSION={version()}",
-            ]
-        )
-    )
-
-    archive_bin_path = archive_path / "bin"
-    archive_bin_path.mkdir(parents=True, exist_ok=True)
-
-    shutil.copy2(cli_path, archive_bin_path / CLI_BINARY_NAME)
-    shutil.copy2(pty_path, archive_bin_path / PTY_BINARY_NAME)
-
-    info(f"Building {archive_name}.tar.gz")
-    tar_gz_path = BUILD_DIR / f"{archive_name}.tar.gz"
-    run_cmd(["tar", "-czf", tar_gz_path, archive_path])
-    generate_sha(tar_gz_path)
-
-    info(f"Building {archive_name}.tar.xz")
-    tar_xz_path = BUILD_DIR / f"{archive_name}.tar.xz"
-    run_cmd(["tar", "-cJf", tar_xz_path, archive_path])
-    generate_sha(tar_xz_path)
-
-    info(f"Building {archive_name}.tar.zst")
-    tar_zst_path = BUILD_DIR / f"{archive_name}.tar.zst"
-    run_cmd(["tar", "-I", "zstd", "-cf", tar_zst_path, archive_path], {"ZSTD_CLEVEL": "19"})
-    generate_sha(tar_zst_path)
-
-    info(f"Building {archive_name}.zip")
-    zip_path = BUILD_DIR / f"{archive_name}.zip"
-    run_cmd(["zip", "-r", zip_path, archive_path])
-    generate_sha(zip_path)
-
-    # clean up
-    shutil.rmtree(archive_path)
 
 
 def linux_tauri_config(
@@ -448,13 +380,10 @@ def build_linux_deb(
     debian_path = bundle_dir / "DEBIAN"
     debian_path.mkdir(parents=True)
     shutil.copy(control_path, bundle_dir / "DEBIAN/control")
-    shutil.copy("bundle/deb/control_minimal", bundle_dir / "DEBIAN/control_minimal")
     shutil.copy("bundle/deb/postrm", bundle_dir / "DEBIAN/postrm")
     shutil.copy("bundle/deb/prerm", bundle_dir / "DEBIAN/prerm")
     replace_text(bundle_dir / "DEBIAN/control", "$VERSION", version())
     replace_text(bundle_dir / "DEBIAN/control", "$APT_ARCH", "amd64")
-    replace_text(bundle_dir / "DEBIAN/control_minimal", "$VERSION", version())
-    replace_text(bundle_dir / "DEBIAN/control_minimal", "$APT_ARCH", "amd64")
     set_executable(bundle_dir / "DEBIAN/postrm")
 
     info("Running dpkg-deb build")
@@ -536,7 +465,7 @@ def build_linux_full(
     run_cmd(
         cargo_tauri_args,
         cwd=DESKTOP_PACKAGE_PATH,
-        env={**os.environ, **rust_env(release=release, variant=Variant.FULL), "BUILD_DIR": BUILD_DIR},
+        env={**os.environ, **rust_env(release=release), "BUILD_DIR": BUILD_DIR},
     )
     desktop_path = pathlib.Path(f"target/{target}/{'release' if release else 'debug'}/{DESKTOP_BINARY_NAME}")
 
@@ -593,29 +522,20 @@ class BinaryPaths:
     pty_path: pathlib.Path
 
 
-BuildOutput = Dict[Variant, BinaryPaths]
-
-
 def build(
     release: bool,
-    variants: List[Variant] | None = None,
     run_lints: bool = True,
     run_test: bool = True,
-) -> BuildOutput:
-    variants = variants or get_variants()
-
+) -> BinaryPaths:
     cargo_features: Mapping[str, Sequence[str]] = {}
 
     info(f"Release: {release}")
     info(f"Cargo features: {cargo_features}")
-    info(f"Variants: {[variant.name for variant in variants]}")
 
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
 
-    npm_packages = None
-    if Variant.FULL in variants:
-        info("Building npm packages")
-        npm_packages = build_npm_packages(run_test=run_test)
+    info("Building npm packages")
+    npm_packages = build_npm_packages(run_test=run_test)
 
     targets = rust_targets()
 
@@ -625,64 +545,48 @@ def build(
 
     if run_test:
         info("Running cargo tests")
-        run_cargo_tests(variants=variants, features=cargo_features, target=cargo_test_target)
+        run_cargo_tests(features=cargo_features, target=cargo_test_target)
 
     if run_lints:
-        run_clippy(variants=variants, features=cargo_features, target=cargo_test_target)
+        run_clippy(features=cargo_features, target=cargo_test_target)
 
-    build_output: BuildOutput = {}
-    for variant in variants:
-        info(f"Building variant: {variant.name}")
+    info("Building", CLI_PACKAGE_NAME)
+    cli_path = build_cargo_bin(
+        release=release,
+        package=CLI_PACKAGE_NAME,
+        output_name=CLI_BINARY_NAME,
+        features=cargo_features,
+        targets=targets,
+    )
 
-        info("Building", CLI_PACKAGE_NAME)
-        cli_path = build_cargo_bin(
-            variant=variant,
+    info("Building", PTY_PACKAGE_NAME)
+    pty_path = build_cargo_bin(
+        release=release,
+        package=PTY_PACKAGE_NAME,
+        output_name=PTY_BINARY_NAME,
+        features=cargo_features,
+        targets=targets,
+    )
+
+    if isDarwin():
+        info(f"Building {DMG_NAME}.dmg")
+        build_paths = build_macos_desktop_app(
             release=release,
-            package=CLI_PACKAGE_NAME,
-            output_name=CLI_BINARY_NAME,
+            cli_path=cli_path,
+            pty_path=pty_path,
+            npm_packages=npm_packages,
             features=cargo_features,
             targets=targets,
         )
 
-        info("Building", PTY_PACKAGE_NAME)
-        pty_path = build_cargo_bin(
-            variant=variant,
+        generate_sha(build_paths.dmg_path)
+    elif isLinux():
+        build_linux_full(
             release=release,
-            package=PTY_PACKAGE_NAME,
-            output_name=PTY_BINARY_NAME,
+            cli_path=cli_path,
+            pty_path=pty_path,
+            npm_packages=npm_packages,
             features=cargo_features,
-            targets=targets,
         )
 
-        if isDarwin():
-            info(f"Building {DMG_NAME}.dmg")
-            if not npm_packages:
-                raise RuntimeError("npm packages must be built for Mac")
-
-            build_paths = build_macos_desktop_app(
-                release=release,
-                cli_path=cli_path,
-                pty_path=pty_path,
-                npm_packages=npm_packages,
-                features=cargo_features,
-                targets=targets,
-            )
-
-            generate_sha(build_paths.dmg_path)
-        elif isLinux():
-            if variant == Variant.FULL:
-                if not npm_packages:
-                    raise RuntimeError(f"npm packages must be built for variant: {variant.name}")
-                build_linux_full(
-                    release=release,
-                    cli_path=cli_path,
-                    pty_path=pty_path,
-                    npm_packages=npm_packages,
-                    features=cargo_features,
-                )
-                build_output[variant] = BinaryPaths(cli_path=cli_path, pty_path=pty_path)
-            else:
-                build_linux_minimal(cli_path=cli_path, pty_path=pty_path)
-                build_output[variant] = BinaryPaths(cli_path=cli_path, pty_path=pty_path)
-
-    return build_output
+    return BinaryPaths(cli_path=cli_path, pty_path=pty_path)

@@ -10,8 +10,7 @@ This folder defines three main protocols:
 2. `fig.proto` - Protocol for communication between client Fig.js apps like
    autocomplete and the desktop app
 3. `figterm.proto` - Protocol for sending commands from the CLI to `figterm`
-4. `remote.proto` - Protocol for sending between `figterm` and the desktop app,
-   intended to be secure for remote machines
+4. `remote.proto` - Protocol for sending between `figterm` and the desktop app
 
 ## Setup
 

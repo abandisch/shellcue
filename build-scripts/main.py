@@ -8,13 +8,6 @@ from const import CLI_BINARY_NAME, CLI_PACKAGE_NAME, PTY_BINARY_NAME
 from doc import run_doc
 from rust import cargo_cmd_name, rust_env
 from test import all_tests
-from util import Variant, get_variants
-
-
-class StoreIfNotEmptyAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        if values and len(values) > 0:
-            setattr(namespace, self.dest, values)
 
 
 parser = argparse.ArgumentParser(
@@ -39,7 +32,6 @@ build_subparser.add_argument(
     action="store_true",
     help="Skip running lints",
 )
-build_subparser.add_argument("--variant", action=StoreIfNotEmptyAction, help="Variant to build for")
 
 test_subparser = subparsers.add_parser(name="test")
 test_subparser.add_argument(
@@ -62,12 +54,6 @@ install_cli.add_argument(
     action="store_true",
     help="Build a release version",
 )
-install_cli.add_argument(
-    "--variant",
-    action="store",
-    help="variant to build for",
-    choices=["minimal", "full"],
-)
 
 # run the docs command
 subparsers.add_parser(name="doc")
@@ -76,13 +62,8 @@ args = parser.parse_args()
 
 match args.subparser:
     case "build":
-        if args.variant:
-            variants = [Variant[args.variant.upper()]]
-        else:
-            variants = None
         build(
             release=not args.not_release,
-            variants=variants,
             run_lints=not args.skip_lints,
             run_test=not args.skip_tests,
         )
@@ -106,11 +87,7 @@ match args.subparser:
             },
         )
     case "install-cli":
-        if args.variant:
-            variant = Variant[args.variant.upper()]
-        else:
-            variant = get_variants()[0]
-        output = build(release=args.release, variants=[variant], run_lints=False, run_test=False)[variant]
+        output = build(release=args.release, run_lints=False, run_test=False)
 
         pty_path = Path.home() / ".local" / "bin" / PTY_BINARY_NAME
         pty_path.unlink(missing_ok=True)
