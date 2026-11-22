@@ -233,7 +233,7 @@ impl DoctorCheck<LinuxContext> for GnomeExtensionCheck {
                 }),
                 ExtensionInstallationStatus::NotInstalled => Err(DoctorError::Error {
                     reason: format!(
-                        "The {PRODUCT_NAME} GNOME extension is not installed. Please restart the desktop app and try again."
+                        "The {PRODUCT_NAME} GNOME extension is not installed. Installing it is not available in this build yet."
                     ).into(),
                     info: vec![],
                     fix: None,
@@ -258,7 +258,7 @@ impl DoctorCheck<LinuxContext> for GnomeExtensionCheck {
                 // Should not match since we're currently not checking against the version here.
                 ExtensionInstallationStatus::UnexpectedVersion { .. } => Err(DoctorError::Error {
                     reason: format!(
-                        "The {PRODUCT_NAME} GNOME extension is currently outdated. Please restart the desktop app and try again."
+                        "The {PRODUCT_NAME} GNOME extension is currently outdated. Updating it is not available in this build yet."
                     ).into(),
                     info: vec![],
                     fix: None,

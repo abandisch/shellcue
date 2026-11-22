@@ -31,10 +31,7 @@ use fig_util::consts::{
     APP_PROCESS_NAME,
     PRODUCT_NAME,
 };
-use fig_util::{
-    URL_SCHEMA,
-    directories,
-};
+use fig_util::directories;
 use platform::PlatformState;
 use sysinfo::{
     ProcessRefreshKind,
@@ -51,21 +48,16 @@ use tracing::{
     error,
     warn,
 };
-use url::Url;
 use webview::notification::WebviewNotificationsState;
 pub use webview::{
     AUTOCOMPLETE_ID,
     AUTOCOMPLETE_WINDOW_TITLE,
-    DASHBOARD_ID,
 };
 use webview::{
     AutocompleteOptions,
-    DashboardOptions,
     WebviewManager,
     autocomplete,
     build_autocomplete,
-    build_dashboard,
-    dashboard,
 };
 
 // #[global_allocator]
@@ -108,15 +100,10 @@ async fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let page = match parse_url_page(cli.url_link.as_deref()) {
-        Ok(page) => page,
-        Err(exit_code) => return exit_code,
-    };
-
     if !cli.allow_multiple {
         match get_current_pid() {
             Ok(current_pid) => {
-                if let Some(exit_code) = allow_multiple_running_check(current_pid, cli.kill_old, page.clone()).await {
+                if let Some(exit_code) = allow_multiple_running_check(current_pid, cli.kill_old) {
                     return exit_code;
                 }
             },
@@ -156,25 +143,11 @@ async fn main() -> ExitCode {
     }
 
     let accessibility_enabled = PlatformState::accessibility_is_enabled().unwrap_or(true);
-    let visible = !cli.no_dashboard;
 
     let autocomplete_enabled =
         !fig_settings::settings::get_bool_or("autocomplete.disable", false) && accessibility_enabled;
 
-    let mut webview_manager = WebviewManager::new(ctx, visible);
-    webview_manager
-        .build_webview(
-            DASHBOARD_ID,
-            build_dashboard,
-            DashboardOptions {
-                show_onboarding: false,
-                visible,
-                page,
-            },
-            true,
-            dashboard::url,
-        )
-        .unwrap();
+    let mut webview_manager = WebviewManager::new(ctx);
     webview_manager
         .build_webview(
             AUTOCOMPLETE_ID,
@@ -189,40 +162,9 @@ async fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn parse_url_page(url: Option<&str>) -> Result<Option<String>, ExitCode> {
-    let Some(url) = url else {
-        return Ok(None);
-    };
-
-    let url = match Url::parse(url) {
-        Ok(url) => url,
-        Err(err) => {
-            error!(%err, %url, "Failed to parse url");
-            return Err(ExitCode::FAILURE);
-        },
-    };
-
-    if url.scheme() != URL_SCHEMA {
-        error!(scheme = %url.scheme(), %url, "Invalid scheme");
-        return Err(ExitCode::FAILURE);
-    }
-
-    Ok(url.host_str().and_then(|s| match s {
-        "dashboard" => Some(url.path().to_owned()),
-        _ => {
-            error!("Invalid deep link");
-            None
-        },
-    }))
-}
-
 #[cfg(target_os = "linux")]
 #[must_use]
-async fn allow_multiple_running_check(
-    current_pid: sysinfo::Pid,
-    kill_old: bool,
-    page: Option<String>,
-) -> Option<ExitCode> {
+fn allow_multiple_running_check(current_pid: sysinfo::Pid, kill_old: bool) -> Option<ExitCode> {
     use std::ffi::OsString;
 
     use tracing::debug;
@@ -252,24 +194,6 @@ async fn allow_multiple_running_check(
             {
                 let exe = process.exe().unwrap_or(Path::new("")).display();
                 eprintln!("{PRODUCT_NAME} is already running: {exe} (pid={pid}, uid={uid})");
-
-                match &page {
-                    Some(page) => {
-                        eprintln!("Opening /{page}...");
-                        Some(page)
-                    },
-                    None => {
-                        eprintln!("Opening {PRODUCT_NAME} Window...");
-                        None
-                    },
-                };
-
-                if let Err(err) =
-                    fig_ipc::local::open_ui_element(fig_proto::local::UiElement::MissionControl, page).await
-                {
-                    eprintln!("Failed to open Fig: {err}");
-                }
-
                 return Some(ExitCode::SUCCESS);
             },
             _ => (),
@@ -280,11 +204,7 @@ async fn allow_multiple_running_check(
 
 #[cfg(target_os = "macos")]
 #[must_use]
-async fn allow_multiple_running_check(
-    current_pid: sysinfo::Pid,
-    kill_old: bool,
-    page: Option<String>,
-) -> Option<ExitCode> {
+fn allow_multiple_running_check(current_pid: sysinfo::Pid, kill_old: bool) -> Option<ExitCode> {
     use std::ffi::OsString;
 
     let app_process_name = OsString::from(APP_PROCESS_NAME);
@@ -300,42 +220,21 @@ async fn allow_multiple_running_check(
                 let exe = process.exe().unwrap_or(Path::new("")).display();
                 eprintln!("Killing instance: {exe} ({pid})");
             } else {
-                let page = page.clone();
-                let on_match = async {
-                    let exe = process.exe().unwrap_or(Path::new("")).display();
-
-                    let mut extra = vec![format!("pid={pid}")];
-
-                    if let Some(user_id) = process.user_id() {
-                        extra.push(format!("uid={}", **user_id));
-                    }
-
-                    if let Some(group_id) = process.group_id() {
-                        extra.push(format!("gid={}", *group_id));
-                    }
-
-                    eprintln!("{PRODUCT_NAME} is already running: {exe} ({})", extra.join(" "),);
-                    match &page {
-                        Some(page) => {
-                            eprintln!("Opening /{page}...");
-                            Some(page)
-                        },
-                        None => {
-                            eprintln!("Opening {PRODUCT_NAME} Window...");
-                            None
-                        },
-                    };
-
-                    if let Err(err) =
-                        fig_ipc::local::open_ui_element(fig_proto::local::UiElement::MissionControl, page).await
-                    {
-                        eprintln!("Failed to open Fig: {err}");
-                    }
-                };
-
                 match process.user_id().map(|uid| uid as &u32) {
                     Some(&uid) if uid == current_uid => {
-                        on_match.await;
+                        let exe = process.exe().unwrap_or(Path::new("")).display();
+
+                        let mut extra = vec![format!("pid={pid}")];
+
+                        if let Some(user_id) = process.user_id() {
+                            extra.push(format!("uid={}", **user_id));
+                        }
+
+                        if let Some(group_id) = process.group_id() {
+                            extra.push(format!("gid={}", *group_id));
+                        }
+
+                        eprintln!("{PRODUCT_NAME} is already running: {exe} ({})", extra.join(" "),);
                         return Some(ExitCode::SUCCESS);
                     },
                     _ => {},

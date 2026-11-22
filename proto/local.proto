@@ -11,7 +11,7 @@ message LocalMessage {
 }
 
 message Command {
-  reserved 102, 105, 110;
+  reserved 102, 105, 110, 111;
 
   optional int64 id = 1;
   optional bool no_response = 2; // opt-out of response from host app
@@ -25,7 +25,6 @@ message Command {
     ReportWindowCommand report_window = 107;
     RestartSettingsListenerCommand restart_settings_listener = 108;
     RunInstallScriptCommand run_install_script = 109;
-    OpenUiElementCommand open_ui_element = 111;
     ResetCacheCommand reset_cache = 112;
     DebugModeCommand debug_mode = 113;
     PromptAccessibilityCommand prompt_accessibility = 114;
@@ -94,18 +93,6 @@ message RestartSettingsListenerCommand {}
 
 message RunInstallScriptCommand {}
 
-enum UiElement {
-  UI_ELEMENT_MENU_BAR = 0;
-  UI_ELEMENT_SETTINGS = 1;
-  UI_ELEMENT_MISSION_CONTROL = 2;
-  UI_ELEMENT_INPUT_METHOD_PROMPT = 3;
-}
-
-message OpenUiElementCommand {
-  UiElement element = 1;
-  optional string route = 2;
-}
-
 message ResetCacheCommand {}
 
 message DebugModeCommand {
@@ -148,7 +135,8 @@ message DumpStateCommand {
 message DevtoolsCommand {
   enum Window {
     WINDOW_DEVTOOLS_AUTOCOMPLETE = 0;
-    WINDOW_DEVTOOLS_DASHBOARD = 1;
+
+    reserved 1;
   }
 
   Window window = 1;

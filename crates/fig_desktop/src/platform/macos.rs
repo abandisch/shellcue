@@ -32,11 +32,6 @@ use cocoa::base::{
 use core_graphics::display::CGRect;
 use core_graphics::window::CGWindowID;
 use fig_integrations::input_method::InputMethod;
-use fig_proto::fig::{
-    AccessibilityChangeNotification,
-    Notification,
-    NotificationType,
-};
 use fig_proto::local::caret_position_hook::Origin;
 use fig_util::Terminal;
 use macos_utils::accessibility::accessibility_is_enabled;
@@ -81,11 +76,7 @@ use tao::dpi::{
     LogicalSize,
     Position,
 };
-use tao::platform::macos::{
-    ActivationPolicy,
-    EventLoopWindowTargetExtMacOS,
-    WindowExtMacOS as _,
-};
+use tao::platform::macos::WindowExtMacOS as _;
 use tracing::{
     debug,
     error,
@@ -111,13 +102,11 @@ use crate::utils::Rect;
 use crate::webview::notification::WebviewNotificationsState;
 use crate::webview::{
     FigIdMap,
-    GLOBAL_PROXY,
     WindowId,
 };
 use crate::{
     AUTOCOMPLETE_ID,
     AUTOCOMPLETE_WINDOW_TITLE,
-    DASHBOARD_ID,
     EventLoopProxy,
     EventLoopWindowTarget,
 };
@@ -140,8 +129,6 @@ static MACOS_VERSION: LazyLock<semver::Version> = LazyLock::new(|| {
     let version = macos_utils::os::OperatingSystemVersion::get();
     semver::Version::new(version.major() as u64, version.minor() as u64, version.patch() as u64)
 });
-
-pub static ACTIVATION_POLICY: Mutex<ActivationPolicy> = Mutex::new(ActivationPolicy::Regular);
 
 #[allow(dead_code)]
 pub fn is_ventura() -> bool {
@@ -303,9 +290,9 @@ impl PlatformStateImpl {
     pub(super) fn handle(
         self: &Arc<Self>,
         event: PlatformBoundEvent,
-        window_target: &EventLoopWindowTarget,
+        _: &EventLoopWindowTarget,
         window_map: &FigIdMap,
-        notifications_state: &Arc<WebviewNotificationsState>,
+        _: &Arc<WebviewNotificationsState>,
     ) -> anyhow::Result<()> {
         debug!("Handling platform event: {:?}", event);
         match event {
@@ -361,17 +348,11 @@ impl PlatformStateImpl {
                             WindowServerEvent::WindowDestroyed { app } => {
                                 events.push(Event::PlatformBoundEvent(PlatformBoundEvent::WindowDestroyed { app }));
                             },
-                            WindowServerEvent::ActiveSpaceChanged { is_fullscreen } => {
-                                events.extend([
-                                    Event::WindowEvent {
-                                        window_id: AUTOCOMPLETE_ID.clone(),
-                                        window_event: WindowEvent::Hide,
-                                    },
-                                    Event::PlatformBoundEvent(PlatformBoundEvent::FullscreenStateUpdated {
-                                        fullscreen: is_fullscreen,
-                                        dashboard_visible: None,
-                                    }),
-                                ]);
+                            WindowServerEvent::ActiveSpaceChanged { .. } => {
+                                events.push(Event::WindowEvent {
+                                    window_id: AUTOCOMPLETE_ID.clone(),
+                                    window_event: WindowEvent::Hide,
+                                });
                             },
                             WindowServerEvent::RequestCaretPositionUpdate => {
                                 events.push(Event::PlatformBoundEvent(
@@ -456,16 +437,6 @@ impl PlatformStateImpl {
                     _visible_windows: BOOL,
                 ) -> BOOL {
                     trace!("application_should_handle_reopen");
-
-                    let proxy = GLOBAL_PROXY.get().unwrap();
-
-                    if let Err(err) = proxy.send_event(Event::WindowEvent {
-                        window_id: DASHBOARD_ID,
-                        window_event: WindowEvent::Show,
-                    }) {
-                        warn!(%err, "Error sending event");
-                    }
-
                     YES
                 }
 
@@ -548,34 +519,6 @@ impl PlatformStateImpl {
                 }
                 Ok(())
             },
-            PlatformBoundEvent::FullscreenStateUpdated {
-                fullscreen,
-                dashboard_visible,
-            } => {
-                let policy = if fullscreen {
-                    ActivationPolicy::Accessory
-                } else {
-                    let dashboard_visible = dashboard_visible.unwrap_or_else(|| {
-                        window_map
-                            .get(&DASHBOARD_ID)
-                            .is_some_and(|window| window.window.is_visible())
-                    });
-
-                    if dashboard_visible {
-                        ActivationPolicy::Regular
-                    } else {
-                        ActivationPolicy::Accessory
-                    }
-                };
-
-                let mut policy_lock = ACTIVATION_POLICY.lock().unwrap();
-                if *policy_lock != policy {
-                    debug!(?policy, "Setting application policy");
-                    *policy_lock = policy;
-                    window_target.set_activation_policy_at_runtime(policy);
-                }
-                Ok(())
-            },
             PlatformBoundEvent::AccessibilityUpdateRequested => {
                 let proxy = self.proxy.clone();
                 tokio::runtime::Handle::current().spawn(async move {
@@ -600,45 +543,8 @@ impl PlatformStateImpl {
             PlatformBoundEvent::AccessibilityUpdated { enabled } => {
                 let _was_enabled = ACCESSIBILITY_ENABLED.swap(enabled, Ordering::SeqCst);
 
-                let proxy = self.proxy.clone();
-                let notifications_state = notifications_state.clone();
-                tokio::spawn(async move {
-                    if let Err(err) = notifications_state
-                        .broadcast_notification_all(
-                            &NotificationType::NotifyOnAccessibilityChange,
-                            Notification {
-                                r#type: Some(fig_proto::fig::notification::Type::AccessibilityChangeNotification(
-                                    AccessibilityChangeNotification { enabled },
-                                )),
-                            },
-                            &proxy,
-                        )
-                        .await
-                    {
-                        error!(%err, "Failed to broadcast notification");
-                    }
-                });
-
                 self.proxy.send_event(Event::ReloadAccessibility).ok();
 
-                Ok(())
-            },
-            PlatformBoundEvent::AppWindowFocusChanged {
-                window_id,
-                focused,
-                fullscreen,
-                visible,
-            } => {
-                // Update activation policy
-                if window_id == DASHBOARD_ID && focused {
-                    debug!("Sending FullscreenStateUpdated");
-                    self.proxy
-                        .send_event(Event::PlatformBoundEvent(PlatformBoundEvent::FullscreenStateUpdated {
-                            fullscreen,
-                            dashboard_visible: Some(visible),
-                        }))
-                        .ok();
-                }
                 Ok(())
             },
             PlatformBoundEvent::WindowDestroyed { app } => {

@@ -28,7 +28,6 @@ pub enum Event {
     ControlFlow(ControlFlow),
     SetTrayVisible(bool),
 
-    ReloadCredentials,
     ReloadAccessibility,
 }
 
@@ -93,21 +92,14 @@ pub enum WindowEvent {
         event_name: EmitEventName,
         payload: Cow<'static, str>,
     },
-    NavigateRelative {
-        path: Cow<'static, str>,
-    },
     NavigateAbsolute {
         url: url::Url,
     },
-    NavigateForward,
-    NavigateBack,
 
     Event {
         event_name: Cow<'static, str>,
         payload: Option<Cow<'static, str>>,
     },
-
-    Reload,
 
     Api {
         /// A base64 encoded protobuf
@@ -116,7 +108,6 @@ pub enum WindowEvent {
     Devtools,
     DebugMode(bool),
 
-    Drag,
     Batch(Vec<WindowEvent>),
 }
 

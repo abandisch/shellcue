@@ -4,7 +4,7 @@ After=multi-user.target
 Wants=graphical.target
 
 [Service]
-ExecStart=/usr/bin/fig_desktop --no-dashboard
+ExecStart=/usr/bin/fig_desktop
 
 [Install]
 WantedBy=default.target

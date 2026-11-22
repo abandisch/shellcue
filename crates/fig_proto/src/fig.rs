@@ -26,7 +26,6 @@ mod internal {
                 NotificationType::NotifyOnHistoryUpdated => "history_update",
                 NotificationType::NotifyOnLocalStateChanged => "local_state_change",
                 NotificationType::NotifyOnEvent => "event",
-                NotificationType::NotifyOnAccessibilityChange => "accessibility_change",
             })
         }
     }

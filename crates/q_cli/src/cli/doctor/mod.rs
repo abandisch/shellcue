@@ -104,7 +104,6 @@ use spinners::{
 };
 use tokio::io::AsyncBufReadExt;
 
-use super::app::restart_fig;
 use super::diagnostics::verify_integration;
 use crate::util::desktop::{
     LaunchArgs,
@@ -116,6 +115,7 @@ use crate::util::{
     glob,
     glob_dir,
     is_executable_in_path,
+    restart_fig,
 };
 
 #[derive(Debug, Args, PartialEq, Eq)]
@@ -1769,34 +1769,6 @@ impl DoctorCheck for WindowsConsoleCheck {
     }
 }
 
-struct DashboardHostCheck;
-
-#[async_trait]
-impl DoctorCheck for DashboardHostCheck {
-    fn name(&self) -> Cow<'static, str> {
-        "Dashboard is loading from the correct URL".into()
-    }
-
-    async fn check(&self, _: &()) -> Result<(), DoctorError> {
-        match fig_settings::settings::get_string("developer.dashboard.host")
-            .ok()
-            .flatten()
-        {
-            Some(host) => {
-                if host.contains("localhost") {
-                    Err(DoctorError::Warning(
-                        format!("developer.dashboard.host = {host}, delete this setting if Dashboard fails to load")
-                            .into(),
-                    ))
-                } else {
-                    Ok(())
-                }
-            },
-            None => Ok(()),
-        }
-    }
-}
-
 #[cfg(target_os = "macos")]
 struct ToolboxInstalledCheck;
 
@@ -1980,7 +1952,6 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
 
     launch_fig_desktop(LaunchArgs {
         wait_for_socket: true,
-        open_dashboard: false,
         verbose: false,
     })
     .ok();
@@ -2042,7 +2013,6 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
                 &PtySocketCheck,
                 &AutocompleteDevModeCheck,
                 &PluginDevModeCheck,
-                &DashboardHostCheck,
             ],
             config,
             &mut spinner,

@@ -59,6 +59,7 @@ use crate::util::{
     get_app_info,
     glob,
     glob_dir,
+    open_accessibility_settings,
     quit_fig,
 };
 
@@ -83,14 +84,12 @@ impl std::fmt::Display for Build {
 
 #[derive(Debug, ValueEnum, Clone, PartialEq, Eq)]
 pub enum App {
-    Dashboard,
     Autocomplete,
 }
 
 impl std::fmt::Display for App {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            App::Dashboard => f.write_str("dashboard"),
             App::Autocomplete => f.write_str("autocomplete"),
         }
     }
@@ -518,7 +517,6 @@ impl DebugSubcommand {
 
                         launch_fig_desktop(LaunchArgs {
                             wait_for_socket: true,
-                            open_dashboard: false,
                             verbose: true,
                         })?;
                     },
@@ -533,7 +531,6 @@ impl DebugSubcommand {
                     Some(AccessibilityAction::Prompt) => {
                         launch_fig_desktop(LaunchArgs {
                             wait_for_socket: true,
-                            open_dashboard: false,
                             verbose: true,
                         })?;
 
@@ -541,12 +538,7 @@ impl DebugSubcommand {
                             .await
                             .context("Could not prompt for accessibility permissions.")?;
                     },
-                    Some(AccessibilityAction::Open) => {
-                        Command::new("open")
-                            .args(["x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"])
-                            .spawn()?
-                            .wait()?;
-                    },
+                    Some(AccessibilityAction::Open) => open_accessibility_settings()?,
                     Some(AccessibilityAction::Status) | None => {
                         cfg_if::cfg_if! {
                             if #[cfg(target_os = "macos")] {
@@ -712,12 +704,10 @@ impl DebugSubcommand {
             Self::Devtools { app } => {
                 launch_fig_desktop(LaunchArgs {
                     wait_for_socket: true,
-                    open_dashboard: false,
                     verbose: true,
                 })?;
 
                 devtools_command(match app {
-                    App::Dashboard => fig_proto::local::devtools_command::Window::DevtoolsDashboard,
                     App::Autocomplete => fig_proto::local::devtools_command::Window::DevtoolsAutocomplete,
                 })
                 .await

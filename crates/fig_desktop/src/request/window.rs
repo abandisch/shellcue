@@ -1,19 +1,13 @@
 use fig_proto::fig::server_originated_message::Submessage as ServerOriginatedSubMessage;
 use fig_proto::fig::{
-    DragWindowRequest,
-    FocusAction,
     PositionWindowRequest,
     PositionWindowResponse,
-    WindowFocusRequest,
 };
 use fig_remote_ipc::figterm::FigtermState;
 use tao::dpi::LogicalSize;
 use tracing::debug;
 
-use super::{
-    RequestResult,
-    RequestResultImpl,
-};
+use super::RequestResult;
 use crate::event::{
     Event,
     WindowEvent,
@@ -89,33 +83,4 @@ pub async fn position_window(
         )),
         None => Err("unable to determine is_above and is_clipped".into()),
     }
-}
-
-pub async fn focus(request: WindowFocusRequest, window_id: WindowId, proxy: &EventLoopProxy) -> RequestResult {
-    debug!(?request, %window_id, "Window Focus Request");
-    match request.r#type() {
-        FocusAction::TakeFocus => {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id,
-                    window_event: WindowEvent::Show,
-                })
-                .unwrap();
-        },
-        FocusAction::ReturnFocus => return Err("ReturnFocus not implemented".into()),
-    }
-
-    RequestResult::success()
-}
-
-pub async fn drag(request: DragWindowRequest, window_id: WindowId, proxy: &EventLoopProxy) -> RequestResult {
-    debug!(?request, %window_id, "Window Drag Request");
-    proxy
-        .send_event(Event::WindowEvent {
-            window_id,
-            window_event: WindowEvent::Drag,
-        })
-        .unwrap();
-
-    RequestResult::success()
 }

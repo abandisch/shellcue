@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::fmt;
 
-pub const DASHBOARD_ID: WindowId = WindowId(Cow::Borrowed("dashboard"));
 pub const AUTOCOMPLETE_ID: WindowId = WindowId(Cow::Borrowed("autocomplete"));
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -26,15 +25,6 @@ pub trait WindowIdProvider {
 impl WindowIdProvider for WindowId {
     fn window_id(&self) -> WindowId {
         self.clone()
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct DashboardId;
-
-impl WindowIdProvider for DashboardId {
-    fn window_id(&self) -> WindowId {
-        DASHBOARD_ID
     }
 }
 

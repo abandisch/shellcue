@@ -6,12 +6,10 @@ CLI_BINARY_NAME = "q"
 CLI_BINARY_NAME_MINIMAL = "q-minimal"
 PTY_BINARY_NAME = "qterm"
 DESKTOP_BINARY_NAME = "q-desktop"
-URL_SCHEMA = "q"
 TAURI_PRODUCT_NAME = "q_desktop"
 LINUX_PACKAGE_NAME = "amazon-q"
 
 # macos specific
-MACOS_BUNDLE_ID = "com.amazon.codewhisperer"
 DMG_NAME = APP_NAME
 
 # Linux specific

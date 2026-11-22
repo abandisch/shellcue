@@ -201,14 +201,8 @@ impl PlatformStateImpl {
             PlatformBoundEvent::EditBufferChanged => {
                 trace!("Ignoring edit buffer changed event");
             },
-            PlatformBoundEvent::FullscreenStateUpdated { .. } => {
-                trace!("Ignoring full screen state updated event");
-            },
             PlatformBoundEvent::AccessibilityUpdated { .. } => {
                 trace!("Ignoring accessibility updated event");
-            },
-            PlatformBoundEvent::AppWindowFocusChanged { .. } => {
-                trace!("Ignoring app window focus changed event");
             },
             PlatformBoundEvent::CaretPositionUpdateRequested => {
                 trace!("Ignoring caret position update requested event");

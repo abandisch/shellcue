@@ -8,7 +8,7 @@ The **Amazon Q Developer CLI** is part of a monorepo that houses the core code f
 
 1. **q_cli**: The main CLI tool that allows users to interact with Amazon Q Developer from the command line
 2. **fig_desktop**: The Rust desktop application that uses tao/wry for windowing and webviews
-3. **Web Applications**: React apps for autocomplete functionality and dashboard interface
+3. **Web Applications**: React apps for autocomplete functionality
 4. **IDE Extensions**: VSCode, JetBrains, and GNOME extensions
 
 ## Project Structure

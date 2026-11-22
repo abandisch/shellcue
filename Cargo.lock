@@ -1835,7 +1835,6 @@ dependencies = [
  "dashmap",
  "dbus",
  "fig_desktop_api",
- "fig_install",
  "fig_integrations",
  "fig_ipc",
  "fig_log",
@@ -1882,7 +1881,6 @@ dependencies = [
  "tray-icon",
  "url",
  "uuid",
- "which",
  "whoami",
  "windows 0.58.0",
  "wry",
@@ -1906,15 +1904,11 @@ dependencies = [
 name = "fig_desktop_api"
 version = "1.19.7"
 dependencies = [
- "anstream",
  "async-trait",
  "base64",
  "bincode",
  "camino",
- "cfg-if",
  "dashmap",
- "dbus",
- "fig_integrations",
  "fig_os_shim",
  "fig_proto",
  "fig_settings",

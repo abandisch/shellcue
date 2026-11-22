@@ -1,6 +1,5 @@
 mod figterm;
 mod notifications;
-mod onboarding;
 mod process;
 mod properties;
 mod window;
@@ -26,15 +25,12 @@ use fig_os_shim::{
 use fig_proto::fig::server_originated_message::Submessage as ServerOriginatedSubMessage;
 use fig_proto::fig::{
     ClientOriginatedMessage,
-    DragWindowRequest,
     InsertTextRequest,
     NotificationRequest,
-    OnboardingRequest,
     PositionWindowRequest,
     RunProcessRequest,
     ServerOriginatedMessage,
     UpdateApplicationPropertiesRequest,
-    WindowFocusRequest,
 };
 use fig_remote_ipc::figterm::FigtermState;
 use fig_settings::{
@@ -137,28 +133,6 @@ impl<'a> fig_desktop_api::handler::EventHandler for EventHandler<'a> {
             request.context.proxy,
         )
         .await
-    }
-
-    async fn window_focus(&self, request: Wrapped<Self::Ctx, WindowFocusRequest>) -> RequestResult {
-        window::focus(
-            request.request,
-            request.context.window_id.clone(),
-            request.context.proxy,
-        )
-        .await
-    }
-
-    async fn drag_window(&self, request: Wrapped<Self::Ctx, DragWindowRequest>) -> RequestResult {
-        window::drag(
-            request.request,
-            request.context.window_id.clone(),
-            request.context.proxy,
-        )
-        .await
-    }
-
-    async fn onboarding(&self, request: Wrapped<Self::Ctx, OnboardingRequest>) -> RequestResult {
-        onboarding::onboarding(request.request, request.context.proxy, &request.context).await
     }
 
     async fn run_process(&self, request: Wrapped<Self::Ctx, RunProcessRequest>) -> RequestResult {

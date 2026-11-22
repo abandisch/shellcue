@@ -18,8 +18,6 @@ pub const PTY_BINARY_NAME: &str = "qterm";
 
 pub const CLI_CRATE_NAME: &str = "q_cli";
 
-pub const URL_SCHEMA: &str = "q";
-
 pub const PRODUCT_NAME: &str = "Amazon Q";
 
 pub const RUNTIME_DIR_NAME: &str = "cwrun";

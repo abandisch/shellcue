@@ -626,7 +626,6 @@ impl InternalSubcommand {
                 // RemoteForward isn't listening
                 launch_fig_desktop(LaunchArgs {
                     wait_for_socket: true,
-                    open_dashboard: false,
                     verbose: false,
                 })
                 .ok();

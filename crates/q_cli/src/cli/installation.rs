@@ -16,7 +16,10 @@ use fig_install::{
     install,
 };
 use fig_os_shim::Env;
-use fig_util::CLI_BINARY_NAME;
+use fig_util::{
+    CLI_BINARY_NAME,
+    PRODUCT_NAME,
+};
 use tracing::warn;
 
 use crate::util::choose;
@@ -128,5 +131,63 @@ pub async fn install_cli(
         }
     }
 
+    println!("{}", next_steps());
+
+    #[cfg(target_os = "macos")]
+    {
+        // index 0 is both the default and `choose`'s non-terminal fallback
+        if !no_confirm
+            && !global
+            && matches!(choose("Open the Accessibility settings now?", &["No", "Yes"]), Ok(Some(1)))
+        {
+            if let Err(err) = crate::util::open_accessibility_settings() {
+                warn!("Failed to open the Accessibility settings: {err}");
+            }
+        }
+    }
+
     Ok(ExitCode::SUCCESS)
+}
+
+fn next_steps() -> String {
+    let steps = [
+        Some("Open a new terminal window so the shell integration loads.".to_owned()),
+        cfg!(target_os = "macos").then(|| {
+            format!(
+                "Grant {PRODUCT_NAME} the Accessibility permission in System Settings > Privacy & Security > Accessibility."
+            )
+        }),
+        Some(format!("Run `{CLI_BINARY_NAME} doctor` if completions do not appear.")),
+    ];
+    let steps: String = steps
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .map(|(i, step)| format!("\n  {}. {step}", i + 1))
+        .collect();
+    format!("\nNext steps:{steps}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn next_steps_text() {
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(
+            next_steps(),
+            "\nNext steps:\n  \
+             1. Open a new terminal window so the shell integration loads.\n  \
+             2. Run `q doctor` if completions do not appear."
+        );
+        #[cfg(target_os = "macos")]
+        assert_eq!(
+            next_steps(),
+            "\nNext steps:\n  \
+             1. Open a new terminal window so the shell integration loads.\n  \
+             2. Grant Amazon Q the Accessibility permission in System Settings > Privacy & Security > Accessibility.\n  \
+             3. Run `q doctor` if completions do not appear."
+        );
+    }
 }
