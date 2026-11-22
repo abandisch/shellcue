@@ -91,7 +91,7 @@ mod tests {
         root
     }
 
-    fn content_type(res: &Response<Cow<'static, [u8]>>) -> &str {
+    fn content_type<'a>(res: &'a Response<Cow<'static, [u8]>>) -> &'a str {
         res.headers()[CONTENT_TYPE].to_str().unwrap()
     }
 
