@@ -25,11 +25,6 @@ pub const DATA_DIR_NAME: &str = "amazon-q";
 /// Backup directory name
 pub const BACKUP_DIR_NAME: &str = ".amazon-q.dotfiles.bak";
 
-// These are the old "CodeWhisperer" branding, used anywhere we will not update to Amazon Q
-pub const OLD_PRODUCT_NAME: &str = "CodeWhisperer";
-pub const OLD_CLI_BINARY_NAMES: &[&str] = &["cw"];
-pub const OLD_PTY_BINARY_NAMES: &[&str] = &["cwterm"];
-
 /// Build time env vars
 pub mod build {
     /// The target of the current build, e.g. "aarch64-unknown-linux-musl"

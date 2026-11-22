@@ -10,8 +10,6 @@ use fig_os_shim::{
 };
 use fig_util::{
     CLI_BINARY_NAME,
-    OLD_CLI_BINARY_NAMES,
-    OLD_PTY_BINARY_NAMES,
     PTY_BINARY_NAME,
     Shell,
     directories,
@@ -25,7 +23,7 @@ bitflags::bitflags! {
     pub struct InstallComponents: u64 {
         /// Removal of the integrations from user's dotfiles
         const SHELL_INTEGRATIONS    = 0b00000001;
-        /// This handles the removal of the CLI and pty binaries as well as legacy copies
+        /// This handles the removal of the CLI and pty binaries as well as the per-shell pty copies
         const BINARY                = 0b00000010;
         const DESKTOP_APP           = 0b00001000;
         const INPUT_METHOD          = 0b00010000;
@@ -56,12 +54,7 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
         // let folders = [directories::home_local_bin()?, Path::new("/usr/local/bin").into()];
         let folders = [directories::home_local_bin()?];
 
-        let mut all_binary_names = vec![CLI_BINARY_NAME, PTY_BINARY_NAME];
-        all_binary_names.extend(OLD_CLI_BINARY_NAMES);
-        all_binary_names.extend(OLD_PTY_BINARY_NAMES);
-
-        let mut pty_names = vec![PTY_BINARY_NAME];
-        pty_names.extend(OLD_PTY_BINARY_NAMES);
+        let all_binary_names = [CLI_BINARY_NAME, PTY_BINARY_NAME];
 
         for folder in folders {
             for binary_name in &all_binary_names {
@@ -70,10 +63,8 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
             }
 
             for shell in Shell::all() {
-                for pty_name in &pty_names {
-                    let pty_path = folder.join(format!("{shell} ({pty_name})"));
-                    remove_binary(pty_path).await;
-                }
+                let pty_path = folder.join(format!("{shell} ({PTY_BINARY_NAME})"));
+                remove_binary(pty_path).await;
             }
         }
     }
