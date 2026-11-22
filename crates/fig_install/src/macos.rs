@@ -7,10 +7,7 @@ use tokio::io::{
     AsyncReadExt,
     AsyncWriteExt,
 };
-use tracing::{
-    error,
-    warn,
-};
+use tracing::warn;
 
 use crate::Error;
 
@@ -44,13 +41,6 @@ pub(crate) async fn uninstall_desktop(ctx: &fig_os_shim::Context) -> Result<(), 
     // Delete Fig defaults on macOS
     tokio::process::Command::new("defaults")
         .args(["delete", APP_BUNDLE_ID])
-        .output()
-        .await
-        .map_err(|err| warn!("Failed to delete defaults: {err}"))
-        .ok();
-
-    tokio::process::Command::new("defaults")
-        .args(["delete", "com.amazon.codewhisperer.shared"])
         .output()
         .await
         .map_err(|err| warn!("Failed to delete defaults: {err}"))
@@ -94,38 +84,12 @@ pub(crate) async fn uninstall_desktop(ctx: &fig_os_shim::Context) -> Result<(), 
             .ok();
     }
 
-    // Remove the previous codewhisperer data dir only if it is a symlink.
-    if let Ok(old_fig_data_dir) = directories::old_fig_data_dir() {
-        if old_fig_data_dir.exists() {
-            if let Ok(metadata) = fs::symlink_metadata(&old_fig_data_dir).await {
-                if metadata.is_symlink() {
-                    fs::remove_file(&old_fig_data_dir)
-                        .await
-                        .map_err(|err| error!("Failed to remove the old fig data dir {old_fig_data_dir:?}: {err}"))
-                        .ok();
-                }
-            }
-        }
-    }
-
     Ok(())
 }
 
 pub async fn uninstall_terminal_integrations() {
     // Delete integrations
     if let Ok(home) = directories::home_dir() {
-        // Delete iTerm integration
-        for path in &[
-            "Library/Application Support/iTerm2/Scripts/AutoLaunch/fig-iterm-integration.py",
-            ".config/iterm2/AppSupport/Scripts/AutoLaunch/fig-iterm-integration.py",
-            "Library/Application Support/iTerm2/Scripts/AutoLaunch/fig-iterm-integration.scpt",
-        ] {
-            fs::remove_file(home.join(path))
-                .await
-                .map_err(|err| warn!("Could not remove iTerm integration {path}: {err}"))
-                .ok();
-        }
-
         // Remove Hyper integration
         let hyper_path = home.join(".hyper.js");
         if hyper_path.exists() {
