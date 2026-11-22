@@ -1,8 +1,10 @@
 packages:
   - proto
-  - tests/fig-api
   - packages/*
-  - packages/*
-  - extensions/vscode
   - extensions/gnome-legacy-extension
   - extensions/gnome-extension
+
+# Refuse any package version published less than 14 days ago (value is in minutes).
+minimumReleaseAge: 20160
+# Fail if the running pnpm differs from package.json's packageManager; never download another pnpm.
+pmOnFail: error

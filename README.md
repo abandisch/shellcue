@@ -114,7 +114,7 @@ rustup target add x86_64-apple-darwin
 rustup target add aarch64-apple-darwin
 ```
 
-### 3. Setup Python and Node using [`mise`](https://mise.jdx.dev)
+### 3. Setup the pinned toolchain using [`mise`](https://mise.jdx.dev)
 
 Add mise integrations to your shell:
 
@@ -133,7 +133,9 @@ For fish:
 echo 'mise activate fish | source' >> ~/.config/fish/config.fish
 ```
 
-Install the Python and Node toolchains using:
+Do not install pnpm separately: the repo refuses to run with any pnpm version other than the one pinned in `package.json`.
+
+Install the pinned Node, pnpm, protoc and Python versions (Rust is pinned by `rust-toolchain.toml` and installed by rustup) using:
 
 ```shell
 mise trust
@@ -210,8 +212,7 @@ Great for speeding up your ramp-up and navigating the repo more effectively.
 
 Several projects live here:
 
-- [`autocomplete`](packages/autocomplete/) - The autocomplete react app
-- [`dashboard`](packages/dashboard-app/) - The dashboard react app
+- [`autocomplete`](packages/autocomplete-app/) - The autocomplete react app
 - [`figterm`](crates/figterm/) - figterm, our headless terminal/pseudoterminal that
   intercepts the user’s terminal edit buffer.
 - [`q_cli`](crates/q_cli/) - the `q` CLI, allows users to interface with Amazon Q Developer from
@@ -221,10 +222,6 @@ Several projects live here:
   for windowing/webviews
 - [`fig_input_method`](crates/fig_input_method/) - The input method used to get cursor
   position on macOS
-- [`vscode`](extensions/vscode/) - Contains the VSCode plugin needed
-  for the Amazon Q Developer for command line to work in VSCode
-- [`jetbrains`](extensions/jetbrains/) - Contains the VSCode plugin
-  needed for the Amazon Q Developer for command line to work in Jetbrains IDEs
 
 Other folder to be aware of
 
