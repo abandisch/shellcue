@@ -109,15 +109,6 @@ pub fn home_local_bin_ctx(ctx: &Context) -> Result<PathBuf> {
     Ok(path)
 }
 
-/// The config directory
-///
-/// - Linux: `$XDG_CONFIG_HOME` or `$HOME/.config`
-/// - MacOS: `$HOME/Library/Application Support`
-/// - Windows: `{FOLDERID_RoamingAppData}`
-pub fn config_dir() -> Result<PathBuf> {
-    dirs::config_dir().ok_or(DirectoryError::NoHomeDirectory)
-}
-
 /// The old codewhisperer data directory
 ///
 /// This should be removed at some point in the future, once all our users have migrated

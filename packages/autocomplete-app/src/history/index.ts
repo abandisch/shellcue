@@ -56,8 +56,6 @@ type HistorySource = {
 const historySources: Record<string, HistorySource> = {
   zsh: { entries: [] },
   fig: { entries: [] },
-  bash: { entries: [] },
-  fish: { entries: [] },
   customCommand: { entries: [] },
 };
 
@@ -299,8 +297,6 @@ export const loadHistory = async (aliases: AliasMap) => {
     loadHistoryCommand(command);
   } else {
     await loadHistoryCommand("fc -R; fc -ln 1", "zsh").catch(() => {});
-    await loadHistoryCommand("fc -ln 1", "bash").catch(() => {});
-    await loadHistoryCommand("history search", "fish").catch(() => {});
   }
 };
 
@@ -381,14 +377,6 @@ export const getHistoryArgSuggestions = (
 
   if (getSetting(SETTINGS.HISTORY_COMMAND)) {
     allValues.push(...getValuesFromSource(historySources.customCommand));
-  } else if (
-    getSetting(SETTINGS.HISTORY_MERGE_SHELLS) &&
-    ["bash", "zsh"].includes(shell)
-  ) {
-    allValues.push(
-      ...getValuesFromSource(historySources.zsh),
-      ...getValuesFromSource(historySources.bash),
-    );
   } else if (shell in historySources) {
     allValues.push(...getValuesFromSource(historySources[shell]));
   }
@@ -420,14 +408,6 @@ export const getFullHistorySuggestions = (
 
   if (getSetting(SETTINGS.HISTORY_COMMAND)) {
     historyEntries.push(...historySources.customCommand.entries);
-  } else if (
-    getSetting(SETTINGS.HISTORY_MERGE_SHELLS) &&
-    ["bash", "zsh"].includes(shell)
-  ) {
-    historyEntries.push(
-      ...historySources.zsh.entries,
-      ...historySources.bash.entries,
-    );
   } else if (shell in historySources) {
     historyEntries.push(...historySources[shell].entries);
   }

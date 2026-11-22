@@ -46,9 +46,6 @@ pub mod build {
     /// The datetime in rfc3339 format of the current build
     pub const DATETIME: Option<&str> = option_env!("AMAZON_Q_BUILD_DATETIME");
 
-    /// If `fish` tests should be skipped
-    pub const SKIP_FISH_TESTS: bool = option_env!("AMAZON_Q_BUILD_SKIP_FISH_TESTS").is_some();
-
     /// If `shellcheck` tests should be skipped
     pub const SKIP_SHELLCHECK_TESTS: bool = option_env!("AMAZON_Q_BUILD_SKIP_SHELLCHECK_TESTS").is_some();
 }

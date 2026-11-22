@@ -139,13 +139,6 @@ static EXPECTED_BUFFER: Mutex<String> = Mutex::new(String::new());
 static SHELL_ENVIRONMENT_VARIABLES: Mutex<Vec<EnvironmentVariable>> = Mutex::new(Vec::new());
 static SHELL_ALIAS: Mutex<Option<String>> = Mutex::new(None);
 
-static USER_ENABLED_SHELLS: LazyLock<Vec<String>> = LazyLock::new(|| {
-    fig_settings::state::get("user.enabled-shells")
-        .ok()
-        .flatten()
-        .unwrap_or_default()
-});
-
 static HOSTNAME: LazyLock<Option<String>> = LazyLock::new(sysinfo::System::host_name);
 
 pub enum MainLoopEvent {
@@ -219,19 +212,13 @@ fn can_send_edit_buffer<T>(term: &Term<T>) -> bool
 where
     T: EventListener,
 {
-    let shell_enabled = ["bash", "zsh", "fish", "nu", "dash"]
-        .into_iter()
-        .chain(USER_ENABLED_SHELLS.iter().map(|s| s.as_str()))
-        .any(|s| {
-            let shell_raw = term.shell_state().get_context().shell.as_deref();
-            // we actually want to work with a nested figterm :)
-            let shell = match shell_raw.and_then(|s| s.strip_suffix(" (figterm)")) {
-                Some(s) => Some(s),
-                None => shell_raw,
-            };
-
-            shell == Some(s)
-        });
+    let shell_raw = term.shell_state().get_context().shell.as_deref();
+    // we actually want to work with a nested figterm :)
+    let shell = match shell_raw.and_then(|s| s.strip_suffix(" (figterm)")) {
+        Some(s) => Some(s),
+        None => shell_raw,
+    };
+    let shell_enabled = shell == Some("zsh");
     let preexec = term.shell_state().preexec;
 
     let mut handle = INSERTION_LOCKED_AT.write().unwrap();

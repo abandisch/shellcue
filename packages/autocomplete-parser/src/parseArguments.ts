@@ -1034,26 +1034,7 @@ const firstTokenSpec: Internal.Subcommand = {
         {
           custom: async (_tokens, _exec, context) => {
             let result: Fig.Suggestion[] = [];
-            if (context?.currentProcess.includes("fish")) {
-              const commands = await executeLoginShell({
-                command: 'complete -C ""',
-                executable: context.currentProcess,
-              });
-              result = commands.split("\n").map((commandString) => {
-                const splitIndex = commandString.indexOf("\t");
-                const name = commandString.slice(0, splitIndex + 1);
-                const description = commandString.slice(splitIndex + 1);
-                return { name, description, type: "subcommand" };
-              });
-            } else if (context?.currentProcess.includes("bash")) {
-              const commands = await executeLoginShell({
-                command: "compgen -c",
-                executable: context.currentProcess,
-              });
-              result = commands
-                .split("\n")
-                .map((name) => ({ name, type: "subcommand" }));
-            } else if (context?.currentProcess.includes("zsh")) {
+            if (context?.currentProcess.includes("zsh")) {
               const commands = await executeLoginShell({
                 command: `for key in \${(k)commands}; do echo $key; done && alias +r`,
                 executable: context.currentProcess,

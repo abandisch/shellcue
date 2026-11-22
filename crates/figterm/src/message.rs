@@ -251,7 +251,6 @@ pub async fn process_figterm_request(
 
             let response = FigtermResponse::Diagnostics(figterm::DiagnosticsResponse {
                 shell_context: Some(shell_state_to_context(term.shell_state())),
-                fish_suggestion_style: term.shell_state().fish_suggestion_color.as_ref().map(map_style),
                 zsh_autosuggestion_style: term.shell_state().zsh_autosuggestion_color.as_ref().map(map_style),
                 edit_buffer,
                 cursor_position,

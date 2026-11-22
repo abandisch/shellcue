@@ -114,14 +114,14 @@ message DiagnosticsRequest {}
 message DiagnosticsResponse {
   // Current shell context of the figterm instance
   optional fig_common.ShellContext shell_context = 1;
-  // Current suggestion style for fish
-  optional TermStyle fish_suggestion_style = 2;
   // Current suggestion style for zsh autosuggestion
   optional TermStyle zsh_autosuggestion_style = 3;
   // The current edit buffer
   optional string edit_buffer = 4;
   // The current cursor cursor position
   optional uint32 cursor_position = 5;
+
+  reserved 2;
 }
 
 message InsertOnNewCmdRequest {

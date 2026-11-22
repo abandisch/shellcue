@@ -65,11 +65,8 @@ enum GuardAssignment {
 
 fn assign_shell_variable(shell: &Shell, name: impl Display, value: impl Display, exported: bool) -> String {
     match (shell, exported) {
-        (Shell::Bash | Shell::Zsh, false) => format!("{name}=\"{value}\""),
-        (Shell::Bash | Shell::Zsh, true) => format!("export {name}=\"{value}\""),
-        (Shell::Fish, false) => format!("set -g {name} \"{value}\""),
-        (Shell::Fish, true) => format!("set -gx {name} \"{value}\""),
-        (Shell::Nu, _) => format!("let-env {name} = \"{value}\";"),
+        (Shell::Zsh, false) => format!("{name}=\"{value}\""),
+        (Shell::Zsh, true) => format!("export {name}=\"{value}\""),
     }
 }
 
@@ -82,9 +79,7 @@ fn guard_source(
 ) -> String {
     let mut output: Vec<Cow<'static, str>> = Vec::with_capacity(4);
     output.push(match shell {
-        Shell::Bash | Shell::Zsh => format!("if [ -z \"${{{guard_var}}}\" ]; then").into(),
-        Shell::Fish => format!("if test -z \"${guard_var}\"").into(),
-        Shell::Nu => format!("if env | any name == '{guard_var}' {{").into(),
+        Shell::Zsh => format!("if [ -z \"${{{guard_var}}}\" ]; then").into(),
     });
 
     let shell_var = assign_shell_variable(shell, guard_var, "1", export);
@@ -106,9 +101,7 @@ fn guard_source(
 
     output.push(
         match shell {
-            Shell::Bash | Shell::Zsh => "fi\n",
-            Shell::Fish => "end\n",
-            Shell::Nu => "}",
+            Shell::Zsh => "fi\n",
         }
         .into(),
     );
@@ -152,13 +145,6 @@ async fn shell_init(shell: &Shell, when: &When, rcfile: &Option<String>) -> Resu
 
     let is_jetbrains_terminal = Terminal::is_jetbrains_terminal();
 
-    if when == &When::Pre && shell == &Shell::Bash && is_jetbrains_terminal {
-        // JediTerm does not launch as a 'true' login shell, so our normal "shopt -q login_shell" check does
-        // not work. Thus, Q_IS_LOGIN_SHELL will be incorrect. We must manually set it so the
-        // user's bash_profile is sourced. https://github.com/JetBrains/intellij-community/blob/master/plugins/terminal/resources/jediterm-bash.in
-        to_source.push("Q_IS_LOGIN_SHELL=1".into());
-    }
-
     if let Some(path) = fig_settings::settings::get_string_opt("qterm.path") {
         to_source.push(assign_shell_variable(shell, "Q_TERM_PATH", path, false));
     }
@@ -168,7 +154,7 @@ async fn shell_init(shell: &Shell, when: &When, rcfile: &Option<String>) -> Resu
 
     if when == &When::Pre && is_jetbrains_terminal {
         // Manually call JetBrains shell integration after exec-ing to figterm.
-        // This may recursively call out to bashrc/zshrc so make sure to assign guard variable first.
+        // This may recursively call out to zshrc so make sure to assign guard variable first.
 
         let get_jetbrains_source = if let Some(bundle_id) = std::env::var_os("__CFBundleIdentifier") {
             if let Some(bundle) = app_path_from_bundle_id(bundle_id) {
@@ -177,21 +163,11 @@ async fn shell_init(shell: &Shell, when: &When, rcfile: &Option<String>) -> Resu
 
                 // We source both the old and new location of these integrations.
                 // In theory, they shouldn't both exist since they come with the app bundle itself.
-                // As of writing, the bash path change isn't live, but we source it anyway.
                 match shell {
-                    Shell::Bash => Some(formatdoc! {"
-                        [ -f '{bundle}/Contents/plugins/terminal/jediterm-bash.in' ] && source '{bundle}/Contents/plugins/terminal/jediterm-bash.in'
-                        [ -f '{bundle}/Contents/plugins/terminal/bash/jediterm-bash.in' ] && source '{bundle}/Contents/plugins/terminal/bash/jediterm-bash.in'
-                    "}),
                     Shell::Zsh => Some(formatdoc! {"
                         [ -f '{bundle}/Contents/plugins/terminal/.zshenv' ] && source '{bundle}/Contents/plugins/terminal/.zshenv'
                         [ -f '{bundle}/Contents/plugins/terminal/zsh/.zshenv' ] && source '{bundle}/Contents/plugins/terminal/zsh/.zshenv'
                     "}),
-                    Shell::Fish => Some(formatdoc! {"
-                        [ -f '{bundle}/Contents/plugins/terminal/fish/config.fish' ] && source '{bundle}/Contents/plugins/terminal/fish/config.fish'
-                        [ -f '{bundle}/Contents/plugins/terminal/fish/init.fish' ] && source '{bundle}/Contents/plugins/terminal/fish/init.fish'
-                    "}),
-                    Shell::Nu => None,
                 }
             } else {
                 None
