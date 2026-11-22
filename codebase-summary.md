@@ -92,6 +92,5 @@ The chat implementation includes a robust tool system that allows Amazon Q to in
 4. **Configuration**:
    - Respects user settings for editor mode (vi/emacs)
    - Region checking for service availability
-   - Telemetry for usage tracking
 
 The implementation provides a seamless interface between the user and Amazon Q's AI capabilities, with powerful tools that allow the assistant to help with file operations, command execution, and AWS service interactions, all within a terminal-based chat interface.

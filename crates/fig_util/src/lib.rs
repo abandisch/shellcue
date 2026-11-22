@@ -1,4 +1,5 @@
 pub mod directories;
+mod install_method;
 pub mod manifest;
 mod open;
 pub mod process_info;
@@ -17,6 +18,10 @@ use std::path::{
 };
 
 pub use consts::*;
+pub use install_method::{
+    InstallMethod,
+    get_install_method,
+};
 pub use open::{
     open_url,
     open_url_async,

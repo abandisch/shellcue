@@ -25,7 +25,6 @@ use fig_proto::figterm::{
     self,
     FigtermRequestMessage,
     FigtermResponseMessage,
-    TelemetryRequest,
 };
 use fig_proto::remote::{
     Clientbound,
@@ -283,7 +282,6 @@ pub async fn process_figterm_request(
                 .ok();
             Ok(None)
         },
-        FigtermRequest::Telemtety(_) => anyhow::bail!("Telemetry is not supported over remote"),
     }
 }
 
@@ -297,14 +295,6 @@ pub async fn process_figterm_message(
     key_interceptor: &mut KeyInterceptor,
 ) -> Result<()> {
     match figterm_request_message.request {
-        Some(FigtermRequest::Telemtety(TelemetryRequest { event_blob })) => {
-            match fig_telemetry::AppTelemetryEvent::from_json(&event_blob) {
-                Ok(event) => {
-                    tokio::spawn(fig_telemetry::send_event(event));
-                },
-                Err(err) => error!(%err, "Failed to parse telemetry event"),
-            }
-        },
         Some(request) => {
             match process_figterm_request(request, main_loop_tx, term, pty_master, key_interceptor).await {
                 Ok(Some(response)) => {

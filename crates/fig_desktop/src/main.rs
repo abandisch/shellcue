@@ -98,8 +98,6 @@ async fn main() -> ExitCode {
     })
     .expect("Failed to init logging");
 
-    fig_telemetry::init_global_telemetry_emitter();
-
     #[cfg(target_os = "macos")]
     install::migrate_data_dir().await;
 
@@ -189,7 +187,6 @@ async fn main() -> ExitCode {
         .unwrap();
 
     webview_manager.run().await.unwrap();
-    fig_telemetry::finish_telemetry().await;
     ExitCode::SUCCESS
 }
 
