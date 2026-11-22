@@ -1,9 +1,5 @@
 use std::sync::Mutex;
 
-use fig_os_shim::{
-    ContextArcProvider,
-    ContextProvider,
-};
 use fig_proto::local::command_response::Response as CommandResponseTypes;
 use fig_proto::local::dump_state_command::Type as DumpStateType;
 use fig_proto::local::{
@@ -14,15 +10,10 @@ use fig_proto::local::{
     DumpStateResponse,
     LogLevelCommand,
     LogLevelResponse,
-    OpenUiElementCommand,
     QuitCommand,
-    UiElement,
 };
 use fig_remote_ipc::figterm::FigtermState;
-use fig_settings::StateProvider;
-use fig_settings::settings::SettingsProvider;
 use tao::event_loop::ControlFlow;
-use tracing::error;
 
 use super::{
     LocalResponse,
@@ -36,7 +27,6 @@ use crate::platform::PlatformState;
 use crate::webview::notification::WebviewNotificationsState;
 use crate::{
     AUTOCOMPLETE_ID,
-    DASHBOARD_ID,
     EventLoopProxy,
     platform,
 };
@@ -120,59 +110,17 @@ pub async fn diagnostic(_: DiagnosticsCommand, figterm_state: &FigtermState) -> 
     ))))
 }
 
-pub async fn open_ui_element(command: OpenUiElementCommand, proxy: &EventLoopProxy) -> LocalResult {
-    match command.element() {
-        UiElement::Settings => {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: DASHBOARD_ID.clone(),
-                    window_event: WindowEvent::Batch(vec![
-                        WindowEvent::NavigateRelative {
-                            path: "/preferences".into(),
-                        },
-                        WindowEvent::Show,
-                    ]),
-                })
-                .unwrap();
-        },
-        UiElement::MissionControl => {
-            let events = if let Some(path) = command.route {
-                vec![WindowEvent::NavigateRelative { path: path.into() }, WindowEvent::Show]
-            } else {
-                vec![WindowEvent::Show]
-            };
-
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: DASHBOARD_ID.clone(),
-                    window_event: WindowEvent::Batch(events),
-                })
-                .unwrap();
-        },
-        UiElement::MenuBar => error!("Opening menu bar is unimplemented"),
-        UiElement::InputMethodPrompt => error!("Opening input method prompt is unimplemented"),
-    };
-
-    Ok(LocalResponse::Success(None))
-}
-
-#[allow(unused_variables)]
-pub async fn prompt_for_accessibility_permission<Ctx>(ctx: &Ctx) -> LocalResult
-where
-    Ctx: SettingsProvider + StateProvider + ContextProvider + ContextArcProvider + Send + Sync,
-{
+pub async fn prompt_for_accessibility_permission() -> LocalResult {
     cfg_if::cfg_if! {
         if #[cfg(target_os = "macos")] {
-            use fig_desktop_api::requests::install::install;
-            use fig_proto::fig::{InstallRequest, InstallComponent, InstallAction};
+            use macos_utils::accessibility::{
+                accessibility_is_enabled,
+                open_accessibility,
+            };
 
-            install(
-                InstallRequest {
-                    component: InstallComponent::Accessibility.into(),
-                    action: InstallAction::Install.into()
-                },
-                ctx
-            ).await.ok();
+            if !accessibility_is_enabled() {
+                open_accessibility();
+            }
             Ok(LocalResponse::Success(None))
         } else {
             Err(LocalResponse::Error {

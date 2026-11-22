@@ -14,10 +14,6 @@ use fig_util::{
 pub struct LaunchArgs {
     /// Should we wait for the socket to continue execution
     pub wait_for_socket: bool,
-    /// Should we open the dashboard right away
-    ///
-    /// Note that this won't open the dashboard if the app is already running
-    pub open_dashboard: bool,
     /// Print output to user
     pub verbose: bool,
 }
@@ -111,16 +107,10 @@ pub fn launch_fig_desktop(args: LaunchArgs) -> Result<()> {
 
     std::fs::remove_file(directories::desktop_socket_path()?).ok();
 
-    let mut common_args = vec![];
-    if !args.open_dashboard {
-        common_args.push("--no-dashboard");
-    }
-
     cfg_if::cfg_if! {
         if #[cfg(target_os = "macos")] {
             let output = Command::new("open")
-                .args(["-g", "-b", fig_util::consts::APP_BUNDLE_ID, "--args"])
-                .args(common_args)
+                .args(["-g", "-b", fig_util::consts::APP_BUNDLE_ID])
                 .output()?;
 
             if !output.status.success() {
@@ -241,7 +231,6 @@ mod tests {
     fn test_e2e_launch_fig_desktop() {
         launch_fig_desktop(LaunchArgs {
             wait_for_socket: true,
-            open_dashboard: true,
             verbose: true,
         })
         .unwrap();

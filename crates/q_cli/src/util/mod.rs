@@ -23,8 +23,11 @@ use anstream::println;
 use anstream::stream::IsTerminal;
 use cfg_if::cfg_if;
 pub use cli_context::CliContext;
-use crossterm::style::Stylize;
-use desktop::desktop_app_running;
+use desktop::{
+    LaunchArgs,
+    desktop_app_running,
+    launch_fig_desktop,
+};
 use dialoguer::Select;
 use dialoguer::theme::ColorfulTheme;
 use eyre::{
@@ -34,11 +37,8 @@ use eyre::{
     bail,
 };
 use fig_ipc::local::quit_command;
+use fig_util::PRODUCT_NAME;
 use fig_util::consts::APP_BUNDLE_ID;
-use fig_util::{
-    CLI_BINARY_NAME,
-    PRODUCT_NAME,
-};
 use globset::{
     Glob,
     GlobSet,
@@ -186,19 +186,48 @@ pub async fn quit_fig(verbose: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+pub async fn restart_fig() -> Result<()> {
+    if fig_util::system_info::in_cloudshell() {
+        bail!("Restarting {PRODUCT_NAME} is not supported in CloudShell");
+    }
+
+    if fig_util::system_info::is_remote() {
+        bail!("Please restart {PRODUCT_NAME} from your host machine");
+    }
+
+    if !desktop_app_running() {
+        launch_fig_desktop(LaunchArgs {
+            wait_for_socket: true,
+            verbose: true,
+        })?;
+
+        Ok(())
+    } else {
+        println!("Restarting {PRODUCT_NAME}");
+        quit_fig(false).await?;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        launch_fig_desktop(LaunchArgs {
+            wait_for_socket: true,
+            verbose: false,
+        })?;
+
+        Ok(())
+    }
+}
+
+pub fn open_accessibility_settings() -> Result<()> {
+    Command::new("open")
+        .args(["x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"])
+        .spawn()?
+        .wait()?;
+    Ok(())
+}
+
 pub fn is_executable_in_path(program: impl AsRef<Path>) -> bool {
     match env::var_os("PATH") {
         Some(path) => env::split_paths(&path).any(|p| p.join(&program).is_file()),
         _ => false,
     }
-}
-
-pub fn app_not_running_message() -> String {
-    format!(
-        "\n{}\n{PRODUCT_NAME} app might not be running, to launch {PRODUCT_NAME} run: {}\n",
-        format!("Unable to connect to {PRODUCT_NAME} app").bold(),
-        format!("{CLI_BINARY_NAME} launch").magenta()
-    )
 }
 
 pub fn match_regex(regex: impl AsRef<str>, input: impl AsRef<str>) -> Option<String> {

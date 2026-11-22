@@ -30,12 +30,6 @@ pub trait Scope {
     const PATH: &'static str;
 }
 
-pub struct Dashboard;
-
-impl Scope for Dashboard {
-    const PATH: &'static str = "dashboard";
-}
-
 pub struct Autocomplete;
 
 impl Scope for Autocomplete {

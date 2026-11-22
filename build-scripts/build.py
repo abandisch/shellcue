@@ -1,15 +1,11 @@
 from dataclasses import dataclass
-from functools import cache
 import os
 import json
-import datetime
 import pathlib
 import shutil
 from typing import Dict, List, Mapping, Sequence
 from util import (
-    Package,
     Variant,
-    enum_encoder,
     get_variants,
     isDarwin,
     isLinux,
@@ -35,11 +31,9 @@ from const import (
     LINUX_LEGACY_GNOME_EXTENSION_UUID,
     LINUX_MODERN_GNOME_EXTENSION_UUID,
     LINUX_PACKAGE_NAME,
-    MACOS_BUNDLE_ID,
     PTY_BINARY_NAME,
     PTY_PACKAGE_NAME,
     TAURI_PRODUCT_NAME,
-    URL_SCHEMA,
 )
 
 BUILD_DIR_RELATIVE = pathlib.Path(os.environ.get("BUILD_DIR") or "build")
@@ -48,9 +42,7 @@ BUILD_DIR = BUILD_DIR_RELATIVE.absolute()
 
 @dataclass
 class NpmBuildOutput:
-    dashboard_path: pathlib.Path
     autocomplete_path: pathlib.Path
-    vscode_path: pathlib.Path
 
 
 @dataclass
@@ -62,38 +54,16 @@ class MacOSBuildOutput:
 def build_npm_packages(run_test: bool = True) -> NpmBuildOutput:
     run_cmd(["pnpm", "install", "--frozen-lockfile"])
 
-    # set the version of extensions/vscode
-    package_json_path = pathlib.Path("extensions/vscode/package.json")
-    package_json_text = package_json_path.read_text()
-    package_json = json.loads(package_json_text)
-    package_json["version"] = version()
-    package_json_path.write_text(json.dumps(package_json, indent=2))
-
     run_cmd(["pnpm", "build"])
     if run_test:
         run_cmd(["pnpm", "test", "--", "--run"])
 
-    # revert the package.json
-    package_json_path.write_text(package_json_text)
-
     # copy to output
-    dashboard_path = BUILD_DIR / "dashboard"
-    shutil.rmtree(dashboard_path, ignore_errors=True)
-    shutil.copytree("packages/dashboard-app/dist", dashboard_path)
-
     autocomplete_path = BUILD_DIR / "autocomplete"
     shutil.rmtree(autocomplete_path, ignore_errors=True)
     shutil.copytree("packages/autocomplete-app/dist", autocomplete_path)
 
-    vscode_path = BUILD_DIR / "vscode-plugin.vsix"
-    shutil.rmtree(vscode_path, ignore_errors=True)
-    shutil.copy2(f"extensions/vscode/codewhisperer-for-command-line-companion-{version()}.vsix", vscode_path)
-    shutil.copy2(
-        f"extensions/vscode/codewhisperer-for-command-line-companion-{version()}.vsix",
-        "crates/fig_integrations/src/vscode/vscode-plugin.vsix",
-    )
-
-    return NpmBuildOutput(dashboard_path=dashboard_path, autocomplete_path=autocomplete_path, vscode_path=vscode_path)
+    return NpmBuildOutput(autocomplete_path=autocomplete_path)
 
 
 def compiled_specs_path() -> pathlib.Path:
@@ -158,21 +128,6 @@ def build_cargo_bin(
         return out_path
 
 
-@cache
-def gen_manifest() -> str:
-    return json.dumps(
-        {
-            "managed_by": "dmg",
-            "packaged_at": datetime.datetime.now().isoformat(),
-            "packaged_by": "amazon",
-            "variant": "full",
-            "version": version(),
-            "kind": "dmg",
-            "default_channel": "stable",
-        }
-    )
-
-
 def build_macos_ime(
     release: bool,
     targets: Sequence[str] = [],
@@ -211,7 +166,6 @@ def macos_tauri_config(cli_path: pathlib.Path, pty_path: pathlib.Path, target: s
                     str(cli_path).removesuffix(f"-{target}"),
                     str(pty_path).removesuffix(f"-{target}"),
                 ],
-                "resources": ["manifest.json"],
             }
         }
     }
@@ -230,10 +184,6 @@ def build_macos_desktop_app(
 
     info("Building macos ime")
     ime_app = build_macos_ime(release=release, targets=targets)
-
-    info("Writing manifest")
-    manifest_path = pathlib.Path(DESKTOP_PACKAGE_PATH) / "manifest.json"
-    manifest_path.write_text(gen_manifest())
 
     info("Building tauri config")
     tauri_config_path = pathlib.Path(DESKTOP_PACKAGE_PATH) / "build-config.json"
@@ -260,7 +210,6 @@ def build_macos_desktop_app(
     )
 
     # clean up
-    manifest_path.unlink(missing_ok=True)
     tauri_config_path.unlink(missing_ok=True)
 
     target_bundle = pathlib.Path(f"target/{target}/release/bundle/macos/{TAURI_PRODUCT_NAME}.app")
@@ -277,35 +226,10 @@ def build_macos_desktop_app(
     # Specifies the app is an "agent app"
     run_cmd(["defaults", "write", info_plist_path, "LSUIElement", "-bool", "TRUE"])
 
-    # Add q:// association to bundle
-    run_cmd(
-        [
-            "plutil",
-            "-insert",
-            "CFBundleURLTypes",
-            "-xml",
-            f"""<array>
-    <dict>
-        <key>CFBundleURLName</key>
-        <string>{MACOS_BUNDLE_ID}</string>
-        <key>CFBundleURLSchemes</key>
-        <array>
-        <string>{URL_SCHEMA}</string>
-        </array>
-    </dict>
-    </array>
-    """,
-            info_plist_path,
-        ]
-    )
-
     info("Copying CodeWhispererInputMethod.app into bundle")
     helpers_dir = app_path / "Contents/Helpers"
     helpers_dir.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ime_app, helpers_dir.joinpath("CodeWhispererInputMethod.app"))
-
-    info("Copying dashboard into bundle")
-    shutil.copytree(npm_packages.dashboard_path, app_path / "Contents/Resources/dashboard")
 
     info("Copying autocomplete into bundle")
     shutil.copytree(npm_packages.autocomplete_path, app_path / "Contents/Resources/autocomplete")
@@ -420,13 +344,10 @@ def build_linux_minimal(cli_path: pathlib.Path, pty_path: pathlib.Path):
 def linux_tauri_config(
     cli_path: pathlib.Path,
     pty_path: pathlib.Path,
-    dashboard_path: pathlib.Path,
     autocomplete_path: pathlib.Path,
     specs_path: pathlib.Path,
-    vscode_path: pathlib.Path,
     legacy_extension_dir_path: pathlib.Path,
     modern_extension_dir_path: pathlib.Path,
-    bundle_metadata_path: pathlib.Path,
     target: str,
 ) -> str:
     config = {
@@ -440,13 +361,10 @@ def linux_tauri_config(
                 "targets": ["appimage"],
                 "icon": ["icons/128x128.png"],
                 "resources": {
-                    dashboard_path.absolute().as_posix(): "dashboard",
                     autocomplete_path.absolute().as_posix(): "autocomplete",
                     specs_path.absolute().as_posix(): "specs",
-                    vscode_path.absolute().as_posix(): "vscode",
                     legacy_extension_dir_path.absolute().as_posix(): LINUX_LEGACY_GNOME_EXTENSION_UUID,
                     modern_extension_dir_path.absolute().as_posix(): LINUX_MODERN_GNOME_EXTENSION_UUID,
-                    bundle_metadata_path.absolute().as_posix(): "bundle-metadata",
                 },
             },
         }
@@ -467,24 +385,6 @@ def linux_desktop_entry() -> str:
 
 
 @dataclass
-class BundleMetadata:
-    packaged_as: Package
-
-
-def make_linux_bundle_metadata(packaged_as: Package) -> pathlib.Path:
-    """
-    Creates the bundle metadata json file under a new directory, returning the path to the directory.
-    """
-    metadata_dir_path = BUILD_DIR / f"{packaged_as.value}-metadata"
-    shutil.rmtree(metadata_dir_path, ignore_errors=True)
-    metadata_dir_path.mkdir(parents=True)
-    (metadata_dir_path / "metadata.json").write_text(
-        json.dumps(BundleMetadata(packaged_as=packaged_as), default=enum_encoder)
-    )
-    return metadata_dir_path
-
-
-@dataclass
 class LinuxDebResources:
     cli_path: pathlib.Path
     pty_path: pathlib.Path
@@ -492,7 +392,6 @@ class LinuxDebResources:
     specs_path: pathlib.Path
     legacy_extension_dir_path: pathlib.Path
     modern_extension_dir_path: pathlib.Path
-    bundle_metadata_path: pathlib.Path
     npm_packages: NpmBuildOutput
 
 
@@ -541,11 +440,6 @@ def build_linux_deb(
     shutil.copytree(resources.modern_extension_dir_path, share_path / LINUX_MODERN_GNOME_EXTENSION_UUID)
     shutil.copytree(resources.npm_packages.autocomplete_path, share_path / "autocomplete")
     shutil.copytree(resources.specs_path, share_path / "specs")
-    shutil.copytree(resources.npm_packages.dashboard_path, share_path / "dashboard")
-    # TODO: Support vscode
-    # vscode_path = share_path / 'vscode/vscode-plugin.vsix'
-    # vscode_path.parent.mkdir(parents=True)
-    # shutil.copy(npm_packages.vscode_path, vscode_path)
 
     def replace_text(file: pathlib.Path, old: str, new: str):
         file.write_text(file.read_text().replace(old, new))
@@ -617,13 +511,10 @@ def build_linux_full(
         linux_tauri_config(
             cli_path=cli_path,
             pty_path=pty_path,
-            dashboard_path=npm_packages.dashboard_path,
             autocomplete_path=npm_packages.autocomplete_path,
             specs_path=specs_path,
-            vscode_path=npm_packages.vscode_path,
             legacy_extension_dir_path=legacy_extension_dir_path,
             modern_extension_dir_path=modern_extension_dir_path,
-            bundle_metadata_path=make_linux_bundle_metadata(Package.APPIMAGE),
             target=target,
         )
     )
@@ -656,7 +547,6 @@ def build_linux_full(
         specs_path=specs_path,
         legacy_extension_dir_path=legacy_extension_dir_path,
         modern_extension_dir_path=modern_extension_dir_path,
-        bundle_metadata_path=make_linux_bundle_metadata(Package.DEB),
         npm_packages=npm_packages,
     )
     build_linux_deb(

@@ -88,7 +88,7 @@ mod tests {
     use fig_desktop_api::handler::ClientOriginatedSubMessage;
     use fig_proto::fig::{
         ClientOriginatedMessage,
-        PingRequest,
+        GetSettingsPropertyRequest,
     };
 
     use super::*;
@@ -101,9 +101,10 @@ mod tests {
     async fn test_handle_errors() {
         let ctx = OsContext::new_fake();
         let id = AUTOCOMPLETE_ID;
+        let get_settings = GetSettingsPropertyRequest { key: None };
         let body = ClientOriginatedMessage {
             id: Some(0),
-            submessage: Some(ClientOriginatedSubMessage::PingRequest(PingRequest {})),
+            submessage: Some(ClientOriginatedSubMessage::GetSettingsPropertyRequest(get_settings)),
         }
         .encode_to_vec();
 

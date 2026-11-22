@@ -3,9 +3,6 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Cli {
-    /// Do not launch the dashboard when starting
-    #[arg(long)]
-    pub no_dashboard: bool,
     /// Checks the `app.launchOnStartup` setting before launching
     #[arg(long)]
     pub is_startup: bool,
@@ -15,8 +12,6 @@ pub struct Cli {
     /// Allow launching multiple instances of `fig_desktop`
     #[arg(long)]
     pub allow_multiple: bool,
-    /// Url to open
-    pub url_link: Option<String>,
 }
 
 #[cfg(test)]
@@ -27,5 +22,11 @@ mod tests {
     fn verify_app() {
         use clap::CommandFactory;
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn removed_arguments_are_rejected() {
+        assert!(Cli::try_parse_from(["fig_desktop", "--no-dashboard"]).is_err());
+        assert!(Cli::try_parse_from(["fig_desktop", "q://dashboard/"]).is_err());
     }
 }

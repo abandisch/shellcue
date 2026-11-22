@@ -111,20 +111,10 @@ pub enum PlatformBoundEvent {
     /// Late initialization after the event loop has started
     InitializePostRun,
     EditBufferChanged,
-    FullscreenStateUpdated {
-        fullscreen: bool,
-        dashboard_visible: Option<bool>,
-    },
     AccessibilityUpdated {
         enabled: bool,
     },
     AccessibilityUpdateRequested,
-    AppWindowFocusChanged {
-        window_id: WindowId,
-        focused: bool,
-        fullscreen: bool,
-        visible: bool,
-    },
     CaretPositionUpdateRequested,
     WindowDestroyed {
         // TODO: dont use on other platforms than macos

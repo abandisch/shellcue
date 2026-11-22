@@ -11,15 +11,12 @@ pub use fig_proto::fig::client_originated_message::Submessage as ClientOriginate
 pub use fig_proto::fig::server_originated_message::Submessage as ServerOriginatedSubMessage;
 use fig_proto::fig::{
     ClientOriginatedMessage,
-    DragWindowRequest,
     InsertTextRequest,
     NotificationRequest,
-    OnboardingRequest,
     PositionWindowRequest,
     RunProcessRequest,
     ServerOriginatedMessage,
     UpdateApplicationPropertiesRequest,
-    WindowFocusRequest,
 };
 use fig_proto::prost::Message;
 use fig_settings::settings::SettingsProvider;
@@ -56,14 +53,6 @@ pub trait EventHandler {
         RequestResult::unimplemented(request.request)
     }
 
-    async fn window_focus(&self, request: Wrapped<Self::Ctx, WindowFocusRequest>) -> RequestResult {
-        RequestResult::unimplemented(request.request)
-    }
-
-    async fn onboarding(&self, request: Wrapped<Self::Ctx, OnboardingRequest>) -> RequestResult {
-        RequestResult::unimplemented(request.request)
-    }
-
     async fn run_process(&self, request: Wrapped<Self::Ctx, RunProcessRequest>) -> RequestResult {
         RequestResult::unimplemented(request.request)
     }
@@ -72,10 +61,6 @@ pub trait EventHandler {
         &self,
         request: Wrapped<Self::Ctx, UpdateApplicationPropertiesRequest>,
     ) -> RequestResult {
-        RequestResult::unimplemented(request.request)
-    }
-
-    async fn drag_window(&self, request: Wrapped<Self::Ctx, DragWindowRequest>) -> RequestResult {
         RequestResult::unimplemented(request.request)
     }
 }
@@ -149,24 +134,17 @@ where
                 ContentsOfDirectoryRequest,
                 CreateDirectoryRequest,
                 DestinationOfSymbolicLinkRequest,
-                DragWindowRequest,
                 GetLocalStateRequest,
-                GetPlatformInfoRequest,
                 GetSettingsPropertyRequest,
                 HistoryQueryRequest,
                 InsertTextRequest,
-                InstallRequest,
                 NotificationRequest,
-                OnboardingRequest,
-                OpenInExternalApplicationRequest,
-                PingRequest,
                 PositionWindowRequest,
                 ReadFileRequest,
                 RunProcessRequest,
                 UpdateApplicationPropertiesRequest,
                 UpdateLocalStateRequest,
                 UpdateSettingsPropertyRequest,
-                WindowFocusRequest,
                 WriteFileRequest,
             };
             use requests::*;
@@ -199,18 +177,8 @@ where
                 UpdateSettingsPropertyRequest(request) => settings::update(request).await,
                 // window
                 PositionWindowRequest(request) => event_handler.position_window(request!(request)).await,
-                WindowFocusRequest(request) => event_handler.window_focus(request!(request)).await,
-                DragWindowRequest(request) => event_handler.drag_window(request!(request)).await,
-                // onboarding
-                OnboardingRequest(request) => event_handler.onboarding(request!(request)).await,
-                // install
-                InstallRequest(request) => install::install(request, &ctx).await,
                 // history
                 HistoryQueryRequest(request) => history::query(request).await,
-                // other
-                OpenInExternalApplicationRequest(request) => other::open_in_external_application(request).await,
-                PingRequest(request) => other::ping(request),
-                GetPlatformInfoRequest(request) => platform::get_platform_info(request, &ctx).await,
             }
         },
         None => {

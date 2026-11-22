@@ -3,11 +3,8 @@ import * as Event from "./event.js";
 import * as Fig from "@aws/amazon-q-developer-cli-proto/fig";
 import * as fs from "./filesystem.js";
 import * as History from "./history.js";
-import * as Install from "./install.js";
 import * as Internal from "./requests.js";
 import * as Keybindings from "./keybindings.js";
-import * as Native from "./native.js";
-import * as Platform from "./platform.js";
 import * as Process from "./process.js";
 import * as Settings from "./settings.js";
 import * as Shell from "./shell.js";
@@ -20,11 +17,8 @@ const lib = {
   Event,
   fs,
   History,
-  Install,
   Internal,
   Keybindings,
-  Native,
-  Platform,
   Process,
   Settings,
   Shell,
@@ -39,11 +33,8 @@ export {
   Fig,
   fs,
   History,
-  Install,
   Internal,
   Keybindings,
-  Native,
-  Platform,
   Process,
   Settings,
   Shell,

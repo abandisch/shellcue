@@ -1,6 +1,4 @@
 pub mod autocomplete;
-pub mod dashboard;
-pub mod menu;
 pub mod notification;
 pub mod window;
 pub mod window_id;
@@ -20,11 +18,7 @@ use fig_os_shim::Context;
 use fig_proto::fig::ClientOriginatedMessage;
 use fig_proto::fig::client_originated_message::Submessage;
 use fig_remote_ipc::figterm::FigtermState;
-use fig_util::consts::PRODUCT_NAME;
-use fig_util::{
-    URL_SCHEMA,
-    directories,
-};
+use fig_util::directories;
 use fnv::FnvBuildHasher;
 use muda::MenuEvent;
 use regex::RegexSet;
@@ -60,9 +54,7 @@ use wry::{
     WebViewBuilder,
 };
 
-use self::menu::menu_bar;
 use self::notification::WebviewNotificationsState;
-use self::window_id::DashboardId;
 use crate::event::{
     Event,
     WindowEvent,
@@ -90,7 +82,6 @@ use crate::tray::{
 use crate::webview::window_id::AutocompleteId;
 pub use crate::webview::window_id::{
     AUTOCOMPLETE_ID,
-    DASHBOARD_ID,
     WindowId,
 };
 use crate::{
@@ -102,12 +93,7 @@ use crate::{
     utils,
 };
 
-pub const DASHBOARD_SIZE: LogicalSize<f64> = LogicalSize::new(960.0, 720.0);
-pub const DASHBOARD_MINIMUM_SIZE: LogicalSize<f64> = LogicalSize::new(700.0, 480.0);
-
 pub const AUTOCOMPLETE_WINDOW_TITLE: &str = "Fig Autocomplete";
-
-pub const LOGIN_PATH: &str = "/";
 
 fn map_theme(theme: &str) -> Option<WryTheme> {
     match theme {
@@ -156,21 +142,17 @@ pub static NOTIFICATIONS_STATE: OnceLock<Arc<WebviewNotificationsState>> = OnceL
 pub static DASH_KV_STORE: OnceLock<Arc<DashKVStore>> = OnceLock::new();
 
 impl WebviewManager {
-    #[allow(unused_variables)]
     #[allow(unused_mut)]
-    pub fn new(context: Arc<Context>, visible: bool) -> Self {
+    pub fn new(context: Arc<Context>) -> Self {
         let mut event_loop = EventLoopBuilder::with_user_event().build();
 
         #[cfg(target_os = "macos")]
-        if !visible {
+        {
             use tao::platform::macos::{
                 ActivationPolicy,
                 EventLoopExtMacOS,
             };
 
-            use crate::platform::ACTIVATION_POLICY;
-
-            *ACTIVATION_POLICY.lock().unwrap() = ActivationPolicy::Accessory;
             event_loop.set_activation_policy(ActivationPolicy::Accessory);
         }
 
@@ -325,7 +307,7 @@ impl WebviewManager {
                         message,
                         Ok(ClientOriginatedMessage {
                             id: _,
-                            submessage: Some(Submessage::PositionWindowRequest(_) | Submessage::WindowFocusRequest(_))
+                            submessage: Some(Submessage::PositionWindowRequest(_))
                         })
                     ) {
                         sync_api_handler_tx.send((fig_id, message)).ok();
@@ -362,17 +344,6 @@ impl WebviewManager {
             error!(%err, "Failed to set tray visible");
         }
 
-        #[allow(unused_variables)]
-        let menu_bar = menu_bar();
-
-        // TODO: fix these
-        // #[cfg(target_os = "windows")]
-        // menu_bar.init_for_hwnd(window_hwnd);
-        // #[cfg(target_os = "linux")]
-        // menu_bar.init_for_gtk_window(&gtk_window, Some(&vertical_gtk_box));
-        #[cfg(target_os = "macos")]
-        menu_bar.init_for_nsapp();
-
         let proxy = self.event_loop.create_proxy();
         proxy
             .send_event(Event::PlatformBoundEvent(PlatformBoundEvent::InitializePostRun))
@@ -384,7 +355,6 @@ impl WebviewManager {
 
             if let Ok(menu_event) = MenuEvent::receiver().try_recv() {
                 info!(?menu_event, "Menu Event");
-                menu::handle_event(&menu_event, &proxy);
                 tray::handle_event(&menu_event, &proxy);
             }
 
@@ -396,20 +366,6 @@ impl WebviewManager {
                             WryWindowEvent::CloseRequested => {
                                 // This is async so we need to pass 'visible' explicitly
                                 window_state.window.set_visible(false);
-
-                                if window_state.window_id == DASHBOARD_ID {
-                                    proxy
-                                        .send_event(Event::PlatformBoundEvent(
-                                            PlatformBoundEvent::AppWindowFocusChanged {
-                                                window_id: DASHBOARD_ID,
-                                                focused: true, /* set to true, in order to update activation
-                                                                * policy & remove from dock */
-                                                fullscreen: false,
-                                                visible: false,
-                                            },
-                                        ))
-                                        .ok();
-                                }
                             },
                             WryWindowEvent::ThemeChanged(theme) => window_state.set_theme(match theme {
                                 TaoTheme::Light => Some(WryTheme::Light),
@@ -425,15 +381,6 @@ impl WebviewManager {
                                         })
                                         .unwrap();
                                 }
-
-                                proxy
-                                    .send_event(Event::PlatformBoundEvent(PlatformBoundEvent::AppWindowFocusChanged {
-                                        window_id: window_state.window_id.clone(),
-                                        focused,
-                                        fullscreen: window_state.window.fullscreen().is_some(),
-                                        visible: window_state.window.is_visible(),
-                                    }))
-                                    .unwrap();
                             },
                             _ => (),
                         }
@@ -492,20 +439,6 @@ impl WebviewManager {
                         Event::ControlFlow(new_control_flow) => {
                             *control_flow = new_control_flow;
                         },
-                        Event::ReloadCredentials => {
-                            // tray.set_menu(Some(Box::new(get_context_menu())));
-
-                            let autocomplete_enabled =
-                                !fig_settings::settings::get_bool_or("autocomplete.disable", false)
-                                    && PlatformState::accessibility_is_enabled().unwrap_or(true);
-
-                            proxy
-                                .send_event(Event::WindowEvent {
-                                    window_id: AUTOCOMPLETE_ID,
-                                    window_event: WindowEvent::SetEnabled(autocomplete_enabled),
-                                })
-                                .unwrap();
-                        },
                         Event::ReloadAccessibility => {
                             // tray.set_menu(Some(Box::new(get_context_menu())));
 
@@ -535,32 +468,6 @@ impl WebviewManager {
                                 debug!(%err, "Failed to handle native event");
                             }
                         },
-                    }
-                },
-                WryEvent::Opened { urls } => {
-                    let mut events = Vec::new();
-                    for url in urls {
-                        if url.scheme() == URL_SCHEMA {
-                            match url.host_str() {
-                                Some("dashboard") => {
-                                    events.push(WindowEvent::NavigateRelative {
-                                        path: url.path().to_owned().into(),
-                                    });
-                                },
-                                host => {
-                                    error!(?host, "Invalid deep link");
-                                },
-                            }
-                        } else {
-                            error!(scheme = %url.scheme(), %url, "Invalid scheme");
-                        }
-                    }
-
-                    if let Err(err) = proxy.send_event(Event::WindowEvent {
-                        window_id: DASHBOARD_ID,
-                        window_event: WindowEvent::Batch(events),
-                    }) {
-                        warn!(%err, "Error sending event");
                     }
                 },
                 WryEvent::MainEventsCleared | WryEvent::NewEvents(StartCause::WaitCancelled { .. }) => {},
@@ -595,103 +502,6 @@ where
             false
         },
     }
-}
-
-pub struct DashboardOptions {
-    pub show_onboarding: bool,
-    pub visible: bool,
-    pub page: Option<String>,
-}
-
-pub fn build_dashboard(
-    ctx: Arc<Context>,
-    web_context: &mut WebContext,
-    event_loop: &EventLoop,
-    DashboardOptions {
-        show_onboarding,
-        visible,
-        page,
-    }: DashboardOptions,
-) -> anyhow::Result<(Window, WebView)> {
-    let window = WindowBuilder::new()
-        .with_title(PRODUCT_NAME)
-        .with_inner_size(DASHBOARD_SIZE)
-        .with_min_inner_size(DASHBOARD_MINIMUM_SIZE)
-        .with_resizable(true)
-        .with_maximizable(false)
-        .with_visible(visible)
-        .with_focused(visible)
-        .with_always_on_top(false)
-        .with_window_icon(Some(utils::icon()))
-        .with_theme(THEME.and_then(to_tao_theme))
-        .build(event_loop)?;
-
-    // #[cfg(not(target_os = "linux"))]
-    // {
-    //     window = window.with_menu(menu::menu_bar());
-    // }
-
-    #[cfg(target_os = "linux")]
-    {
-        use gtk::traits::GtkWindowExt;
-        use tao::platform::unix::WindowExtUnix;
-
-        window.gtk_window().set_role("dashboard");
-    }
-
-    let proxy = event_loop.create_proxy();
-
-    let mut url = dashboard::url();
-
-    if show_onboarding {
-        url.set_path(LOGIN_PATH);
-    } else if let Some(page) = page {
-        url.set_path(&page);
-    }
-
-    let webview_builder = WebViewBuilder::with_web_context(web_context)
-        .with_url(url.as_str())
-        .with_ipc_handler(move |payload| {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: DASHBOARD_ID.clone(),
-                    window_event: WindowEvent::Api {
-                        payload: payload.into_body(),
-                    },
-                })
-                .unwrap();
-        })
-        .with_devtools(true)
-        .with_asynchronous_custom_protocol(
-            "qcliresource".into(),
-            utils::wrap_custom_protocol(
-                Arc::clone(&ctx),
-                "qcliresource::Dashboard",
-                DashboardId,
-                resource::handle::<resource::Dashboard>,
-            ),
-        )
-        .with_asynchronous_custom_protocol(
-            "api".into(),
-            utils::wrap_custom_protocol(Arc::clone(&ctx), "api", DashboardId, api::handle),
-        )
-        .with_navigation_handler(navigation_handler(DASHBOARD_ID, &[r"^localhost$", r"^127\.0\.0\.1$"]))
-        .with_initialization_script(&javascript_init(true))
-        .with_clipboard(true)
-        .with_hotkeys_zoom(true);
-
-    cfg_if! {
-        if #[cfg(target_os = "linux")] {
-            use tao::platform::unix::WindowExtUnix;
-            use wry::WebViewBuilderExtUnix;
-            let vbox = window.default_vbox().unwrap();
-            let webview = webview_builder.build_gtk(vbox)?;
-        } else {
-            let webview = webview_builder.build(&window)?;
-        }
-    };
-
-    Ok((window, webview))
 }
 
 pub struct AutocompleteOptions;
@@ -919,36 +729,6 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
             let enabled = !notification.as_bool().unwrap_or(false);
             debug!(%enabled, "Tray icon");
             proxy.send_event(Event::SetTrayVisible(enabled)).unwrap();
-        }
-    );
-
-    watcher!(
-        settings,
-        "developer.dashboard.host",
-        |_notification: JsonNotification, proxy: &EventLoopProxy| {
-            let url = dashboard::url();
-            debug!(%url, "Dashboard host");
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: DASHBOARD_ID,
-                    window_event: WindowEvent::NavigateAbsolute { url },
-                })
-                .unwrap();
-        }
-    );
-
-    watcher!(
-        settings,
-        "developer.dashboard.build",
-        |_notification: JsonNotification, proxy: &EventLoopProxy| {
-            let url = dashboard::url();
-            debug!(%url, "Dashboard host");
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: DASHBOARD_ID,
-                    window_event: WindowEvent::NavigateAbsolute { url },
-                })
-                .unwrap();
         }
     );
 

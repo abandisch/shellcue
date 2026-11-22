@@ -13,14 +13,9 @@ import {
   DestinationOfSymbolicLinkRequest,
   DestinationOfSymbolicLinkRequestSchema,
   DestinationOfSymbolicLinkResponse,
-  DragWindowRequest,
-  DragWindowRequestSchema,
   GetLocalStateRequest,
   GetLocalStateRequestSchema,
   GetLocalStateResponse,
-  GetPlatformInfoRequest,
-  GetPlatformInfoRequestSchema,
-  GetPlatformInfoResponse,
   GetSettingsPropertyRequest,
   GetSettingsPropertyRequestSchema,
   GetSettingsPropertyResponse,
@@ -29,18 +24,8 @@ import {
   HistoryQueryResponse,
   InsertTextRequest,
   InsertTextRequestSchema,
-  InstallRequest,
-  InstallRequestSchema,
-  InstallResponse,
   NotificationRequest,
   NotificationRequestSchema,
-  OnboardingRequest,
-  OnboardingRequestSchema,
-  OpenInExternalApplicationRequest,
-  OpenInExternalApplicationRequestSchema,
-  PingRequest,
-  PingRequestSchema,
-  PingResponse,
   PositionWindowRequest,
   PositionWindowRequestSchema,
   PositionWindowResponse,
@@ -56,8 +41,6 @@ import {
   UpdateLocalStateRequestSchema,
   UpdateSettingsPropertyRequest,
   UpdateSettingsPropertyRequestSchema,
-  WindowFocusRequest,
-  WindowFocusRequestSchema,
   WriteFileRequest,
   WriteFileRequestSchema,
 } from "@aws/amazon-q-developer-cli-proto/fig";
@@ -267,32 +250,6 @@ export async function sendRunProcessRequest(
   });
 }
 
-export async function sendInstallRequest(
-  request: Omit<InstallRequest, "$typeName" | "$unknown">,
-): Promise<InstallResponse> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      { case: "installRequest", value: create(InstallRequestSchema, request) },
-      (response) => {
-        switch (response?.case) {
-          case "installResponse":
-            resolve(response.value);
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'InstallRequest'`,
-              ),
-            );
-        }
-      },
-    );
-  });
-}
-
 export async function sendHistoryQueryRequest(
   request: Omit<HistoryQueryRequest, "$typeName" | "$unknown">,
 ): Promise<HistoryQueryResponse> {
@@ -314,59 +271,6 @@ export async function sendHistoryQueryRequest(
             reject(
               Error(
                 `Invalid response '${response?.case}' for 'HistoryQueryRequest'`,
-              ),
-            );
-        }
-      },
-    );
-  });
-}
-
-export async function sendPingRequest(
-  request: Omit<PingRequest, "$typeName" | "$unknown">,
-): Promise<PingResponse> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      { case: "pingRequest", value: create(PingRequestSchema, request) },
-      (response) => {
-        switch (response?.case) {
-          case "pingResponse":
-            resolve(response.value);
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(`Invalid response '${response?.case}' for 'PingRequest'`),
-            );
-        }
-      },
-    );
-  });
-}
-
-export async function sendGetPlatformInfoRequest(
-  request: Omit<GetPlatformInfoRequest, "$typeName" | "$unknown">,
-): Promise<GetPlatformInfoResponse> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      {
-        case: "getPlatformInfoRequest",
-        value: create(GetPlatformInfoRequestSchema, request),
-      },
-      (response) => {
-        switch (response?.case) {
-          case "getPlatformInfoResponse":
-            resolve(response.value);
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'GetPlatformInfoRequest'`,
               ),
             );
         }
@@ -520,93 +424,6 @@ export async function sendUpdateApplicationPropertiesRequest(
   });
 }
 
-export async function sendOnboardingRequest(
-  request: Omit<OnboardingRequest, "$typeName" | "$unknown">,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      {
-        case: "onboardingRequest",
-        value: create(OnboardingRequestSchema, request),
-      },
-      (response) => {
-        switch (response?.case) {
-          case "success":
-            resolve();
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'OnboardingRequest'`,
-              ),
-            );
-        }
-      },
-    );
-  });
-}
-
-export async function sendWindowFocusRequest(
-  request: Omit<WindowFocusRequest, "$typeName" | "$unknown">,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      {
-        case: "windowFocusRequest",
-        value: create(WindowFocusRequestSchema, request),
-      },
-      (response) => {
-        switch (response?.case) {
-          case "success":
-            resolve();
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'WindowFocusRequest'`,
-              ),
-            );
-        }
-      },
-    );
-  });
-}
-
-export async function sendOpenInExternalApplicationRequest(
-  request: Omit<OpenInExternalApplicationRequest, "$typeName" | "$unknown">,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      {
-        case: "openInExternalApplicationRequest",
-        value: create(OpenInExternalApplicationRequestSchema, request),
-      },
-      (response) => {
-        switch (response?.case) {
-          case "success":
-            resolve();
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'OpenInExternalApplicationRequest'`,
-              ),
-            );
-        }
-      },
-    );
-  });
-}
-
 export async function sendAppendToFileRequest(
   request: Omit<AppendToFileRequest, "$typeName" | "$unknown">,
 ): Promise<void> {
@@ -686,35 +503,6 @@ export async function sendCreateDirectoryRequest(
             reject(
               Error(
                 `Invalid response '${response?.case}' for 'CreateDirectoryRequest'`,
-              ),
-            );
-        }
-      },
-    );
-  });
-}
-
-export async function sendDragWindowRequest(
-  request: Omit<DragWindowRequest, "$typeName" | "$unknown">,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      {
-        case: "dragWindowRequest",
-        value: create(DragWindowRequestSchema, request),
-      },
-      (response) => {
-        switch (response?.case) {
-          case "success":
-            resolve();
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'DragWindowRequest'`,
               ),
             );
         }

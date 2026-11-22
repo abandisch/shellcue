@@ -1,8 +1,5 @@
 import { PointSchema, SizeSchema } from "@aws/amazon-q-developer-cli-proto/fig";
-import {
-  sendPositionWindowRequest,
-  sendDragWindowRequest,
-} from "./requests.js";
+import { sendPositionWindowRequest } from "./requests.js";
 import { create } from "@bufbuild/protobuf";
 
 // Developer Facing API
@@ -31,8 +28,4 @@ export async function setFrame(frame: {
       y: frame.offsetFromBaseline ?? 0,
     }),
   });
-}
-
-export async function dragWindow() {
-  return sendDragWindowRequest({});
 }

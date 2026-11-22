@@ -1,6 +1,5 @@
 //! CLI functionality
 
-pub mod app;
 mod completion;
 mod debug;
 mod diagnostics;
@@ -35,16 +34,13 @@ use clap::{
 use crossterm::style::Stylize;
 use eyre::{
     Result,
-    WrapErr,
     bail,
 };
 use feed::Feed;
-use fig_ipc::local::open_ui_element;
 use fig_log::{
     LogArgs,
     initialize_logging,
 };
-use fig_proto::local::UiElement;
 use fig_util::{
     CLI_BINARY_NAME,
     PRODUCT_NAME,
@@ -62,6 +58,7 @@ use tracing::{
 use self::integrations::IntegrationsSubcommands;
 use crate::util::desktop::{
     LaunchArgs,
+    desktop_app_running,
     launch_fig_desktop,
 };
 use crate::util::CliContext;
@@ -161,8 +158,6 @@ pub enum CliRootCommands {
         #[arg(long, num_args = 0..=1, default_missing_value = "")]
         changelog: Option<String>,
     },
-    /// Open the dashboard
-    Dashboard,
 }
 
 const HELP_TEXT: &str = color_print::cstr! {"
@@ -252,15 +247,14 @@ impl Cli {
                 CliRootCommands::Debug(debug_subcommand) => debug_subcommand.execute().await,
                 CliRootCommands::Completion(args) => args.execute(),
                 CliRootCommands::Internal(internal_subcommand) => internal_subcommand.execute().await,
-                CliRootCommands::Launch => launch_dashboard(false).await,
+                CliRootCommands::Launch => launch_app(),
                 CliRootCommands::Quit => crate::util::quit_fig(true).await,
                 CliRootCommands::Restart { .. } => {
-                    app::restart_fig().await?;
-                    launch_dashboard(false).await
+                    crate::util::restart_fig().await?;
+                    Ok(ExitCode::SUCCESS)
                 },
                 CliRootCommands::Integrations(subcommand) => subcommand.execute().await,
                 CliRootCommands::Version { changelog } => Self::print_version(changelog),
-                CliRootCommands::Dashboard => launch_dashboard(false).await,
             },
             // Root command
             None => {
@@ -360,29 +354,20 @@ impl Cli {
     }
 }
 
-async fn launch_dashboard(help_fallback: bool) -> Result<ExitCode> {
+fn launch_app() -> Result<ExitCode> {
     if manifest::is_minimal() || system_info::is_remote() {
-        if help_fallback {
-            Cli::command().print_help()?;
-            return Ok(ExitCode::SUCCESS);
-        } else {
-            bail!("Launching the dashboard is not supported in minimal mode");
-        }
+        bail!("Launching the app is not supported in minimal mode");
+    }
+
+    if desktop_app_running() {
+        println!("{PRODUCT_NAME} is already running");
+        return Ok(ExitCode::SUCCESS);
     }
 
     launch_fig_desktop(LaunchArgs {
         wait_for_socket: true,
-        open_dashboard: true,
         verbose: true,
     })?;
-
-    let route = Some("/".into());
-
-    println!("Opening {PRODUCT_NAME} dashboard");
-
-    open_ui_element(UiElement::MissionControl, route)
-        .await
-        .context("Failed to open dashboard")?;
 
     Ok(ExitCode::SUCCESS)
 }
@@ -500,6 +485,13 @@ mod test {
         for args in removed {
             assert!(Cli::try_parse_from(*args).is_err(), "{args:?} should not parse");
         }
+    }
+
+    #[test]
+    fn removed_dashboard_commands_are_rejected() {
+        assert!(Cli::try_parse_from([CLI_BINARY_NAME, "dashboard"]).is_err());
+        assert!(Cli::try_parse_from([CLI_BINARY_NAME, "debug", "devtools", "dashboard"]).is_err());
+        assert!(Cli::try_parse_from([CLI_BINARY_NAME, "debug", "devtools", "autocomplete"]).is_ok());
     }
 
     #[test]

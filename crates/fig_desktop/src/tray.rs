@@ -1,10 +1,13 @@
 use std::borrow::Cow;
 
 use cfg_if::cfg_if;
-use fig_install::InstallComponents;
-use fig_os_shim::Context;
 use fig_remote_ipc::figterm::FigtermState;
+use fig_settings::{
+    JsonStore,
+    OldSettings,
+};
 use fig_util::consts::PRODUCT_NAME;
+use fig_util::directories;
 use muda::{
     IconMenuItem,
     Menu,
@@ -15,20 +18,18 @@ use muda::{
     Submenu,
 };
 use tao::event_loop::ControlFlow;
-use tracing::trace;
+use tracing::{
+    trace,
+    warn,
+};
 use tray_icon::{
     Icon,
     TrayIcon,
     TrayIconBuilder,
 };
 
-use crate::event::{
-    Event,
-    WindowEvent,
-};
+use crate::event::Event;
 use crate::{
-    AUTOCOMPLETE_ID,
-    DASHBOARD_ID,
     EventLoopProxy,
     EventLoopWindowTarget,
 };
@@ -53,72 +54,44 @@ use crate::{
 
 pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {
     match &*menu_event.id().0 {
-        "dashboard-devtools" => {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: DASHBOARD_ID,
-                    window_event: WindowEvent::Devtools,
-                })
-                .unwrap();
-        },
-        "autocomplete-devtools" => {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: AUTOCOMPLETE_ID,
-                    window_event: WindowEvent::Devtools,
-                })
-                .unwrap();
-        },
         "quit" => {
             proxy.send_event(Event::ControlFlow(ControlFlow::Exit)).unwrap();
         },
-        "dashboard" => {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: DASHBOARD_ID.clone(),
-                    window_event: WindowEvent::Batch(vec![
-                        WindowEvent::NavigateRelative { path: "/".into() },
-                        WindowEvent::Show,
-                    ]),
-                })
-                .unwrap();
-        },
         "settings" => {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: DASHBOARD_ID.clone(),
-                    window_event: WindowEvent::Batch(vec![
-                        WindowEvent::NavigateRelative {
-                            path: "/autocomplete".into(),
-                        },
-                        WindowEvent::Show,
-                    ]),
-                })
-                .unwrap();
-        },
-        "not-working" => {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: DASHBOARD_ID.clone(),
-                    window_event: WindowEvent::Batch(vec![
-                        WindowEvent::NavigateRelative { path: "/help".into() },
-                        WindowEvent::Show,
-                    ]),
-                })
-                .unwrap();
-        },
-        "uninstall" => {
-            tokio::runtime::Handle::current().spawn(async {
-                fig_install::uninstall(InstallComponents::all(), Context::new())
-                    .await
-                    .ok();
-                #[allow(clippy::exit)]
-                std::process::exit(0);
-            });
+            tokio::runtime::Handle::current().spawn(open_settings_file());
         },
         id => {
             trace!(?id, "Unhandled tray event");
         },
+    }
+}
+
+async fn open_settings_file() {
+    // Creates the file as `{}` when it does not exist yet.
+    if let Err(err) = OldSettings::load_from_file() {
+        warn!(%err, "Failed to load the settings file");
+    }
+
+    let path = match directories::settings_path() {
+        Ok(path) => path,
+        Err(err) => {
+            warn!(%err, "Failed to get the settings path");
+            return;
+        },
+    };
+
+    cfg_if! {
+        if #[cfg(target_os = "macos")] {
+            let opener = "open";
+        } else {
+            let opener = "xdg-open";
+        }
+    }
+
+    match tokio::process::Command::new(opener).arg(&path).status().await {
+        Ok(status) if status.success() => {},
+        Ok(status) => warn!(%status, ?path, "Failed to open the settings file"),
+        Err(err) => warn!(%err, ?path, "Failed to open the settings file"),
     }
 }
 
@@ -308,29 +281,13 @@ impl MenuElement {
 }
 
 fn menu() -> Vec<MenuElement> {
-    let not_working = MenuElement::entry(None, None, format!("{PRODUCT_NAME} not working?"), "not-working");
-    let version = MenuElement::info(None, format!("Version: {}", env!("CARGO_PKG_VERSION")));
-    let quit = MenuElement::entry(None, None, format!("Quit {PRODUCT_NAME}"), "quit");
-    // let dashboard = MenuElement::entry(None, None, "Dashboard", "dashboard");
-    let settings = MenuElement::entry(None, None, "Settings", "settings");
-    // let developer = MenuElement::sub_menu("Developer", vec![
-    //     MenuElement::entry(None, None, "Dashboard Devtools", "dashboard-devtools"),
-    //     MenuElement::entry(None, None, "Autocomplete Devtools", "autocomplete-devtools"),
-    //     MenuElement::entry(None, None, "Companion Devtools", "companion-devtools"),
-    // ]);
-
-    let mut menu = vec![settings];
-
-    menu.extend(vec![
+    vec![
+        MenuElement::entry(None, None, "Settings", "settings"),
         MenuElement::Separator,
-        not_working,
+        MenuElement::info(None, format!("Version: {}", env!("CARGO_PKG_VERSION"))),
         MenuElement::Separator,
-        version,
-        MenuElement::Separator,
-        quit,
-    ]);
-
-    menu
+        MenuElement::entry(None, None, format!("Quit {PRODUCT_NAME}"), "quit"),
+    ]
 }
 
 #[cfg(test)]
@@ -349,14 +306,6 @@ mod tests {
                 MenuElement::SubMenu { .. } => "submenu",
             })
             .collect();
-        assert_eq!(shape, [
-            "settings",
-            "---",
-            "not-working",
-            "---",
-            "info",
-            "---",
-            "quit",
-        ]);
+        assert_eq!(shape, ["settings", "---", "info", "---", "quit"]);
     }
 }

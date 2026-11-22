@@ -1,10 +1,10 @@
+use std::path::Path;
 use std::process::ExitCode;
 
 use anstream::println;
 use clap::{
     ArgGroup,
     Args,
-    Parser,
     Subcommand,
 };
 use eyre::{
@@ -12,29 +12,17 @@ use eyre::{
     WrapErr,
     bail,
 };
-use fig_ipc::local::open_ui_element;
 use fig_os_shim::Os;
-use fig_proto::local::UiElement;
 use fig_settings::JsonStore;
 use fig_util::{
     CLI_BINARY_NAME,
     directories,
-    manifest,
-    system_info,
 };
 use globset::Glob;
 use serde_json::json;
 
 use super::OutputFormat;
-use crate::cli::Cli;
-use crate::util::desktop::{
-    LaunchArgs,
-    launch_fig_desktop,
-};
-use crate::util::{
-    CliContext,
-    app_not_running_message,
-};
+use crate::util::CliContext;
 
 #[derive(Debug, Subcommand, PartialEq, Eq)]
 pub enum SettingsSubcommands {
@@ -63,12 +51,6 @@ pub struct SettingsArgs {
 
 impl SettingsArgs {
     pub async fn execute(&self, cli_context: &CliContext) -> Result<ExitCode> {
-        macro_rules! print_connection_error {
-            () => {
-                println!("{}", app_not_running_message());
-            };
-        }
-
         match self.cmd {
             Some(SettingsSubcommands::Open) => {
                 let file = directories::settings_path().context("Could not get settings path")?;
@@ -148,26 +130,43 @@ impl SettingsArgs {
                         ));
                     }
 
-                    if manifest::is_minimal() || system_info::is_remote() {
-                        Cli::parse_from([CLI_BINARY_NAME, "settings", "--help"]);
-                        return Ok(ExitCode::SUCCESS);
-                    }
-
-                    launch_fig_desktop(LaunchArgs {
-                        wait_for_socket: true,
-                        open_dashboard: false,
-                        verbose: true,
-                    })?;
-
-                    match open_ui_element(UiElement::Settings, None).await {
-                        Ok(()) => Ok(ExitCode::SUCCESS),
-                        Err(err) => {
-                            print_connection_error!();
-                            Err(err.into())
-                        },
-                    }
+                    let file = directories::settings_path().context("Could not get settings path")?;
+                    println!("{}", settings_overview(&file));
+                    Ok(ExitCode::SUCCESS)
                 },
             },
         }
+    }
+}
+
+fn settings_overview(settings_path: &Path) -> String {
+    format!(
+        "Settings file: {}\n\
+         \n\
+         Usage:\n  \
+         {CLI_BINARY_NAME} settings <key>            Print a value\n  \
+         {CLI_BINARY_NAME} settings <key> <value>    Set a value\n  \
+         {CLI_BINARY_NAME} settings --delete <key>   Remove a value\n  \
+         {CLI_BINARY_NAME} settings open             Open the settings file",
+        settings_path.display()
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_overview_text() {
+        assert_eq!(
+            settings_overview(Path::new("/home/user/.local/share/amazon-q/settings.json")),
+            "Settings file: /home/user/.local/share/amazon-q/settings.json\n\
+             \n\
+             Usage:\n  \
+             q settings <key>            Print a value\n  \
+             q settings <key> <value>    Set a value\n  \
+             q settings --delete <key>   Remove a value\n  \
+             q settings open             Open the settings file"
+        );
     }
 }

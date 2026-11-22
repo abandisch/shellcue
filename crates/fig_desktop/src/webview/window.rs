@@ -28,7 +28,6 @@ use tokio::sync::mpsc::UnboundedSender;
 use tracing::{
     debug,
     error,
-    info,
     instrument,
     warn,
 };
@@ -56,7 +55,6 @@ use crate::utils::Rect;
 #[allow(unused_imports)]
 use crate::{
     AUTOCOMPLETE_ID,
-    DASHBOARD_ID,
     EventLoopWindowTarget,
 };
 
@@ -356,20 +354,6 @@ impl WindowState {
                     #[cfg(not(target_os = "linux"))]
                     self.window.set_resizable(false);
                 }
-
-                #[cfg(target_os = "macos")]
-                if self.window_id == DASHBOARD_ID {
-                    use tao::platform::macos::{
-                        ActivationPolicy,
-                        EventLoopWindowTargetExtMacOS,
-                    };
-
-                    let mut policy_lock = platform::ACTIVATION_POLICY.lock().unwrap();
-                    if *policy_lock != ActivationPolicy::Accessory {
-                        *policy_lock = ActivationPolicy::Accessory;
-                        window_target.set_activation_policy_at_runtime(ActivationPolicy::Accessory);
-                    }
-                }
             },
             WindowEvent::Show => {
                 if self.window_id == AUTOCOMPLETE_ID {
@@ -393,20 +377,6 @@ impl WindowState {
                         );
                     }
                 } else {
-                    #[cfg(target_os = "macos")]
-                    if self.window_id == DASHBOARD_ID {
-                        use tao::platform::macos::{
-                            ActivationPolicy,
-                            EventLoopWindowTargetExtMacOS,
-                        };
-
-                        let mut policy_lock = platform::ACTIVATION_POLICY.lock().unwrap();
-                        if *policy_lock != ActivationPolicy::Regular {
-                            *policy_lock = ActivationPolicy::Regular;
-                            window_target.set_activation_policy_at_runtime(ActivationPolicy::Regular);
-                        }
-                    }
-
                     self.window.set_visible(true);
                     self.window.set_focus();
                 }
@@ -417,23 +387,6 @@ impl WindowState {
                     .unwrap();
                 *self.url.lock() = url;
             },
-            WindowEvent::NavigateRelative { path } => {
-                let event_name = "dashboard.navigate";
-                let payload = serde_json::json!({ "path": path });
-
-                self.notification(notifications_state, &NotificationType::NotifyOnEvent, Notification {
-                    r#type: Some(NotificationEnum::EventNotification(EventNotification {
-                        event_name: Some(event_name.to_string()),
-                        payload: Some(payload.to_string()),
-                    })),
-                });
-            },
-            WindowEvent::NavigateForward => {
-                self.webview.evaluate_script("window.history.forward();").unwrap();
-            },
-            WindowEvent::NavigateBack => {
-                self.webview.evaluate_script("window.history.back();").unwrap();
-            },
             WindowEvent::Event { event_name, payload } => {
                 self.notification(notifications_state, &NotificationType::NotifyOnEvent, Notification {
                     r#type: Some(NotificationEnum::EventNotification(EventNotification {
@@ -441,23 +394,6 @@ impl WindowState {
                         payload: payload.map(|s| s.into_owned()),
                     })),
                 });
-            },
-            WindowEvent::Reload => {
-                info!(%self.window_id, "Reloading window");
-
-                let url = serde_json::json!(self.url.lock().clone());
-
-                self.webview
-                    .evaluate_script(&format!(
-                        "if (window.location.href === 'about:blank') {{\
-                            console.log('Reloading window to', {url});\
-                            window.location.href = {url};\
-                        }} else {{\
-                            console.log('Reloading window');\
-                            window.location.reload();\
-                        }}"
-                    ))
-                    .unwrap();
             },
             WindowEvent::Emit { event_name, payload } => {
                 self.emit(event_name, payload);
@@ -497,11 +433,6 @@ impl WindowState {
             },
             WindowEvent::SetEnabled(enabled) => self.set_enabled(enabled),
             WindowEvent::SetTheme(theme) => self.set_theme(theme),
-            WindowEvent::Drag => {
-                if let Err(err) = self.window.drag_window() {
-                    error!(%err, "Failed to drag window");
-                }
-            },
             WindowEvent::Batch(events) => {
                 for event in events {
                     self.handle(

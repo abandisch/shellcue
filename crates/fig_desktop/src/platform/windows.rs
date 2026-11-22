@@ -237,10 +237,6 @@ impl PlatformStateImpl {
                     },
                 }
             },
-            PlatformBoundEvent::FullscreenStateUpdated { .. } => {
-                trace!("Ignoring full screen state updated event");
-                Ok(())
-            },
             PlatformBoundEvent::AccessibilityUpdated { .. } => {
                 trace!("Ignoring accessibility updated event");
                 Ok(())
