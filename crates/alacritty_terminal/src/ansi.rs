@@ -485,9 +485,6 @@ pub trait Handler {
     /// Fig ShellPath Osc
     fn shell_path(&mut self, _: &Path) {}
 
-    /// Fig WSL Distro Osc
-    fn wsl_distro(&mut self, _: &str) {}
-
     /// Fig ExitCode Osc
     fn exit_code(&mut self, _: i32) {}
 
@@ -1190,10 +1187,6 @@ where
                                     b"ShellPath" => match str::from_utf8(val[1..].as_ref()) {
                                         Ok(path_str) => self.handler.shell_path(Path::new(path_str)),
                                         Err(err) => error!("Failed to parse path: {err}"),
-                                    },
-                                    b"WSLDistro" => match str::from_utf8(val[1..].as_ref()) {
-                                        Ok(s) => self.handler.wsl_distro(s),
-                                        Err(err) => error!("Error decoding WSL Distro: {err}"),
                                     },
                                     b"ExitCode" => match str::from_utf8(&val[1..]) {
                                         Ok(code) => match code.parse::<i32>() {

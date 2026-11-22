@@ -125,7 +125,6 @@ async fn shell_version(shell: &Shell, exe_path: &Path) -> Result<String, Error> 
 mod tests {
     use super::*;
 
-    #[cfg(not(windows))]
     #[tokio::test]
     async fn test_shell_version() {
         let exe_path_str = "/bin/zsh";

@@ -39,7 +39,7 @@ message EnvironmentVariable {
 }
 
 message ShellContext {
-  reserved 6, 9, 12;
+  reserved 6, 9, 11, 12;
 
   // pid of the shell
   optional int32 pid = 1;
@@ -57,8 +57,6 @@ message ShellContext {
   optional string hostname = 8;
   // path to the current shell exe
   optional string shell_path = 10;
-  // name of the wsl instance
-  optional string wsl_distro = 11;
   // environment variables in the shell
   repeated EnvironmentVariable environment_variables = 13;
   // the version of qterm

@@ -88,9 +88,6 @@ fig_precmd() {
   fig_osc "Dir=%s" "$PWD"
   fig_osc "Shell=zsh"
   fig_osc "ShellPath=%s" "${Q_SHELL:-$SHELL}"
-  if [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
-    fig_osc "WSLDistro=%s" "${WSL_DISTRO_NAME}"
-  fi
   fig_osc "PID=%d" "$$"
   fig_osc "ExitCode=%s" "${LAST_STATUS}"
   fig_osc "TTY=%s" "${TTY}"

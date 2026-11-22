@@ -78,15 +78,7 @@ fn working_directory(path: Option<&str>, shell_state: &ShellState) -> PathBuf {
                 .and_then(map_dir)
         })
         .or_else(|| std::env::current_dir().ok())
-        .unwrap_or_else(|| {
-            cfg_if::cfg_if! {
-                if #[cfg(windows)] {
-                    PathBuf::from("C:\\")
-                } else if #[cfg(unix)] {
-                    PathBuf::from("/")
-                }
-            }
-        })
+        .unwrap_or_else(|| PathBuf::from("/"))
 }
 
 fn create_command(executable: impl AsRef<Path>, working_directory: impl AsRef<Path>) -> Command {
@@ -106,9 +98,6 @@ fn create_command(executable: impl AsRef<Path>, working_directory: impl AsRef<Pa
         which::which_in(executable.as_ref(), path, working_directory.as_ref())
             .map_or_else(|_| Command::new(executable.as_ref()), Command::new)
     };
-
-    #[cfg(target_os = "windows")]
-    cmd.creation_flags(windows::Win32::System::Threading::DETACHED_PROCESS.0);
 
     cmd.current_dir(working_directory);
 

@@ -89,22 +89,6 @@ describe("classifyIcon", () => {
       "url",
     );
   });
-});
-
-describe("classifyIcon on windows", () => {
-  beforeEach(() => {
-    vi.stubGlobal("fig", { constants: { os: "windows" } });
-  });
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("maps icon requests to the fig.icon host", () => {
-    const result = classifyIcon("fig://icon?type=docker");
-    expect(result.kind).toBe("url");
-    if (result.kind !== "url") return;
-    expect(result.url.hostname).toBe("fig.icon");
-  });
 
   it("does not let a spec choose the host", () => {
     expect(classifyIcon("fig://evil.com/x.png")).toEqual({ kind: "default" });

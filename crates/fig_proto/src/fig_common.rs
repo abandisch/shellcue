@@ -35,7 +35,7 @@ impl Serialize for ShellContext {
     where
         S: serde::Serializer,
     {
-        let mut s = serializer.serialize_struct("ShellContext", 14)?;
+        let mut s = serializer.serialize_struct("ShellContext", 13)?;
         s.serialize_field("pid", &self.pid)?;
         s.serialize_field("ttys", &self.ttys)?;
         s.serialize_field("process_name", &self.process_name)?;
@@ -44,7 +44,6 @@ impl Serialize for ShellContext {
         s.serialize_field("terminal", &self.terminal)?;
         s.serialize_field("hostname", &self.hostname)?;
         s.serialize_field("shell_path", &self.shell_path)?;
-        s.serialize_field("wsl_distro", &self.wsl_distro)?;
         s.serialize_field("environment_variables", &self.environment_variables)?;
         s.serialize_field("qterm_version", &self.qterm_version)?;
         s.serialize_field("preexec", &self.preexec)?;

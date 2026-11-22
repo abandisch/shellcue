@@ -52,15 +52,6 @@ pub enum TargetTriple {
     #[serde(rename = "aarch64-unknown-linux-musl")]
     #[strum(serialize = "aarch64-unknown-linux-musl")]
     AArch64UnknownLinuxMusl,
-    #[serde(rename = "x86_64-pc-windows-msvc")]
-    #[strum(serialize = "x86_64-pc-windows-msvc")]
-    X86_64PcWindowsMsvc,
-    #[serde(rename = "i686-pc-windows-msvc")]
-    #[strum(serialize = "i686-pc-windows-msvc")]
-    I686PcWindowsMsvc,
-    #[serde(rename = "aarch64-pc-windows-msvc")]
-    #[strum(serialize = "aarch64-pc-windows-msvc")]
-    AArch64PcWindowsMsvc,
     #[strum(default)]
     Other(String),
 }
@@ -78,12 +69,6 @@ impl TargetTriple {
                 TargetTriple::X86_64UnknownLinuxMusl
             } else if #[cfg(all(target_os = "linux", target_env = "musl", target_arch = "aarch64"))] {
                 TargetTriple::AArch64UnknownLinuxMusl
-            } else if #[cfg(all(target_os = "windows", target_arch = "x86_64"))] {
-                TargetTriple::X86_64PcWindowsMsvc
-            } else if #[cfg(all(target_os = "windows", target_arch = "x86"))] {
-                TargetTriple::I686PcWindowsMsvc
-            } else if #[cfg(all(target_os = "windows", target_arch = "aarch64"))] {
-                TargetTriple::AArch64PcWindowsMsvc
             } else {
                 compile_error!("unknown target")
             }
@@ -97,7 +82,6 @@ impl TargetTriple {
 pub enum Os {
     Macos,
     Linux,
-    Windows,
     #[strum(default)]
     Other(String),
 }
@@ -107,7 +91,6 @@ impl Os {
         match std::env::consts::OS {
             "macos" => Os::Macos,
             "linux" => Os::Linux,
-            "windows" => Os::Windows,
             _ => panic!("Unsupported OS: {}", std::env::consts::OS),
         }
     }
@@ -209,6 +192,14 @@ mod tests {
             TargetTriple,
             TargetTriple::AArch64UnknownLinuxMusl,
             "aarch64-unknown-linux-musl"
+        );
+    }
+
+    #[test]
+    fn test_windows_target_triple_is_other() {
+        assert_eq!(
+            TargetTriple::from_str("x86_64-pc-windows-msvc").unwrap(),
+            TargetTriple::Other("x86_64-pc-windows-msvc".into())
         );
     }
 

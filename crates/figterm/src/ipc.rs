@@ -1,11 +1,5 @@
 //! Utiities for IPC with Tauri App
 
-use std::io;
-use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
 use std::time::Duration;
 
 use anyhow::Result;
@@ -36,20 +30,9 @@ use flume::{
     Sender,
     unbounded,
 };
-use pin_project::pin_project;
-use tokio::io::{
-    AsyncRead,
-    AsyncWrite,
-    AsyncWriteExt,
-    ReadBuf,
-};
+use tokio::io::AsyncWriteExt;
 use tokio::join;
-use tokio::process::{
-    ChildStdin,
-    ChildStdout,
-};
 use tokio::sync::oneshot;
-use tokio::task::JoinHandle;
 use tokio::time::{
     MissedTickBehavior,
     interval,
@@ -63,90 +46,11 @@ use tracing::{
 
 use crate::MainLoopEvent;
 
-#[allow(dead_code)]
-#[pin_project(project = MessageSourceProj)]
-enum MessageSource {
-    UnixStream(#[pin] tokio::io::ReadHalf<tokio::net::UnixStream>),
-    ChildStdout(#[pin] ChildStdout),
-}
-
-impl AsyncRead for MessageSource {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
-        match self.project() {
-            MessageSourceProj::UnixStream(stream) => stream.poll_read(cx, buf),
-            MessageSourceProj::ChildStdout(stdout) => stdout.poll_read(cx, buf),
-        }
-    }
-}
-
-#[allow(dead_code)]
-#[pin_project(project = MessageSinkProj)]
-enum MessageSink {
-    UnixStream(#[pin] tokio::io::WriteHalf<tokio::net::UnixStream>),
-    ChildStdin(#[pin] ChildStdin),
-}
-
-impl AsyncWrite for MessageSink {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
-        match self.project() {
-            MessageSinkProj::UnixStream(stream) => stream.poll_write(cx, buf),
-            MessageSinkProj::ChildStdin(stdin) => stdin.poll_write(cx, buf),
-        }
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        match self.project() {
-            MessageSinkProj::UnixStream(stream) => stream.poll_flush(cx),
-            MessageSinkProj::ChildStdin(stdin) => stdin.poll_flush(cx),
-        }
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        match self.project() {
-            MessageSinkProj::UnixStream(stream) => stream.poll_shutdown(cx),
-            MessageSinkProj::ChildStdin(stdin) => stdin.poll_shutdown(cx),
-        }
-    }
-}
-
-async fn get_forwarded_stream() -> Result<(MessageSource, MessageSink, Option<JoinHandle<()>>)> {
-    #[cfg(target_os = "linux")]
-    if fig_util::system_info::in_wsl() {
-        use std::process::Stdio;
-
-        use anyhow::Context as AnyhowContext;
-
-        let mut child = tokio::process::Command::new("fig.exe")
-            .args(["_", "stream-from-socket"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()?;
-
-        let stdin = child.stdin.take().context("Failed to open stdin")?;
-        let stdout = child.stdout.take().context("Failed to open stdout")?;
-
-        let child_task = tokio::spawn(async move {
-            if let Err(err) = child.wait().await {
-                error!(%err, "Error waiting for child");
-            }
-        });
-
-        return Ok((
-            MessageSource::ChildStdout(stdout),
-            MessageSink::ChildStdin(stdin),
-            Some(child_task),
-        ));
-    }
-
+async fn get_forwarded_stream()
+-> Result<(tokio::io::ReadHalf<tokio::net::UnixStream>, tokio::io::WriteHalf<tokio::net::UnixStream>)> {
     let socket = directories::local_remote_socket_path()?;
     let stream = fig_ipc::socket_connect_timeout(&socket, Duration::from_secs(5)).await?;
-    let (reader, writer) = tokio::io::split(stream);
-    Ok((MessageSource::UnixStream(reader), MessageSink::UnixStream(writer), None))
+    Ok(tokio::io::split(stream))
 }
 
 /// Spawns a local unix socket for communicating with figterm on a local machine
@@ -258,8 +162,8 @@ pub async fn spawn_remote_ipc(
                     break;
                 }
                 res = get_forwarded_stream() => {
-                    let (reader, mut writer, child) = match res {
-                        Ok((reader, writer, child)) => (reader, writer, child),
+                    let (reader, mut writer) = match res {
+                        Ok((reader, writer)) => (reader, writer),
                         Err(err) => {
                             error!("failed to get forwarded stream: {err}");
                             continue;
@@ -352,11 +256,7 @@ pub async fn spawn_remote_ipc(
                         debug!("incoming_task exited");
                     });
 
-                    if let Some(child) = child {
-                        let _ = join!(outgoing_task, incoming_task, child);
-                    } else {
-                        let _ = join!(outgoing_task, incoming_task);
-                    }
+                    let _ = join!(outgoing_task, incoming_task);
                 }
             }
         }

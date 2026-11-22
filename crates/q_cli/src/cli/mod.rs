@@ -528,6 +528,12 @@ mod test {
     }
 
     #[test]
+    fn stream_from_socket_is_rejected() {
+        assert!(Cli::try_parse_from([CLI_BINARY_NAME, "_", "stream-from-socket"]).is_err());
+        assert!(Cli::try_parse_from([CLI_BINARY_NAME, "_", "sockets-dir"]).is_ok());
+    }
+
+    #[test]
     fn test_doctor() {
         assert_parse!(
             ["doctor"],

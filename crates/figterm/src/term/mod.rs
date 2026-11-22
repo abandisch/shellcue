@@ -11,22 +11,15 @@ use crate::input::InputEvent;
 
 #[cfg(unix)]
 pub mod unix;
-#[cfg(windows)]
-pub mod windows;
 
 pub mod istty;
 
 #[cfg(unix)]
 pub use self::unix::UnixTerminal;
-#[cfg(windows)]
-pub use self::windows::WindowsTerminal;
 
 /// Represents the size of the terminal screen.
 /// The number of rows and columns of character cells are expressed.
 /// Some implementations populate the size of those cells in pixels.
-// On Windows, GetConsoleFontSize() can return the size of a cell in
-// logical units and we can probably use this to populate xpixel, ypixel.
-// GetConsoleScreenBufferInfo() can return the rows and cols.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScreenSize {
     /// The number of rows of text
@@ -78,9 +71,6 @@ pub trait Terminal {
 
     fn read_input(&mut self) -> Result<Receiver<InputEventResult>>;
 
-    #[cfg(windows)]
-    fn get_cursor_coordinate(&mut self) -> Result<CellCoordinate>;
-
     /// Passes through the input without any delay on input, the delay
     /// is used to batch input since some terminals will send multiple
     /// writes for a single keypress.
@@ -93,8 +83,6 @@ pub trait Terminal {
 /// something unusual and want easier access to the constructors.
 #[cfg(unix)]
 pub type SystemTerminal = UnixTerminal;
-#[cfg(windows)]
-pub type SystemTerminal = WindowsTerminal;
 
 pub fn cast<T: NumCast + Display + Copy, U: NumCast>(n: T) -> Result<U> {
     num_traits::cast(n).ok_or_else(|| anyhow::anyhow!("{} is out of bounds for this system", n))

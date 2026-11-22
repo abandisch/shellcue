@@ -275,7 +275,6 @@ mod tests {
             terminal: None,
             hostname: None,
             shell_path: Some("/bin/bash".into()),
-            wsl_distro: None,
             environment_variables: vec![],
             qterm_version: None,
             preexec: Some(false),

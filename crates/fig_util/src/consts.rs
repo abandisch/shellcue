@@ -6,9 +6,6 @@ pub const APP_PROCESS_NAME: &str = "q_desktop";
 #[cfg(target_os = "linux")]
 pub const APP_PROCESS_NAME: &str = "q-desktop";
 
-#[cfg(windows)]
-pub const APP_PROCESS_NAME: &str = "q_desktop.exe";
-
 /// The name configured under `"package.productName"` in the tauri.conf.json file.
 pub const TAURI_PRODUCT_NAME: &str = "q_desktop";
 
@@ -24,8 +21,6 @@ pub const RUNTIME_DIR_NAME: &str = "cwrun";
 /// Data directory name used in paths like ~/.local/share/{DATA_DIR_NAME}
 #[cfg(unix)]
 pub const DATA_DIR_NAME: &str = "amazon-q";
-#[cfg(windows)]
-pub const DATA_DIR_NAME: &str = "AmazonQ";
 
 /// Backup directory name
 pub const BACKUP_DIR_NAME: &str = ".amazon-q.dotfiles.bak";
