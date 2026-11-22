@@ -151,9 +151,9 @@ mod tests {
     #[test]
     fn test_removed_shells_fail_from_str() {
         for name in ["bash", "fish", "nu"] {
-            assert!(Shell::from_str(name).is_err(), "{name} should not parse");
+            assert!(name.parse::<Shell>().is_err(), "{name} should not parse");
             assert!(Shell::try_find_shell(name).is_none(), "{name} should not be found");
         }
-        assert_eq!(Shell::from_str("zsh"), Ok(Shell::Zsh));
+        assert_eq!("zsh".parse::<Shell>(), Ok(Shell::Zsh));
     }
 }
