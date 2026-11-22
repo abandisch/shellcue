@@ -31,10 +31,5 @@ pub async fn logout(_request: UserLogoutRequest, proxy: &EventLoopProxy) -> Requ
         .map_err(|err| error!(?err))
         .ok();
 
-    proxy
-        .send_event(Event::ReloadTray { is_logged_in: false })
-        .map_err(|err| error!(?err))
-        .ok();
-
     RequestResult::success()
 }
