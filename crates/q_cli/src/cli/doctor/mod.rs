@@ -44,15 +44,12 @@ use eyre::{
     Result,
     WrapErr,
 };
+use fig_integrations::Error as InstallationError;
 #[cfg(target_os = "macos")]
 use fig_integrations::input_method::InputMethodError;
 use fig_integrations::shell::{
     ShellExt,
     ShellIntegration,
-};
-use fig_integrations::{
-    Error as InstallationError,
-    Integration,
 };
 use fig_ipc::{
     BufferedUnixStream,

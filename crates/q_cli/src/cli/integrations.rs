@@ -4,6 +4,7 @@ use anstream::println;
 use clap::Subcommand;
 use crossterm::style::Stylize;
 use eyre::Result;
+#[cfg(target_os = "macos")]
 use fig_integrations::Integration as _;
 use fig_integrations::shell::ShellExt;
 use fig_os_shim::Env;

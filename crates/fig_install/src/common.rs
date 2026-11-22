@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+#[cfg(target_os = "macos")]
 use fig_integrations::Integration;
 use fig_integrations::shell::ShellExt;
 use fig_os_shim::{
