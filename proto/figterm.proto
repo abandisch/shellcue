@@ -13,10 +13,9 @@ message FigtermRequestMessage {
     InsertOnNewCmdRequest insert_on_new_cmd = 5;
     UpdateShellContextRequest update_shell_context = 6;
     NotifySSHSessionStartedRequest notify_ssh_session_started = 7;
-    TelemetryRequest telemtety = 10;
   }
 
-  reserved 8, 9, 11;
+  reserved 8, 9, 10, 11;
 }
 
 // A response message back from figterm
@@ -151,9 +150,4 @@ message UpdateShellContextRequest {
 message NotifySSHSessionStartedRequest {
   string uuid = 1;
   string remote_host = 2;
-}
-
-message TelemetryRequest {
-  // A json blob containing the event
-  string event_blob = 1;
 }

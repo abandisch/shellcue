@@ -21,9 +21,6 @@ use crate::utils::is_cargo_debug_build;
 const PREVIOUS_VERSION_KEY: &str = "desktop.versionAtPreviousLaunch";
 
 #[cfg(target_os = "macos")]
-const MIGRATED_KEY: &str = "desktop.migratedFromFig";
-
-#[cfg(target_os = "macos")]
 pub async fn migrate_data_dir() {
     // Migrate the user data dir
     if let (Ok(old), Ok(new)) = (fig_util::directories::old_fig_data_dir(), fig_data_dir()) {
@@ -75,17 +72,6 @@ pub async fn run_install(ctx: Arc<Context>, ignore_immediate_update: bool) {
     #[cfg(target_os = "macos")]
     {
         initialize_fig_dir(&fig_os_shim::Env::new()).await.ok();
-
-        if fig_util::directories::home_dir()
-            .map(|home| home.join("Library/Application Support/fig/credentials.json"))
-            .is_ok_and(|path| path.exists())
-            && !fig_settings::state::get_bool_or(MIGRATED_KEY, false)
-        {
-            let set = fig_settings::state::set_value(MIGRATED_KEY, true);
-            if set.is_ok() {
-                fig_telemetry::send_fig_user_migrated().await;
-            }
-        }
     }
 
     #[cfg(target_os = "macos")]

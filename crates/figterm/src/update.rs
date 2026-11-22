@@ -5,14 +5,14 @@ use fig_os_shim::{
 };
 use fig_settings::keys::UPDATE_AVAILABLE_KEY;
 use fig_settings::settings::get_bool_or;
-use fig_telemetry::{
-    InstallMethod,
-    get_install_method,
-};
-use fig_util::CLI_BINARY_NAME;
 use fig_util::manifest::{
     Variant,
     manifest,
+};
+use fig_util::{
+    CLI_BINARY_NAME,
+    InstallMethod,
+    get_install_method,
 };
 use semver::Version;
 use tracing::warn;

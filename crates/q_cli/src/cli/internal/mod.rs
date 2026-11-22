@@ -465,13 +465,6 @@ impl InternalSubcommand {
                 let mut integrations_uninstalled = false;
                 let mut data_dir_removed = false;
 
-                // let emit = tokio::spawn(fig_telemetry::emit_track(TrackEvent::new(
-                //     TrackEventType::UninstalledApp,
-                //     TrackSource::Cli,
-                //     env!("CARGO_PKG_VERSION").into(),
-                //     std::iter::empty::<(&str, &str)>(),
-                // )));
-
                 let users = users
                     .split(' ')
                     .map(|line| line.trim())
@@ -537,8 +530,6 @@ impl InternalSubcommand {
                         Err(err) => error!(user, ?err, "Failed to remove data dir"),
                     }
                 }
-
-                // emit.await.ok();
 
                 if !integrations_uninstalled {
                     bail!("Failed to uninstall completely: integrations were not uninstalled");

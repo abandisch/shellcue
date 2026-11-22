@@ -52,7 +52,6 @@ fig_proto.workspace = true
 fig_remote_ipc.workspace = true
 fig_request.workspace = true
 fig_settings.workspace = true
-fig_telemetry.workspace = true
 fig_util.workspace = true
 flume.workspace = true
 fnv = "1.0.7"
@@ -78,7 +77,6 @@ shellexpand.workspace = true
 sysinfo.workspace = true
 tao = { version = "0.31.1", features = ["serde"] }
 tempfile.workspace = true
-time.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tray-icon = { version = "0.19.2", default-features = false }

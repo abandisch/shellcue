@@ -5,13 +5,8 @@ use std::sync::{
 
 use amzn_codewhisperer_client::Client as CodewhispererClient;
 use amzn_codewhisperer_client::operation::generate_completions::GenerateCompletionsError;
+use amzn_codewhisperer_client::types::AccessDeniedExceptionReason;
 use amzn_codewhisperer_client::types::error::AccessDeniedError;
-use amzn_codewhisperer_client::types::{
-    AccessDeniedExceptionReason,
-    OptOutPreference,
-    TelemetryEvent,
-    UserContext,
-};
 use amzn_consolas_client::Client as ConsolasClient;
 use amzn_consolas_client::error::DisplayErrorContext;
 use amzn_consolas_client::operation::generate_recommendations::GenerateRecommendationsError;
@@ -223,32 +218,6 @@ impl Client {
         Ok(customizations)
     }
 
-    // .telemetry_event(TelemetryEvent::UserTriggerDecisionEvent(user_trigger_decision_event))
-    // .user_context(user_context)
-    // .opt_out_preference(opt_out_preference)
-    pub async fn send_telemetry_event(
-        &self,
-        telemetry_event: TelemetryEvent,
-        user_context: UserContext,
-        opt_out: OptOutPreference,
-    ) -> Result<(), Error> {
-        match &self.inner {
-            inner::Inner::Codewhisperer(client) => {
-                let _ = client
-                    .send_telemetry_event()
-                    .telemetry_event(telemetry_event)
-                    .user_context(user_context)
-                    .opt_out_preference(opt_out)
-                    .set_profile_arn(self.profile_arn.clone())
-                    .send()
-                    .await;
-                Ok(())
-            },
-            inner::Inner::Consolas(_) => Err(Error::UnsupportedConsolas("send_telemetry_event")),
-            inner::Inner::Mock => Ok(()),
-        }
-    }
-
     pub async fn list_available_profiles(&self) -> Result<Vec<Profile>, Error> {
         match &self.inner {
             inner::Inner::Codewhisperer(client) => {
@@ -409,12 +378,6 @@ pub async fn consolas_generate_recommendation(
 
 #[cfg(test)]
 mod tests {
-    use amzn_codewhisperer_client::types::{
-        ChatAddMessageEvent,
-        IdeCategory,
-        OperatingSystem,
-    };
-
     use super::*;
     use crate::model::{
         FileContext,
@@ -450,24 +413,5 @@ mod tests {
             .await
             .unwrap();
         client.list_customizations().await.unwrap();
-        client
-            .send_telemetry_event(
-                TelemetryEvent::ChatAddMessageEvent(
-                    ChatAddMessageEvent::builder()
-                        .conversation_id("<conversation-id>")
-                        .message_id("<message-id>")
-                        .build()
-                        .unwrap(),
-                ),
-                UserContext::builder()
-                    .ide_category(IdeCategory::Cli)
-                    .operating_system(OperatingSystem::Linux)
-                    .product("<product>")
-                    .build()
-                    .unwrap(),
-                OptOutPreference::OptIn,
-            )
-            .await
-            .unwrap();
     }
 }
