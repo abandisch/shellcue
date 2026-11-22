@@ -14,7 +14,6 @@ pub const TAURI_PRODUCT_NAME: &str = "q_desktop";
 
 pub const CLI_BINARY_NAME: &str = "q";
 pub const CLI_BINARY_NAME_MINIMAL: &str = "q-minimal";
-pub const CHAT_BINARY_NAME: &str = "qchat";
 pub const PTY_BINARY_NAME: &str = "qterm";
 
 pub const CLI_CRATE_NAME: &str = "q_cli";
@@ -47,9 +46,6 @@ pub mod url {
         "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-autocomplete.html";
     pub const AUTOCOMPLETE_SSH_WIKI: &str =
         "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-autocomplete-ssh.html";
-    pub const CHAT_WIKI: &str = "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-chat.html";
-    pub const TRANSLATE_WIKI: &str =
-        "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-conversation.html";
     pub const TELEMETRY_WIKI: &str = "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/opt-out-IDE.html";
 }
 
@@ -134,9 +130,6 @@ pub mod env_var {
 
         /// Indicates the user is debugging the shell
         Q_DEBUG_SHELL = "Q_DEBUG_SHELL",
-
-        /// Indicates the user is using zsh autosuggestions which disables Inline
-        Q_USING_ZSH_AUTOSUGGESTIONS = "Q_USING_ZSH_AUTOSUGGESTIONS",
 
         /// Overrides the path to the bundle metadata released with certain desktop builds.
         Q_BUNDLE_METADATA_PATH = "Q_BUNDLE_METADATA_PATH"

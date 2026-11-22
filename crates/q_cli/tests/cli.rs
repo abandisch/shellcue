@@ -71,6 +71,12 @@ fn help_flag_has_status_code_zero() -> Result<()> {
 }
 
 #[test]
+fn no_args_prints_help_with_status_code_zero() -> Result<()> {
+    cli().assert().success().stdout(predicate::str::contains("Usage"));
+    Ok(())
+}
+
+#[test]
 fn help_all_flag_has_status_code_zero() -> Result<()> {
     cli().arg("--help-all").assert().success();
     Ok(())

@@ -171,7 +171,6 @@ where
                 AuthStartPkceAuthorizationRequest,
                 AuthStatusRequest,
                 CheckForUpdatesRequest,
-                CodewhispererListCustomizationRequest,
                 ContentsOfDirectoryRequest,
                 CreateDirectoryRequest,
                 DestinationOfSymbolicLinkRequest,
@@ -258,8 +257,6 @@ where
                     auth::builder_id_start_device_authorization(request, &ctx).await
                 },
                 AuthBuilderIdPollCreateTokenRequest(request) => auth::builder_id_poll_create_token(request, &ctx).await,
-                // codewhisperer api
-                CodewhispererListCustomizationRequest(request) => codewhisperer::list_customization(request).await,
                 // other
                 OpenInExternalApplicationRequest(request) => other::open_in_external_application(request).await,
                 PingRequest(request) => other::ping(request),
