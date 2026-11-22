@@ -5367,7 +5367,6 @@ dependencies = [
  "unicode-width 0.2.2",
  "uuid",
  "walkdir",
- "which",
  "whoami",
  "winapi",
  "windows 0.58.0",
