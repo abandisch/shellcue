@@ -110,6 +110,13 @@ def build_npm_packages(run_test: bool = True) -> NpmBuildOutput:
     return NpmBuildOutput(dashboard_path=dashboard_path, autocomplete_path=autocomplete_path, vscode_path=vscode_path)
 
 
+def compiled_specs_path() -> pathlib.Path:
+    specs_path = BUILD_DIR / "specs"
+    if not (specs_path / "index.json").is_file():
+        raise RuntimeError(f"{specs_path / 'index.json'} not found; the specs must be compiled first (VM step: specs)")
+    return specs_path
+
+
 def build_cargo_bin(
     variant: Variant,
     release: bool,
@@ -396,6 +403,9 @@ def build_macos_desktop_app(
     info("Copying autocomplete into bundle")
     shutil.copytree(npm_packages.autocomplete_path, app_path / "Contents/Resources/autocomplete")
 
+    info("Copying specs into bundle")
+    shutil.copytree(compiled_specs_path(), app_path / "Contents/Resources/specs")
+
     # Add symlinks
     # os.symlink(f"./{CLI_BINARY_NAME}", app_path / "Contents/MacOS/cli")
     # os.symlink(f"./{PTY_BINARY_NAME}", app_path / "Contents/MacOS/pty")
@@ -545,6 +555,7 @@ def linux_tauri_config(
     chat_path: pathlib.Path,
     dashboard_path: pathlib.Path,
     autocomplete_path: pathlib.Path,
+    specs_path: pathlib.Path,
     vscode_path: pathlib.Path,
     themes_path: pathlib.Path,
     legacy_extension_dir_path: pathlib.Path,
@@ -566,6 +577,7 @@ def linux_tauri_config(
                 "resources": {
                     dashboard_path.absolute().as_posix(): "dashboard",
                     autocomplete_path.absolute().as_posix(): "autocomplete",
+                    specs_path.absolute().as_posix(): "specs",
                     vscode_path.absolute().as_posix(): "vscode",
                     themes_path.absolute().as_posix(): "themes",
                     legacy_extension_dir_path.absolute().as_posix(): LINUX_LEGACY_GNOME_EXTENSION_UUID,
@@ -614,6 +626,7 @@ class LinuxDebResources:
     pty_path: pathlib.Path
     chat_path: pathlib.Path
     desktop_path: pathlib.Path
+    specs_path: pathlib.Path
     themes_path: pathlib.Path
     legacy_extension_dir_path: pathlib.Path
     modern_extension_dir_path: pathlib.Path
@@ -666,6 +679,7 @@ def build_linux_deb(
     shutil.copytree(resources.legacy_extension_dir_path, share_path / LINUX_LEGACY_GNOME_EXTENSION_UUID)
     shutil.copytree(resources.modern_extension_dir_path, share_path / LINUX_MODERN_GNOME_EXTENSION_UUID)
     shutil.copytree(resources.npm_packages.autocomplete_path, share_path / "autocomplete")
+    shutil.copytree(resources.specs_path, share_path / "specs")
     shutil.copytree(resources.npm_packages.dashboard_path, share_path / "dashboard")
     shutil.copytree(resources.themes_path, share_path / "themes")
     # TODO: Support vscode
@@ -719,6 +733,7 @@ def build_linux_full(
     shutil.rmtree(theme_repo, ignore_errors=True)
     run_cmd(["git", "clone", "https://github.com/withfig/themes.git", theme_repo])
     themes_path = theme_repo / "themes"
+    specs_path = compiled_specs_path()
 
     info("Grabbing GNOME extensions")
 
@@ -751,6 +766,7 @@ def build_linux_full(
             chat_path=chat_path,
             dashboard_path=npm_packages.dashboard_path,
             autocomplete_path=npm_packages.autocomplete_path,
+            specs_path=specs_path,
             vscode_path=npm_packages.vscode_path,
             themes_path=themes_path,
             legacy_extension_dir_path=legacy_extension_dir_path,
@@ -786,6 +802,7 @@ def build_linux_full(
         pty_path=pty_path,
         chat_path=chat_path,
         desktop_path=desktop_path,
+        specs_path=specs_path,
         themes_path=themes_path,
         legacy_extension_dir_path=legacy_extension_dir_path,
         modern_extension_dir_path=modern_extension_dir_path,

@@ -11,6 +11,8 @@ TOOLS="$HOME/tools"
 DL="$TOOLS/dl"
 ENV_FILE="$TOOLS/env.sh"
 SRC="$HOME/shellcue"
+SPECS_REPO_URL="https://github.com/abandisch/shellcue-specs.git"
+SPECS_SRC="$HOME/shellcue-specs"
 
 # Change together with .mise.toml (node, pnpm, protoc), package.json (packageManager) and rust-toolchain.toml (Rust); enter_src enforces it.
 NODE_VERSION="26.13.0"
@@ -29,7 +31,7 @@ APT_PACKAGES=(
     libfuse2t64 git ca-certificates xz-utils zip unzip gpgv zsh fish shellcheck
 )
 
-STEPS="tools clone lock fetch web rust-check rust-test info"
+STEPS="tools clone lock fetch web specs rust-check rust-test info"
 
 usage() {
     cat <<'EOF'
@@ -41,6 +43,8 @@ Runs inside the ShellCue build VM. Steps:
   lock                     refresh Cargo.lock (cargo update --workspace) and pnpm-lock.yaml (lockfile-only); print what changed
   fetch                    cargo fetch --locked and pnpm install --frozen-lockfile --ignore-scripts
   web                      pnpm run build, then pnpm run test:ci
+  specs                    fetch the specs repo at the commit in packages/spec-compiler/SPECS_COMMIT and compile it
+                           into ~/shellcue/build/specs; needs 'fetch' first (nothing from the specs repo is installed or run)
   rust-check               cargo check --locked --workspace --all-targets --exclude fig_desktop-fuzz
   rust-test                cargo test --locked --no-fail-fast --workspace --lib --bins --test '*' --exclude fig_desktop-fuzz,
                            with SSH_CLIENT, SSH_CONNECTION and SSH_TTY unset
@@ -580,6 +584,50 @@ step_web() {
     end_parts
 }
 
+# Nothing in the specs checkout is installed or executed (no pnpm/npm/node there); the compiler only reads it.
+fetch_specs() {
+    local pin="$1" head
+    rm -rf -- "$SPECS_SRC"
+    git init -q "$SPECS_SRC"
+    git -C "$SPECS_SRC" remote add origin "$SPECS_REPO_URL"
+    GIT_TERMINAL_PROMPT=0 git -C "$SPECS_SRC" fetch --depth 1 origin "$pin" \
+        || die "cannot fetch $pin from $SPECS_REPO_URL (is the commit pushed and the repository public?)"
+    git -C "$SPECS_SRC" checkout -q --detach FETCH_HEAD
+    head="$(git -C "$SPECS_SRC" rev-parse HEAD)"
+    [[ "$head" == "$pin" ]] || die "specs HEAD is $head after checkout, expected $pin"
+    git -C "$SPECS_SRC" log -1 --oneline
+}
+
+step_specs() {
+    require_no_args "$@"
+    load_env
+    enter_src
+    local pin_file="packages/spec-compiler/SPECS_COMMIT" sha_re='^[0-9a-f]{40}$' lines pin
+    [[ -f "$pin_file" ]] || die "$pin_file not found"
+    lines="$(wc -l < "$pin_file")"
+    pin="$(< "$pin_file")"
+    [[ "$lines" -eq 1 && "$pin" =~ $sha_re ]] \
+        || die "$pin_file must be exactly one line holding a 40 lowercase hex commit sha"
+    printf '    specs pin: %s\n' "$pin"
+    fetch_specs "$pin"
+
+    local out="$SRC/build/specs" license="$SPECS_SRC/LICENSE" tree
+    rm -rf -- "$out"
+    mkdir -p -- "$SRC/build"
+    [[ -d packages/spec-compiler/node_modules/esbuild ]] \
+        || die "packages/spec-compiler/node_modules/esbuild is missing; run the 'fetch' step first"
+    [[ -d "$SPECS_SRC/src" && ! -L "$SPECS_SRC/src" ]] || die "$SPECS_SRC/src is not a real directory"
+    node packages/spec-compiler/src/cli.js --src "$SPECS_SRC/src" --out "$out"
+    # The checkout is untrusted: a symlinked LICENSE could pull in any file from the VM.
+    [[ -f "$license" && ! -L "$license" ]] || die "$license is not a regular file"
+    cp -P -- "$license" "$out/LICENSE"
+    printf '    .js files: %s\n' "$(find "$out" -type f -name '*.js' | wc -l)"
+    printf '    size: %s\n' "$(du -sh -- "$out" | cut -f1)"
+    printf '    index.json sha256: %s\n' "$(sha256_of "$out/index.json")"
+    tree="$(cd "$out" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum)"
+    printf '    tree sha256 (sha256sum of the sorted per-file sha256sum list): %s\n' "${tree%% *}"
+}
+
 step_rust_check() {
     require_no_args "$@"
     load_env
@@ -650,6 +698,7 @@ main() {
         lock) step_lock "$@" ;;
         fetch) step_fetch "$@" ;;
         web) step_web "$@" ;;
+        specs) step_specs "$@" ;;
         rust-check) step_rust_check "$@" ;;
         rust-test) step_rust_test "$@" ;;
         info) step_info "$@" ;;
