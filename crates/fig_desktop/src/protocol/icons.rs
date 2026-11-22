@@ -68,8 +68,11 @@ static ASSETS: LazyLock<HashMap<AssetSpecifier<'static>, Arc<Cow<'static, [u8]>>
     }
 
     load_assets! {
-        "alert", "asterisk", "box", "carrot", "characters", "command", "commandkey", "cpu", "database",
-        "file", "folder", "flag", "gear", "invite", "option", "package", "string", "symlink", "template"
+        "alert", "android", "apple", "asterisk", "aws", "azure", "box", "carrot", "characters", "command",
+        "commandkey", "commit", "cpu", "database", "discord", "docker", "file", "firebase", "flag", "folder",
+        "gcloud", "gear", "git", "github", "gitlab", "gradle", "heroku", "invite", "kubernetes", "netlify",
+        "node", "npm", "okteto", "option", "package", "slack", "string", "symlink", "template", "twitter",
+        "vercel", "yarn"
     }
 
     map
@@ -305,5 +308,57 @@ mod tests {
             Path::new(r"c:\User\chay\Downloads")
         );
         assert_eq!(transform_unix_to_windows_path("/".into()), Path::new("/"));
+    }
+
+    #[test]
+    fn popup_icon_types_are_embedded() {
+        let types = [
+            "alert",
+            "android",
+            "apple",
+            "asterisk",
+            "aws",
+            "azure",
+            "box",
+            "carrot",
+            "characters",
+            "command",
+            "commandkey",
+            "commit",
+            "cpu",
+            "database",
+            "discord",
+            "docker",
+            "firebase",
+            "flag",
+            "gcloud",
+            "gear",
+            "git",
+            "github",
+            "gitlab",
+            "gradle",
+            "heroku",
+            "invite",
+            "kubernetes",
+            "netlify",
+            "node",
+            "npm",
+            "okteto",
+            "option",
+            "package",
+            "slack",
+            "string",
+            "template",
+            "twitter",
+            "vercel",
+            "yarn",
+        ];
+        assert_eq!(types.len(), 39);
+        for name in types {
+            assert!(
+                ASSETS.contains_key(&AssetSpecifier::Named(name.into())),
+                "missing embedded icon: {name}"
+            );
+        }
     }
 }

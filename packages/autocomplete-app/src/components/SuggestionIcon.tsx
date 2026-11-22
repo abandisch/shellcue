@@ -4,43 +4,17 @@ import {
   SuggestionType,
 } from "@aws/amazon-q-developer-cli-shared/internal";
 import { localProtocol } from "@aws/amazon-q-developer-cli-shared/utils";
-import { icons } from "../fig/icons";
+import {
+  classifyIcon,
+  cssUrl,
+  templateIconUri,
+  transformIconUri,
+} from "./iconUri";
 
 type SuggestionIconProps = {
   suggestion: Suggestion;
   iconPath: string;
   style: React.CSSProperties;
-};
-
-const transformIconUri = (icon: URL): URL => {
-  let { host } = icon;
-
-  if (icon.protocol !== "fig:") {
-    return icon;
-  }
-
-  if (host === "" && fig.constants?.newUriFormat) {
-    host = "path";
-  }
-
-  if (icon.hostname === "icon") {
-    const type = icon.searchParams.get("type");
-    if (type) {
-      if (icons.includes(type)) {
-        return new URL(
-          `https://specs.q.us-east-1.amazonaws.com/icons/${type}.png`,
-        );
-      }
-    }
-  }
-
-  if (window.fig.constants?.os === "windows") {
-    return new URL(
-      `https://fig.${host}${icon.pathname}${icon.search}${icon.hash}`,
-    );
-  }
-
-  return new URL(`fig://${host}${icon.pathname}${icon.search}${icon.hash}`);
 };
 
 function renderIcon(icon: URL, height: string | number) {
@@ -69,9 +43,7 @@ function renderIcon(icon: URL, height: string | number) {
         minWidth: height,
         minHeight: height,
         fontSize: typeof height === "number" ? height * 0.6 : height,
-        backgroundImage: isTemplate
-          ? `url(${transformIconUri(new URL(`fig://template?color=${color}`))})`
-          : `url(${icon})`,
+        backgroundImage: cssUrl(isTemplate ? templateIconUri(color) : icon),
       }}
     >
       {badge &&
@@ -88,9 +60,7 @@ function renderIcon(icon: URL, height: string | number) {
           <span
             className="flex h-2.5 w-2.5 place-content-center place-self-end bg-contain bg-no-repeat text-[80%] text-white"
             style={{
-              backgroundImage: `url(${transformIconUri(
-                new URL(`fig://template?color=${color}`),
-              )})`,
+              backgroundImage: cssUrl(templateIconUri(color)),
             }}
           >
             {badge}
@@ -127,23 +97,28 @@ const SuggestionIcon = ({
   }
 
   if (!img && icon && typeof icon === "string") {
-    try {
-      const iconUri = new URL(icon);
-      img = renderIcon(transformIconUri(iconUri), height ?? 0);
-    } catch (_err) {
-      if (typeof height === "number") {
-        height *= 0.8;
-      }
-      img = (
-        <span
-          style={{
-            fontSize: height,
-          }}
-          className="relative right-[0.0625rem] pb-2.5"
-        >
-          {icon}
-        </span>
-      );
+    const result = classifyIcon(icon);
+    switch (result.kind) {
+      case "text":
+        if (typeof height === "number") {
+          height *= 0.8;
+        }
+        img = (
+          <span
+            style={{
+              fontSize: height,
+            }}
+            className="relative right-[0.0625rem] pb-2.5"
+          >
+            {icon}
+          </span>
+        );
+        break;
+      case "url":
+        img = renderIcon(result.url, height ?? 0);
+        break;
+      case "default":
+        break;
     }
   }
 
