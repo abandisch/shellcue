@@ -404,6 +404,7 @@ step_tools() {
 
     cd "$TOOLS"
     rustup set auto-self-update disable
+    printf -- '--> installing the Rust toolchain %s; the short terminal view shows nothing more until it ends\n' "$RUST_TOOLCHAIN"
     rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
 
     local v_node v_pnpm v_protoc v_rustup v_rustc
@@ -499,6 +500,7 @@ step_rust_check() {
     require_no_args "$@"
     load_env
     enter_src
+    printf -- '--> cargo check is running (several minutes on a first run); the short terminal view shows nothing more until it ends\n'
     cargo check --locked --workspace --all-targets --exclude fig_desktop-fuzz
 }
 
@@ -512,7 +514,10 @@ step_rust_test() {
         if printenv "$v" >/dev/null; then set_vars="$set_vars $v"; fi
     done
     printf '    SSH session variables set (unset for cargo test):%s\n' "${set_vars:- none}"
-    run_limited "$TEST_LIMIT_SECS" env -u SSH_CLIENT -u SSH_CONNECTION -u SSH_TTY \
+    # The Linux VM runs shellcheck over the same init text (the snapshot tests pin it); this VM has no shellcheck.
+    printf -- '--> note: four shellcheck lint tests are compiled to skip (SHELLCUE_BUILD_SKIP_SHELLCHECK_TESTS); they count as passed without linting\n'
+    printf -- '--> cargo test is running (limit %s minutes); the short terminal view shows nothing more until it ends\n' "$((TEST_LIMIT_SECS / 60))"
+    run_limited "$TEST_LIMIT_SECS" env -u SSH_CLIENT -u SSH_CONNECTION -u SSH_TTY SHELLCUE_BUILD_SKIP_SHELLCHECK_TESTS=1 \
         cargo test --locked --no-fail-fast --workspace --lib --bins --test '*' --exclude fig_desktop-fuzz || rc=$?
     if [[ $rc -eq 142 ]]; then
         printf '    the test run exceeded %s minutes; cargo and the processes it started were stopped (exit status %s)\n' "$((TEST_LIMIT_SECS / 60))" "$rc"

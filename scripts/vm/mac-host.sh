@@ -17,6 +17,7 @@ PUBKEY_FILE="$STATE_DIR/id.pub"
 KNOWN_HOSTS="$STATE_DIR/known_hosts"
 AGENT_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
 
+QUIET=0
 VM_USER=""
 VM_HOST=""
 SSH_OPTS=()
@@ -27,6 +28,10 @@ Usage: mac-host.sh <command>
 
 Drives the macOS build VM over SSH. Logs go to $LOG_DIR (outside the repo),
 named <timestamp>-mac-<step>.log. Only text comes back; no file is copied out of the VM.
+step and clone print only the lines starting ==> or -->, plus the pushing line (and the last log lines if the
+step fails); the log has everything. Long steps therefore sit quiet here while they work. step info, trust and
+push print everything. To see every line of a step here too:
+  MAC_HOST_VERBOSE=1 scripts/vm/mac-host.sh step rust-test
 
 Commands:
   trust <fingerprint>     record the VM's SSH host key in vm-mac/known_hosts, only if the key the VM presents has
@@ -69,11 +74,17 @@ One-time setup. Run every mac-host.sh command from the repo root: $REPO_ROOT
          xcode-select --install
     5. Note the user name and the VM's name; the name keeps working when the VM's address changes:
          whoami
-         scutil --get LocalHostName         (add .local to what it prints, for example shellcue-macos.local)
+         scutil --get LocalHostName         (write it in lower case and add .local, for example shellcue-macos.local)
        If the name does not connect later, use the address instead: ipconfig getifaddr en0
     6. Read the VM's host key fingerprint; it is the second word, starting SHA256:
+         sudo ssh-keygen -A                 (creates any missing host keys, harmless if they exist; sudo asks for
+                                             this VM user's password and shows nothing while you type)
          ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
     7. Keep the VM awake during builds: System Settings > Energy, and Lock Screen: never sleep.
+    8. Check the VM resolves names: curl -sI https://github.com | head -1 should print a line starting HTTP.
+       If it prints nothing while ping -c 3 1.1.1.1 works, add DNS servers of your choice in the VM under
+       System Settings > Network > Ethernet > Details > DNS. If the ping fails too, the VM has no network:
+       check that UTM's Network Mode for this VM is Shared Network.
 
  C. On this Mac, with the user and name from B5 (this example assumes user "builder"):
       printf '%s\n' 'builder@shellcue-macos.local' > "$STATE_DIR/target"
@@ -121,7 +132,7 @@ read_one_line() {
 }
 
 load_target() {
-    local target user_re='^[a-z_][a-z0-9_-]{0,31}$' host_re='^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$'
+    local target lower user_re='^[a-z_][a-z0-9_-]{0,31}$' host_re='^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$'
     case "$STATE_DIR" in
         *'"'*|*$'\n'*) die "the path $STATE_DIR contains a quote or newline, which ssh options cannot carry" ;;
     esac
@@ -136,6 +147,9 @@ load_target() {
     VM_HOST="${target#*@}"
     [[ "$VM_USER" =~ $user_re ]] || die "user name in $TARGET_FILE is not a plain login name: '$VM_USER'"
     [[ "$VM_HOST" =~ $host_re ]] || die "host in $TARGET_FILE is not a plain name or IPv4 address: '$VM_HOST'"
+    # ssh and ssh-keyscan write host names in lower case, and the pinned line is compared exactly.
+    lower="$(printf '%s' "$VM_HOST" | LC_ALL=C tr 'A-Z' 'a-z')"
+    [ "$lower" = "$VM_HOST" ] || die "host in $TARGET_FILE has capital letters; write it in lower case: '$lower'"
 }
 
 load_ssh() {
@@ -188,6 +202,15 @@ require_plain_word() {
     esac
 }
 
+# The log always gets every line; with QUIET=1 the terminal gets only the step, part and verdict lines.
+terminal_filter() {
+    if [ "$QUIET" -eq 1 ]; then
+        LC_ALL=C grep --line-buffered -E '^(==> |--> |pushing )' || true
+    else
+        cat
+    fi
+}
+
 run_logged() {
     local label="$1" ts log rc tr_rc tee_rc statuses cmdline
     shift
@@ -200,7 +223,7 @@ run_logged() {
     cmdline="$(printf '%q ' "$@")"
     printf 'command: %s\n' "${cmdline% }" | tee -a "$log"
     set +e
-    ( set -e; "$@" ) 2>&1 | sanitize | tee -a "$log"
+    ( set -e; "$@" ) 2>&1 | sanitize | tee -a "$log" | terminal_filter
     statuses=("${PIPESTATUS[@]}")
     set -e
     rc="${statuses[0]}"
@@ -211,6 +234,10 @@ run_logged() {
         if [ "$rc" -eq 0 ]; then
             if [ "$tr_rc" -ne 0 ]; then rc="$tr_rc"; else rc="$tee_rc"; fi
         fi
+    fi
+    if [ "$QUIET" -eq 1 ] && [ "$rc" -ne 0 ]; then
+        printf 'last lines of the log (when a step has several parts, an earlier part'"'"'s error may be higher up in the log):\n'
+        tail -n 20 "$log" | sed 's/^/  | /'
     fi
     printf 'log: %s\nexit status: %s\n' "$log" "$rc" | tee -a "$log"
     ssh_hint "$rc"
@@ -294,6 +321,8 @@ cmd_step() {
         require_plain_word "$word"
     done
     load_ssh
+    # info exists for its detail lines, so it is never shortened.
+    if [ "$name" != "info" ] && [ "${MAC_HOST_VERBOSE:-0}" != "1" ]; then QUIET=1; fi
     run_logged "mac-$name" push_body "$@"
 }
 
