@@ -13,6 +13,8 @@ ENV_FILE="$TOOLS/env.sh"
 SRC="$HOME/shellcue"
 SPECS_REPO_URL="https://github.com/abandisch/shellcue-specs.git"
 SPECS_SRC="$HOME/shellcue-specs"
+# Outside the checkout so generated icons never dirty it; host.sh pull-icons reads from here.
+ICONS_OUT="$HOME/shellcue-icons"
 
 # Change together with .mise.toml (node, pnpm, protoc), package.json (packageManager) and rust-toolchain.toml (Rust); enter_src enforces it.
 NODE_VERSION="26.13.0"
@@ -29,9 +31,10 @@ APT_PACKAGES=(
     libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev libwebkit2gtk-4.1-dev
     libjavascriptcoregtk-4.1-dev valac libibus-1.0-dev libglib2.0-dev sqlite3 libxdo-dev
     libfuse2t64 git ca-certificates xz-utils zip unzip gpgv zsh fish shellcheck
+    librsvg2-bin icnsutils
 )
 
-STEPS="tools clone lock fetch web specs rust-check rust-test info"
+STEPS="tools clone lock fetch web specs icons rust-check rust-test info"
 
 usage() {
     cat <<'EOF'
@@ -45,6 +48,8 @@ Runs inside the ShellCue build VM. Steps:
   web                      pnpm run build, then pnpm run test:ci
   specs                    fetch the specs repo at the commit in packages/spec-compiler/SPECS_COMMIT and compile it
                            into ~/shellcue/build/specs; needs 'fetch' first (nothing from the specs repo is installed or run)
+  icons [check]            generate the PNG and ICNS icons from artwork/*.svg into ~/shellcue-icons (outside the checkout)
+                           and report whether each committed file matches; with 'check', fail if any does not
   rust-check               cargo check --locked --workspace --all-targets --exclude fig_desktop-fuzz
   rust-test                cargo test --locked --no-fail-fast --workspace --lib --bins --test '*' --exclude fig_desktop-fuzz,
                            with SSH_CLIENT, SSH_CONNECTION and SSH_TTY unset
@@ -628,6 +633,38 @@ step_specs() {
     printf '    tree sha256 (sha256sum of the sorted per-file sha256sum list): %s\n' "${tree%% *}"
 }
 
+step_icons() {
+    local mode="${1:-}"
+    [[ $# -le 1 && ( -z "$mode" || "$mode" == "check" ) ]] || die "usage: guest.sh icons [check]"
+    enter_src
+    local t manifest="scripts/icons/manifest.txt"
+    for t in rsvg-convert png2icns; do
+        [[ -n "$(type -P "$t" || true)" ]] || die "'$t' not on PATH; run the 'tools' step first"
+    done
+    [[ -f "$manifest" ]] || die "$manifest not found"
+    dpkg-query -W librsvg2-bin icnsutils | sed 's/^/    /'
+    rm -rf -- "$ICONS_OUT"
+    bash scripts/icons/generate.sh "$ICONS_OUT"
+
+    local kind width height path same=0 differs=0 missing=0
+    while read -r kind width height path || [[ -n "$kind" ]]; do
+        if [[ ! -e "$SRC/$path" ]]; then
+            missing=$((missing + 1))
+            printf '    not in repo: %s\n' "$path"
+        elif cmp -s -- "$ICONS_OUT/$path" "$SRC/$path"; then
+            same=$((same + 1))
+            printf '    same: %s\n' "$path"
+        else
+            differs=$((differs + 1))
+            printf '    DIFFERS: %s\n' "$path"
+        fi
+    done < "$manifest"
+    printf '    generated vs committed: %s same, %s differ, %s not in repo\n' "$same" "$differs" "$missing"
+    if [[ "$mode" == "check" && $((differs + missing)) -ne 0 ]]; then
+        die "committed icons do not match what artwork/*.svg generates"
+    fi
+}
+
 step_rust_check() {
     require_no_args "$@"
     load_env
@@ -699,6 +736,7 @@ main() {
         fetch) step_fetch "$@" ;;
         web) step_web "$@" ;;
         specs) step_specs "$@" ;;
+        icons) step_icons "$@" ;;
         rust-check) step_rust_check "$@" ;;
         rust-test) step_rust_test "$@" ;;
         info) step_info "$@" ;;

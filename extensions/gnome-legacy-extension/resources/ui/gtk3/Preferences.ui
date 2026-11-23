@@ -9,7 +9,7 @@
     <child>
       <object class="GtkImage">
         <property name="valign">center</property>
-        <property name="icon-name">amazon-q-for-cli-legacy-connected-symbolic</property>
+        <property name="icon-name">shellcue-legacy-connected-symbolic</property>
         <property name="pixel-size">128</property>
       </object>
     </child>

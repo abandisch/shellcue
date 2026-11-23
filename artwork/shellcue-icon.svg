@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="ShellCue">
+<rect width="256" height="256" rx="58" fill="#12241C"/>
+<g transform="translate(-9 -5)">
+<path d="M78 86 L134 128 L78 170" fill="none" stroke="#F4F1E8" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+<path transform="translate(146 176) rotate(-28)" d="M0 0 C16 -22 50 -24 70 0 C50 24 16 22 0 0 Z" fill="#7FD49A"/>
+</g>
+</svg>
