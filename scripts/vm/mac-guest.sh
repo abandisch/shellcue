@@ -296,7 +296,7 @@ install_protoc() {
     unzip -q "$zip" -d "$dir.staging"
     [[ -f "$dir.staging/bin/protoc" ]] || die "protoc zip did not contain bin/protoc"
     [[ -d "$dir.staging/include" ]] || die "protoc zip did not contain include/"
-    chmod u+x -- "$dir.staging/bin/protoc"
+    chmod u+x "$dir.staging/bin/protoc"
     mv -- "$dir.staging" "$dir"
 }
 
@@ -309,7 +309,7 @@ rustup_version_ok() {
 }
 
 install_rustup() {
-    chmod u+x -- "$DL/rustup-init"
+    chmod u+x "$DL/rustup-init"
     "$DL/rustup-init" -y --default-toolchain none --profile minimal --no-modify-path
 }
 
