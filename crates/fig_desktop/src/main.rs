@@ -27,10 +27,7 @@ use fig_log::{
     initialize_logging,
 };
 use fig_os_shim::Context;
-use fig_util::consts::{
-    APP_PROCESS_NAME,
-    PRODUCT_NAME,
-};
+use fig_util::consts::PRODUCT_NAME;
 use fig_util::directories;
 use platform::PlatformState;
 use sysinfo::{
@@ -164,6 +161,7 @@ async fn main() -> ExitCode {
 fn allow_multiple_running_check(current_pid: sysinfo::Pid, kill_old: bool) -> Option<ExitCode> {
     use std::ffi::OsString;
 
+    use fig_util::consts::app_process_listing_name;
     use tracing::debug;
 
     if kill_old {
@@ -174,7 +172,7 @@ fn allow_multiple_running_check(current_pid: sysinfo::Pid, kill_old: bool) -> Op
     let system = System::new_with_specifics(
         RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing().with_user(sysinfo::UpdateKind::Always)),
     );
-    let app_process_name = OsString::from(APP_PROCESS_NAME);
+    let app_process_name = OsString::from(app_process_listing_name());
     let processes = system.processes_by_exact_name(&app_process_name);
 
     let processes = processes.collect::<Vec<_>>();
@@ -203,6 +201,8 @@ fn allow_multiple_running_check(current_pid: sysinfo::Pid, kill_old: bool) -> Op
 #[must_use]
 fn allow_multiple_running_check(current_pid: sysinfo::Pid, kill_old: bool) -> Option<ExitCode> {
     use std::ffi::OsString;
+
+    use fig_util::consts::APP_PROCESS_NAME;
 
     let app_process_name = OsString::from(APP_PROCESS_NAME);
     let system = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing()));

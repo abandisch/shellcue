@@ -1,7 +1,8 @@
 use clap::Parser;
+use fig_util::consts::APP_PROCESS_NAME;
 
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(version, about, long_about = None, name = APP_PROCESS_NAME)]
 pub struct Cli {
     /// Checks the `app.launchOnStartup` setting before launching
     #[arg(long)]
@@ -22,6 +23,12 @@ mod tests {
     fn verify_app() {
         use clap::CommandFactory;
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn command_name() {
+        use clap::CommandFactory;
+        assert_eq!(Cli::command().get_name(), APP_PROCESS_NAME);
     }
 
     #[test]

@@ -1,10 +1,10 @@
 {
-  "uuid": "amazon-q-for-cli-gnome-integration@aws.amazon.com",
-  "name": "Amazon Q for CLI GNOME Integration",
-  "url": "https://github.com/aws",
+  "uuid": "shellcue-gnome-integration@bandisch-apps.com",
+  "name": "ShellCue GNOME Integration",
+  "url": "https://github.com/abandisch/shellcue",
   "version": 1,
-  "description": "Integrates Amazon Q for CLI with GNOME Shell for versions 45+",
-  "gettext-domain": "amazon-q-for-cli-gnome-integration",
-  "settings-schema": "org.gnome.shell.extensions.amazon-q-for-cli-gnome-integration",
+  "description": "Integrates ShellCue with GNOME Shell for versions 45+",
+  "gettext-domain": "shellcue-gnome-integration",
+  "settings-schema": "org.gnome.shell.extensions.shellcue-gnome-integration",
   "shell-version": ["45", "46", "47"]
 }

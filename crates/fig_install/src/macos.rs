@@ -33,7 +33,7 @@ pub(crate) async fn uninstall_desktop(ctx: &fig_os_shim::Context) -> Result<(), 
     // Remove launch agents
     if let Ok(home) = directories::home_dir() {
         let launch_agents = home.join("Library").join("LaunchAgents");
-        remove_in_dir_with_prefix_unless(&launch_agents, "com.amazon.codewhisperer.", |p| p.contains("daemon")).await;
+        remove_in_dir_with_prefix_unless(&launch_agents, "com.bandisch-apps.shellcue.", |p| p.contains("daemon")).await;
     } else {
         warn!("Could not find home directory");
     }

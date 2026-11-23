@@ -1,7 +1,7 @@
-Package: amazon-q
-Description: Amazon Q CLI for Linux
-Maintainer: Amazon Q CLI Team <q-cli@amazon.com>
-Homepage: https://github.com/aws/q-cli
+Package: shellcue
+Description: ShellCue terminal autocomplete for Linux
+Maintainer: ShellCue contributors <noreply@bandisch-apps.com>
+Homepage: https://github.com/abandisch/shellcue
 Version: $VERSION
 Architecture: $APT_ARCH
 Depends: libayatana-appindicator3-1, libwebkit2gtk-4.1-0, libgtk-3-0, util-linux

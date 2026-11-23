@@ -1,14 +1,14 @@
 #!/bin/sh
 
-# Installs the q and qterm into place on the user's machine
+# Installs shellcue and shellcue-term into place on the user's machine
 # and installs the recommended integrations
 
 set -o errexit
 set -o nounset
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-CLI_BINARY_NAME="q"
-PTY_BINARY_NAME="qterm"
+CLI_BINARY_NAME="shellcue"
+PTY_BINARY_NAME="shellcue-term"
 
 log_error() {
     printf '\e[31m[ERROR]\e[0m %s\n' "$1" >&2
@@ -134,11 +134,11 @@ if is_target_triple_gnu && ! check_glibc_version; then
     exit 1
 fi
 
-if [ -n "${Q_INSTALL_GLOBAL:-}" ]; then
+if [ -n "${SHELLCUE_INSTALL_GLOBAL:-}" ]; then
     install -m 755 "$SCRIPT_DIR/bin/$CLI_BINARY_NAME" /usr/local/bin/
     install -m 755 "$SCRIPT_DIR/bin/$PTY_BINARY_NAME" /usr/local/bin/
 
-    if [ -z "${Q_SKIP_SETUP:-}" ]; then
+    if [ -z "${SHELLCUE_SKIP_SETUP:-}" ]; then
         /usr/local/bin/$CLI_BINARY_NAME integrations install dotfiles
         /usr/local/bin/$CLI_BINARY_NAME setup --global "$@"
     fi
@@ -148,7 +148,7 @@ else
     install -m 755 "$SCRIPT_DIR/bin/$CLI_BINARY_NAME" "$HOME/.local/bin/"
     install -m 755 "$SCRIPT_DIR/bin/$PTY_BINARY_NAME" "$HOME/.local/bin/"
 
-    if [ -z "${Q_SKIP_SETUP:-}" ]; then
+    if [ -z "${SHELLCUE_SKIP_SETUP:-}" ]; then
         "$HOME/.local/bin/$CLI_BINARY_NAME" setup "$@"
     fi
 fi

@@ -3,13 +3,13 @@
     "distDir": []
   },
   "package": {
-    "productName": "q_desktop"
+    "productName": "shellcue-desktop"
   },
   "tauri": {
     "bundle": {
       "targets": "app",
       "active": true,
-      "identifier": "com.amazon.codewhisperer",
+      "identifier": "com.bandisch-apps.shellcue",
       "icon": [
         "icons/icon.icns",
         "icons/128x128.png",

@@ -1,13 +1,22 @@
-pub const APP_BUNDLE_ID: &str = "com.amazon.codewhisperer";
-pub const APP_BUNDLE_NAME: &str = "Amazon Q.app";
+pub const APP_BUNDLE_ID: &str = "com.bandisch-apps.shellcue";
+pub const APP_BUNDLE_NAME: &str = "ShellCue.app";
 
-#[cfg(target_os = "macos")]
-pub const APP_PROCESS_NAME: &str = "q_desktop";
-#[cfg(target_os = "linux")]
-pub const APP_PROCESS_NAME: &str = "q-desktop";
+pub const APP_PROCESS_NAME: &str = "shellcue-desktop";
+
+/// [`APP_PROCESS_NAME`] as process listings report it: Linux truncates process names to 15 bytes.
+pub fn app_process_listing_name() -> &'static str {
+    #[cfg(target_os = "linux")]
+    {
+        &APP_PROCESS_NAME[..APP_PROCESS_NAME.len().min(15)]
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        APP_PROCESS_NAME
+    }
+}
 
 /// The name configured under `"package.productName"` in the tauri.conf.json file.
-pub const TAURI_PRODUCT_NAME: &str = "q_desktop";
+pub const TAURI_PRODUCT_NAME: &str = "shellcue-desktop";
 
 pub const CLI_BINARY_NAME: &str = "shellcue";
 pub const PTY_BINARY_NAME: &str = "shellcue-term";
@@ -28,16 +37,16 @@ pub const BACKUP_DIR_NAME: &str = ".shellcue.dotfiles.bak";
 /// Build time env vars
 pub mod build {
     /// The target of the current build, e.g. "aarch64-unknown-linux-musl"
-    pub const TARGET_TRIPLE: Option<&str> = option_env!("AMAZON_Q_BUILD_TARGET_TRIPLE");
+    pub const TARGET_TRIPLE: Option<&str> = option_env!("SHELLCUE_BUILD_TARGET_TRIPLE");
 
     /// A git full sha hash of the current build
-    pub const HASH: Option<&str> = option_env!("AMAZON_Q_BUILD_HASH");
+    pub const HASH: Option<&str> = option_env!("SHELLCUE_BUILD_HASH");
 
     /// The datetime in rfc3339 format of the current build
-    pub const DATETIME: Option<&str> = option_env!("AMAZON_Q_BUILD_DATETIME");
+    pub const DATETIME: Option<&str> = option_env!("SHELLCUE_BUILD_DATETIME");
 
     /// If `shellcheck` tests should be skipped
-    pub const SKIP_SHELLCHECK_TESTS: bool = option_env!("AMAZON_Q_BUILD_SKIP_SHELLCHECK_TESTS").is_some();
+    pub const SKIP_SHELLCHECK_TESTS: bool = option_env!("SHELLCUE_BUILD_SKIP_SHELLCHECK_TESTS").is_some();
 }
 
 /// macOS specific constants
@@ -49,13 +58,13 @@ pub mod macos {
 }
 
 pub mod linux {
-    pub const DESKTOP_ENTRY_NAME: &str = "amazon-q.desktop";
+    pub const DESKTOP_ENTRY_NAME: &str = "shellcue.desktop";
 
     /// Name of the deb package.
-    pub const PACKAGE_NAME: &str = "amazon-q";
+    pub const PACKAGE_NAME: &str = "shellcue";
 
     /// The wm_class used for the application windows.
-    pub const DESKTOP_APP_WM_CLASS: &str = "Amazon-q";
+    pub const DESKTOP_APP_WM_CLASS: &str = "Shellcue";
 }
 
 pub mod env_var {
@@ -120,5 +129,26 @@ mod tests {
             println!("build_datetime: {build_datetime}");
             println!("{}", OffsetDateTime::parse(build_datetime, &Rfc3339).unwrap());
         }
+    }
+
+    #[test]
+    fn app_process_listing_name_fits_listing() {
+        if cfg!(target_os = "linux") {
+            assert_eq!(app_process_listing_name(), "shellcue-deskto");
+            assert!(app_process_listing_name().len() <= 15);
+        } else {
+            assert_eq!(app_process_listing_name(), APP_PROCESS_NAME);
+        }
+    }
+
+    #[test]
+    fn identity_constants() {
+        assert_eq!(APP_PROCESS_NAME, "shellcue-desktop");
+        assert_eq!(TAURI_PRODUCT_NAME, "shellcue-desktop");
+        assert_eq!(APP_BUNDLE_ID, "com.bandisch-apps.shellcue");
+        assert_eq!(APP_BUNDLE_NAME, "ShellCue.app");
+        assert_eq!(linux::PACKAGE_NAME, "shellcue");
+        assert_eq!(linux::DESKTOP_ENTRY_NAME, "shellcue.desktop");
+        assert_eq!(linux::DESKTOP_APP_WM_CLASS, "Shellcue");
     }
 }

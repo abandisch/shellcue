@@ -35,7 +35,7 @@ tasks.add(
     );
 
     resources.add(
-      "amazon-q-for-cli-legacy-gnome-integration.gresource",
+      "shellcue-legacy-gnome-integration.gresource",
       new File(await fs.readFile("./resources/resources.gresource")),
     );
 
@@ -61,10 +61,10 @@ tasks.add(
     );
 
     schemas.add(
-      "org.gnome.shell.extensions.amazon-q-for-cli-legacy-gnome-integration.gschema.xml",
+      "org.gnome.shell.extensions.shellcue-legacy-gnome-integration.gschema.xml",
       new File(
         await fs.readFile(
-          "./schemas/org.gnome.shell.extensions.amazon-q-for-cli-legacy-gnome-integration.gschema.xml",
+          "./schemas/org.gnome.shell.extensions.shellcue-legacy-gnome-integration.gschema.xml",
         ),
       ),
     );
@@ -162,8 +162,6 @@ for await (const entry of await fs.opendir("./src")) {
 
 await tasks.wait();
 
-await zip.save(
-  "./amazon-q-for-cli-legacy-gnome-integration@aws.amazon.com.zip",
-);
+await zip.save("./shellcue-legacy-gnome-integration@bandisch-apps.com.zip");
 
 console.log("Extension bundled!");

@@ -51,7 +51,7 @@ pub fn desktop_app_running() -> bool {
 pub fn desktop_app_running() -> bool {
     use std::ffi::OsString;
 
-    use fig_util::consts::APP_PROCESS_NAME;
+    use fig_util::consts::app_process_listing_name;
     use sysinfo::{
         ProcessRefreshKind,
         RefreshKind,
@@ -59,7 +59,7 @@ pub fn desktop_app_running() -> bool {
     };
 
     let s = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing()));
-    let app_process_name = OsString::from(APP_PROCESS_NAME);
+    let app_process_name = OsString::from(app_process_listing_name());
     let mut processes = s.processes_by_exact_name(&app_process_name);
     processes.next().is_some()
 }
@@ -153,7 +153,7 @@ fn launch_linux_desktop(ctx: std::sync::Arc<fig_os_shim::Context>, state: &fig_s
                 },
             }
         }
-        // Fall back to calling q-desktop if on the user's path
+        // Fall back to calling shellcue-desktop if on the user's path
     }
 
     Command::new(APP_PROCESS_NAME)

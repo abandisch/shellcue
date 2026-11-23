@@ -187,7 +187,7 @@ pub async fn initialize_fig_dir() -> anyhow::Result<()> {
 
     if let Some(bundle_path) = get_bundle_path() {
         let exe = bundle_path.join("Contents").join("MacOS").join(APP_PROCESS_NAME);
-        let startup_launch_agent = LaunchdPlist::new("com.amazon.codewhisperer.launcher")
+        let startup_launch_agent = LaunchdPlist::new("com.bandisch-apps.shellcue.launcher")
             .program_arguments([&exe.to_string_lossy(), "--is-startup"])
             .associated_bundle_identifiers([APP_BUNDLE_ID])
             .run_at_load(true);
@@ -285,7 +285,7 @@ async fn run_linux_install(ctx: Arc<Context>, settings: Arc<fig_settings::Settin
     // launch_ibus().await;
 }
 
-/// Installs the correct version of the Amazon Q for CLI GNOME Shell extension, if required.
+/// Installs the correct version of the ShellCue GNOME Shell extension, if required.
 #[cfg(target_os = "linux")]
 async fn install_gnome_shell_extension<Ctx, ExtensionsCtx>(
     ctx: &Ctx,
@@ -949,7 +949,7 @@ echo "{binary_name} {version}"
             let entry_path = appimage_desktop_entry_path(&ctx).unwrap();
             let icon_path = appimage_desktop_entry_icon_path(&ctx).unwrap();
             fs.create_dir_all(&entry_path.parent().unwrap()).await.unwrap();
-            fs.write(&entry_path, "[Desktop Entry]\nExec=q-desktop").await.unwrap();
+            fs.write(&entry_path, "[Desktop Entry]\nExec=shellcue-desktop").await.unwrap();
             fs.create_dir_all(icon_path.parent().unwrap()).await.unwrap();
             fs.write(&icon_path, "image").await.unwrap();
             let state = State::from_slice(&[("appimage.manageDesktopEntry", true.into())]);
@@ -974,7 +974,7 @@ echo "{binary_name} {version}"
             let entry_path = appimage_desktop_entry_path(&ctx).unwrap();
             let icon_path = appimage_desktop_entry_icon_path(&ctx).unwrap();
             fs.create_dir_all(&entry_path.parent().unwrap()).await.unwrap();
-            fs.write(&entry_path, "[Desktop Entry]\nExec=q-desktop").await.unwrap();
+            fs.write(&entry_path, "[Desktop Entry]\nExec=shellcue-desktop").await.unwrap();
             fs.create_dir_all(icon_path.parent().unwrap()).await.unwrap();
             fs.write(&icon_path, "image").await.unwrap();
             let state = State::new_fake();
