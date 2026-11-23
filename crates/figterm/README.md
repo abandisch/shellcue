@@ -13,11 +13,11 @@ prompts (precmd), and right before a command is executed (preexec)
 
 ## Installation/Usage
 
-First, make sure shell integrations are installed. You can use the `q_cli` to do
+First, make sure shell integrations are installed. You can use the `shellcue` CLI to do
 this:
 
 ```
-q integrations install dotfiles
+shellcue integrations install dotfiles
 ```
 
 The run `make install` to build the binary and move to the right location.
@@ -28,8 +28,7 @@ You can verify figterm is running by:
 
 1. Running `pstree -p $$` and checking, e.g. for a `figterm` process with a
    child `zsh` process.
-2. Running `env | grep FIG` and checking the `Q_TERM` variable is set to
-3.
+2. Running `env | grep SHELLCUE` and checking the `SHELLCUE_TERM` variable is set.
 
 ## How does it work?
 

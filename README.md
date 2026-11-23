@@ -1,46 +1,10 @@
+# ShellCue
 
-<p align="center">
-  <a href="https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-installing.html">
-    <picture>
-      <img src="./.github/media/amazon-q-logo.avif" alt="Amazon Q"
-        width="200px"
-      >
-    </picture>
-  </a>
-</p>
+Terminal autocomplete: a sprig cut free.
 
-<h4 align="center">
-  Amazon Q CLI brings IDE-style autocomplete and agentic capabilities to your terminal.
-</h4>
+ShellCue adds IDE-style completions to your terminal for hundreds of command-line tools such as `git`, `npm` and `docker`. It runs locally: no account, no telemetry, no AI.
 
-
-<div align="center">
-  <a href="https://github.com/aws/amazon-q-developer-cli/graphs/commit-activity"><img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/aws/amazon-q-developer-cli"/></a>
-  <a href="https://github.com/aws/amazon-q-developer-cli/issues"><img alt="GitHub open issues" src="https://img.shields.io/github/issues/aws/amazon-q-developer-cli"/></a>
-</div>
-
-
-<div align="center">
-
-[![Rust Test](https://github.com/aws/amazon-q-developer-cli/actions/workflows/rust.yml/badge.svg)](https://github.com/aws/amazon-q-developer-cli/actions/workflows/rust.yml)
-[![Typos Test](https://github.com/aws/amazon-q-developer-cli/actions/workflows/typos.yml/badge.svg)](https://github.com/aws/amazon-q-developer-cli/actions/workflows/typos.yml)
-[![Typescript Test](https://github.com/aws/amazon-q-developer-cli/actions/workflows/typescript.yml/badge.svg)](https://github.com/aws/amazon-q-developer-cli/actions/workflows/typescript.yml)
-</div>
-
-<p align="center">
-  <a href="https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-installing.html">
-    <picture>
-      <img src="./.github/media/amazon-q-cli-features.jpeg" alt="Amazon Q CLI Features"
-      >
-    </picture>
-  </a>
-</p>
-
-## 😍 Features
--   🔮 [**Auto Completion**](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-autocomplete.html): IDE-style completions to hundreds of popular CLIs like `git`, `npm`, `docker`, and `aws`.
--   💬 [**Natural Language Chat**](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-chat.html): Interact with your terminal using natural language to ask questions, debug issues, or explore the codebase.
--   🧠 [**Contextual Awareness**](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-chat.html#command-line-chat-context-integration): Integrates context from your local development environment, so answers are tailored to your specific code and setup.
--   🤖 [**Agentic Execution**](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-autocomplete.html): Let Amazon Q take action: generate code, edit files, automate Git workflows, resolve merge conflicts, and more — with your permission.
+It supports zsh on macOS and Linux.
 
 ## ⚡️ Installation
 
@@ -58,7 +22,7 @@ ShellCue is built from source; build instructions will follow.
 ### 1. Clone repo
 
 ```shell
-git clone https://github.com/aws/amazon-q-developer-cli-autocomplete.git
+git clone https://github.com/abandisch/shellcue.git
 ```
 
 ### 2. Setup
@@ -143,14 +107,14 @@ pnpm install --ignore-scripts
 
 
 ### 3. Start Local Development
-To compile and view changes made to `q chat`:
+To compile and run the `shellcue` CLI:
 ```shell
 cargo run --bin q_cli
 ```
 
-> If you are working on other q commands, just append `-- <command name>`. For example, to run `q doctor`, you can run `cargo run --bin q_cli -- doctor`
+> To run a specific subcommand, append `-- <command name>`. For example, to run `shellcue doctor`, you can run `cargo run --bin q_cli -- doctor`
 
-To run tests for the Q CLI crate:
+To run tests for the CLI crate:
 ```shell
 cargo test -p q_cli
 ```
@@ -167,35 +131,6 @@ cargo clippy --locked --workspace --color always -- -D warnings
 
 
 
-### 💡 Quick Tip for Onboarding
-
-Use Q CLI to help you onboard Q CLI! 
-
-Start a `q chat` session:
-
-```shell
-q chat
-```
-
-Once inside `q chat`, you can supply project context by adding the [`codebase-summary.md`](codebase-summary.md) file:
-
-```shell
-/context add codebase-summary.md
-```
-
-This enables Q to answer onboarding questions like:
-
-- “What does this crate do?”
-
-- “Where is X implemented?”
-
-- “How do these components interact?”
-
-Great for speeding up your ramp-up and navigating the repo more effectively.
-
-
-
-
 ## 🏗️ Project Layout
 
 Several projects live here:
@@ -203,8 +138,7 @@ Several projects live here:
 - [`autocomplete`](packages/autocomplete-app/) - The autocomplete react app
 - [`figterm`](crates/figterm/) - figterm, our headless terminal/pseudoterminal that
   intercepts the user’s terminal edit buffer.
-- [`q_cli`](crates/q_cli/) - the `q` CLI, allows users to interface with Amazon Q Developer from
-  the command line
+- [`q_cli`](crates/q_cli/) - the `shellcue` CLI
 - [`fig_desktop`](crates/fig_desktop/) - the Rust desktop app, uses
   [`tao`](https://docs.rs/tao/latest/tao/)/[`wry`](https://docs.rs/wry/latest/wry/)
   for windowing/webviews
@@ -222,20 +156,15 @@ Other folder to be aware of
   specification for inter-process communication
 - [`tests/`](tests/) - Contain integration tests for the projects
 
-Below is a high level architecture of how the different components of the app and
-their IPC:
-
-![architecture](docs/assets/architecture.svg)
-
 
 
 
 ## 🛡️ Security
 
-See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
+See [SECURITY.md](SECURITY.md) for more information.
 
 ## 📜 Licensing
 
 This repo is dual licensed under MIT and Apache 2.0 licenses.
 
-“Amazon Web Services” and all related marks, including logos, graphic designs, and service names, are trademarks or trade dress of AWS in the U.S. and other countries. AWS’s trademarks and trade dress may not be used in connection with any product or service that is not AWS’s, in any manner that is likely to cause confusion among customers, or in any manner that disparages or discredits AWS.
+ShellCue is a fork of [Amazon Q Developer CLI autocomplete](https://github.com/aws/amazon-q-developer-cli-autocomplete), which grew out of [Fig](https://github.com/withfig/autocomplete). It is an independent project and is not affiliated with, endorsed by or supported by Amazon or AWS.
