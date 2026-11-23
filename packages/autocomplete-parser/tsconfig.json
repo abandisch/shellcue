@@ -1,8 +1,8 @@
 {
-  "extends": ["@amzn/tsconfig/base.json", "@amzn/tsconfig/dom.json"],
+  "extends": ["@shellcue/tsconfig/base.json", "@shellcue/tsconfig/dom.json"],
   "compilerOptions": {
     "outDir": "dist",
-    "types": ["@withfig/autocomplete-types", "@amzn/types"]
+    "types": ["@withfig/autocomplete-types", "@shellcue/types"]
   },
   "include": ["src"]
 }

@@ -1,8 +1,8 @@
 import React from "react";
 import logger from "loglevel";
 import ReactDOM from "react-dom/client";
-import { State } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
-import { preloadSpecs } from "@aws/amazon-q-developer-cli-autocomplete-parser";
+import { State } from "@shellcue/api-bindings-wrappers";
+import { preloadSpecs } from "@shellcue/autocomplete-parser";
 import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";
 

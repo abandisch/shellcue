@@ -1,4 +1,4 @@
-declare module "@aws/amazon-q-developer-cli-fuzzysort" {
+declare module "@shellcue/fuzzysort" {
   export interface Result {
     /**
      * Higher is better

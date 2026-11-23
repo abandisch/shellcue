@@ -1,8 +1,5 @@
-import {
-  Annotation,
-  TokenType,
-} from "@aws/amazon-q-developer-cli-autocomplete-parser";
-import { Subcommand } from "@aws/amazon-q-developer-cli-shared/internal";
+import { Annotation, TokenType } from "@shellcue/autocomplete-parser";
+import { Subcommand } from "@shellcue/shared/internal";
 import { describe, expect, it } from "vitest";
 import { getTemplateSuggestions } from "../templateSuggestionsGenerator";
 import { GeneratorContext } from "../helpers";

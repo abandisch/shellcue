@@ -1,7 +1,7 @@
 import {
   SettingsChangedNotification,
   NotificationType,
-} from "@aws/amazon-q-developer-cli-proto/fig";
+} from "@shellcue/proto/fig";
 import { _subscribe, NotificationResponse } from "./notifications.js";
 
 import {

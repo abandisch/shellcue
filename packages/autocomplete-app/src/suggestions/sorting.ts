@@ -1,9 +1,6 @@
-import { makeArray } from "@aws/amazon-q-developer-cli-shared/utils";
-import { Suggestion } from "@aws/amazon-q-developer-cli-shared/internal";
-import {
-  SETTINGS,
-  getSetting,
-} from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
+import { makeArray } from "@shellcue/shared/utils";
+import { Suggestion } from "@shellcue/shared/internal";
+import { SETTINGS, getSetting } from "@shellcue/api-bindings-wrappers";
 
 // { command: { commandParam: count/lastUsedDate } }
 // e.g. git: { add: 2, push: 4 }

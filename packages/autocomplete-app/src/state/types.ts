@@ -1,7 +1,7 @@
-import { Suggestion } from "@aws/amazon-q-developer-cli-shared/internal";
-import { ArgumentParserResult } from "@aws/amazon-q-developer-cli-autocomplete-parser";
-import { Command } from "@aws/amazon-q-developer-cli-shell-parser";
-import { SettingsMap } from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
+import { Suggestion } from "@shellcue/shared/internal";
+import { ArgumentParserResult } from "@shellcue/autocomplete-parser";
+import { Command } from "@shellcue/shell-parser";
+import { SettingsMap } from "@shellcue/api-bindings-wrappers";
 import { FigState } from "../fig/hooks";
 import { GeneratorState } from "../generators/helpers";
 

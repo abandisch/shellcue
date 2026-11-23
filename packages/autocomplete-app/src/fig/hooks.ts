@@ -6,13 +6,10 @@ import {
   Settings,
   Shell,
   Types,
-} from "@aws/amazon-q-developer-cli-api-bindings";
-import { AliasMap } from "@aws/amazon-q-developer-cli-shell-parser";
-import {
-  SettingsMap,
-  updateSettings,
-} from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
-import { clearSpecIndex } from "@aws/amazon-q-developer-cli-autocomplete-parser";
+} from "@shellcue/api-bindings";
+import { AliasMap } from "@shellcue/shell-parser";
+import { SettingsMap, updateSettings } from "@shellcue/api-bindings-wrappers";
+import { clearSpecIndex } from "@shellcue/autocomplete-parser";
 import { updateSelectSuggestionKeybindings } from "../actions";
 import { generatorCache } from "../generators/helpers";
 

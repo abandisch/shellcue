@@ -1,11 +1,11 @@
-import fuzzysort from "@aws/amazon-q-developer-cli-fuzzysort";
+import fuzzysort from "@shellcue/fuzzysort";
 import logger from "loglevel";
-import { Suggestion } from "@aws/amazon-q-developer-cli-shared/internal";
+import { Suggestion } from "@shellcue/shared/internal";
 import {
   makeArray,
   longestCommonPrefix,
   ensureTrailingSlash,
-} from "@aws/amazon-q-developer-cli-shared/utils";
+} from "@shellcue/shared/utils";
 
 const SHORTCUT_PREFIX = "?";
 

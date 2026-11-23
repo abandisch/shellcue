@@ -1,5 +1,5 @@
 {
-  "extends": ["@amzn/tsconfig/base.json", "@amzn/tsconfig/dom.json"],
+  "extends": ["@shellcue/tsconfig/base.json", "@shellcue/tsconfig/dom.json"],
   "compilerOptions": {
     "outDir": "dist"
   },

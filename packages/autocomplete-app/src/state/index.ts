@@ -3,23 +3,19 @@ import logger from "loglevel";
 import { Mutate, StateCreator, StoreApi } from "zustand";
 import { createWithEqualityFn } from "zustand/traditional";
 
-import { Suggestion } from "@aws/amazon-q-developer-cli-shared/internal";
-import {
-  fieldsAreEqual,
-  makeArray,
-  memoizeOne,
-} from "@aws/amazon-q-developer-cli-shared/utils";
-import { AliasMap, getCommand } from "@aws/amazon-q-developer-cli-shell-parser";
+import { Suggestion } from "@shellcue/shared/internal";
+import { fieldsAreEqual, makeArray, memoizeOne } from "@shellcue/shared/utils";
+import { AliasMap, getCommand } from "@shellcue/shell-parser";
 import {
   ArgumentParserResult,
   initialParserState,
-} from "@aws/amazon-q-developer-cli-autocomplete-parser";
+} from "@shellcue/autocomplete-parser";
 import {
   getSetting,
   SETTINGS,
   SettingsMap,
-} from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
-import { type Types } from "@aws/amazon-q-developer-cli-api-bindings";
+} from "@shellcue/api-bindings-wrappers";
+import { type Types } from "@shellcue/api-bindings";
 import { detailedDiff } from "deep-object-diff";
 import { FigState, initialFigState } from "../fig/hooks";
 import { AutocompleteState, NamedSetState, Visibility } from "./types";
