@@ -88,25 +88,11 @@ install-macos-bundle: build-native
 	mkdir -p /Applications/ShellCue.app/Contents/MacOS/
 	install $(TARGET_DIR)/debug/$(CRATE_NAME) /Applications/ShellCue.app/Contents/MacOS/shellcue-desktop
 
-### Convert icons
-
-icons:
-	echo $(MAKE_DIR)
-	for res in 16 22 24 32 48 64 128 256 512; do \
-		convert -resize "$${res}x$${res}" "icons/icon.png" "icons/$${res}x$${res}.png" ; \
-	done
-	cargo tauri icon icons/icon.png
-	cargo tauri icon -o volume-icons icons/VolumeIcon.png
-	mv volume-icons/icon.icns $(MAKE_DIR)/../bundle/dmg/VolumeIcon.icns
-	# Clean up unused output from tauri icon cli.
-	rm icons/Square* icons/StoreLogo.png
-	rm -rf volume-icons
-
 ### Clean the project
 
 clean:
 	command -v cargo &>/dev/null && cargo clean
 	rm -rf $(BUILT_PRODUCTS_DIR)
 
-.PHONY: clean icons
+.PHONY: clean
 

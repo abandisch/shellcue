@@ -11,8 +11,11 @@ VM_MEMORY="${SHELLCUE_VM_MEMORY:-12G}"
 VM_DISK="${SHELLCUE_VM_DISK:-60G}"
 GUEST_PATH="/home/ubuntu/guest.sh"
 GUEST_SRC="/home/ubuntu/shellcue"
-GUEST_STEPS="tools clone lock fetch web specs rust-check rust-test info"
+GUEST_ICONS="/home/ubuntu/shellcue-icons"
+GUEST_STEPS="tools clone lock fetch web specs icons rust-check rust-test info"
 PULL_MAX_BYTES=52428800
+ICON_MAX_BYTES=4194304
+ICON_MAX_ENTRIES=64
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -27,7 +30,7 @@ usage() {
 Usage: host.sh <command>
 
 Drives the Multipass VM "$VM_NAME" (Ubuntu $VM_IMAGE). Logs go to $LOG_DIR,
-fetched lockfiles to $OUT_DIR (both outside the repo).
+fetched lockfiles and icons to $OUT_DIR (both outside the repo).
 
 Commands:
   create                  launch the VM ($VM_CPUS CPUs, $VM_MEMORY memory, $VM_DISK disk; no mounts, no cloud-init)
@@ -35,6 +38,8 @@ Commands:
   step <name> [args...]   push, then run guest.sh <name> in the VM, logged; steps: $GUEST_STEPS
   clone                   step clone <current branch> <HEAD sha>; refuses if dirty or not pushed to origin
   pull-lockfiles          copy the VM's Cargo.lock and pnpm-lock.yaml into a fresh vm-out/<timestamp>/
+  pull-icons              copy the icons that "step icons" generated into a fresh vm-out/<timestamp>/icons/, taking only
+                          the files named in scripts/icons/manifest.txt and checking each one's type, size and dimensions
   exec -- <command...>    run one diagnostic command in the VM, logged as "exec"
   info                    multipass info $VM_NAME
   stop                    multipass stop $VM_NAME, logged as "stop"
@@ -59,6 +64,15 @@ Typical first session:
   scripts/vm/host.sh step rust-check
   scripts/vm/host.sh step rust-test
   scripts/vm/host.sh stop
+
+Regenerating the icons after artwork/*.svg changes (commit and push the change first):
+  scripts/vm/host.sh step tools
+  scripts/vm/host.sh clone
+  scripts/vm/host.sh step icons
+  scripts/vm/host.sh pull-icons
+  (review the pulled files; if accepted, copy them into the repo, commit and push)
+  scripts/vm/host.sh clone
+  scripts/vm/host.sh step icons check
 EOF
 }
 
@@ -321,6 +335,103 @@ cmd_pull_lockfiles() {
     run_logged pull-lockfiles pull_body
 }
 
+hex_bytes() {
+    LC_ALL=C od -An -v -tx1 -j "$2" -N "$3" "$1" | tr -d ' \n'
+}
+
+reject_icon() {
+    mv -f -- "$1" "$1.rejected"
+    die "rejected $1: $2; renamed to $1.rejected"
+}
+
+# Pulled icons are untrusted binaries: header, size and (for PNG) dimensions must match the manifest; structure only, nothing is decoded.
+check_pulled_icon() {
+    local f="$1" kind="$2" want_w="$3" want_h="$4" size w h len hex8='^[0-9a-f]{8}$'
+    [ -f "$f" ] && [ ! -L "$f" ] || die "rejected $f: not a regular file"
+    size="$(wc -c < "$f" | tr -d ' ')"
+    [ "$size" -le "$ICON_MAX_BYTES" ] || reject_icon "$f" "$size bytes exceeds the $ICON_MAX_BYTES-byte cap"
+    case "$kind" in
+        png)
+            [ "$size" -ge 45 ] || reject_icon "$f" "$size bytes is too small to be a PNG"
+            [ "$(hex_bytes "$f" 0 8)" = "89504e470d0a1a0a" ] || reject_icon "$f" "no PNG signature"
+            [ "$(hex_bytes "$f" 12 4)" = "49484452" ] || reject_icon "$f" "first chunk is not IHDR"
+            w="$(hex_bytes "$f" 16 4)"
+            h="$(hex_bytes "$f" 20 4)"
+            [[ "$w" =~ $hex8 && "$h" =~ $hex8 ]] || reject_icon "$f" "could not read the PNG dimensions"
+            [ "$((16#$w))" -eq "$want_w" ] && [ "$((16#$h))" -eq "$want_h" ] \
+                || reject_icon "$f" "PNG is $((16#$w))x$((16#$h)), the manifest says ${want_w}x${want_h}"
+            [ "$(hex_bytes "$f" "$((size - 12))" 12)" = "0000000049454e44ae426082" ] \
+                || reject_icon "$f" "does not end with a PNG IEND chunk"
+            ;;
+        icns)
+            [ "$size" -ge 16 ] || reject_icon "$f" "$size bytes is too small to be an ICNS"
+            [ "$(hex_bytes "$f" 0 4)" = "69636e73" ] || reject_icon "$f" "no ICNS signature"
+            len="$(hex_bytes "$f" 4 4)"
+            [[ "$len" =~ $hex8 ]] || reject_icon "$f" "could not read the ICNS length"
+            [ "$((16#$len))" -eq "$size" ] || reject_icon "$f" "ICNS header says $((16#$len)) bytes, the file has $size"
+            ;;
+        *) die "unknown icon kind '$kind' for $f" ;;
+    esac
+}
+
+# The manifest is read from this working tree, never from the VM; every line is validated before anything is transferred.
+read_icon_manifest() {
+    local manifest="$1" line n=0 kind width height path line_re='^(png|icns) [0-9]{1,5} [0-9]{1,5} [A-Za-z0-9._/@-]+$'
+    ICON_ENTRIES=()
+    ICON_PATHS=" "
+    [ -f "$manifest" ] && [ ! -L "$manifest" ] || die "icon manifest not found: $manifest"
+    while IFS= read -r line || [ -n "$line" ]; do
+        n=$((n + 1))
+        [ "$n" -le "$ICON_MAX_ENTRIES" ] || die "$manifest has more than $ICON_MAX_ENTRIES lines"
+        [[ "$line" =~ $line_re ]] || die "$manifest line $n is not '<png|icns> <width> <height> <path>'"
+        read -r kind width height path <<< "$line"
+        case "$path" in
+            /*|-*|.*|*/|*..*|*//*|*/.*|*/-*) die "$manifest line $n: path '$path' is not a plain repo-relative path" ;;
+        esac
+        case "$ICON_PATHS" in
+            *" $path "*) die "$manifest line $n: duplicate path '$path'" ;;
+        esac
+        ICON_PATHS="$ICON_PATHS$path "
+        ICON_ENTRIES+=("$line")
+    done < "$manifest"
+    [ "$n" -ge 1 ] || die "$manifest is empty"
+}
+
+pull_icons_body() {
+    vm_exists || die "VM $VM_NAME does not exist"
+    check_no_mounts
+    local dest entry kind width height path
+    read_icon_manifest "$REPO_ROOT/scripts/icons/manifest.txt"
+    mkdir -p "$OUT_DIR"
+    dest="$OUT_DIR/$(utc_stamp)"
+    mkdir "$dest"
+    dest="$dest/icons"
+    mkdir "$dest"
+    for entry in "${ICON_ENTRIES[@]}"; do
+        read -r kind width height path <<< "$entry"
+        mkdir -p "$(dirname "$dest/$path")"
+        multipass transfer "$VM_NAME:$GUEST_ICONS/$path" "$dest/$path"
+        check_pulled_icon "$dest/$path" "$kind" "$width" "$height"
+        printf 'ok %s %s\n' "$kind" "$dest/$path"
+    done
+    printf 'Not copied into the repo; review before using.\n'
+    printf '\nsha256 of the files as received:\n'
+    for entry in "${ICON_ENTRIES[@]}"; do
+        read -r kind width height path <<< "$entry"
+        ( cd "$dest" && shasum -a 256 "$path" )
+    done
+    printf 'Compare these with the sha256sum lines in the latest icons log in %s.\n' "$LOG_DIR"
+    printf '\nNext steps:\n'
+    printf '  1. Compare the checksums, then review the images in %s; they are untrusted VM output until you accept them.\n' "$dest"
+    printf '  2. If you accept them, copy them over the same paths in the repo, commit, and push.\n'
+    printf '  3. Run host.sh clone, then host.sh step icons check; it must report every file as "same".\n'
+}
+
+cmd_pull_icons() {
+    require_multipass
+    run_logged pull-icons pull_icons_body
+}
+
 cmd_exec() {
     [ "${1:-}" = "--" ] || die "usage: host.sh exec -- <command...> (the -- separator is required)"
     shift
@@ -370,6 +481,7 @@ main() {
         step) cmd_step "$@" ;;
         clone) [ $# -eq 0 ] || die "clone takes no arguments"; cmd_clone ;;
         pull-lockfiles) [ $# -eq 0 ] || die "pull-lockfiles takes no arguments"; cmd_pull_lockfiles ;;
+        pull-icons) [ $# -eq 0 ] || die "pull-icons takes no arguments"; cmd_pull_icons ;;
         exec) cmd_exec "$@" ;;
         info) [ $# -eq 0 ] || die "info takes no arguments"; cmd_info ;;
         stop) [ $# -eq 0 ] || die "stop takes no arguments"; require_multipass; run_logged stop cmd_stop ;;
