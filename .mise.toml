@@ -1,4 +1,4 @@
-# Keep in step: node and pnpm with package.json; node, pnpm and protoc with scripts/vm/guest.sh.
+# Keep in step: node and pnpm with package.json; node, pnpm and protoc with scripts/vm/guest.sh and scripts/vm/mac-guest.sh.
 [tools]
 node = "26.13.0"
 pnpm = "12.17.0"

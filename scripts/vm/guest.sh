@@ -16,7 +16,7 @@ SPECS_SRC="$HOME/shellcue-specs"
 # Outside the checkout so generated icons never dirty it; host.sh pull-icons reads from here.
 ICONS_OUT="$HOME/shellcue-icons"
 
-# Change together with .mise.toml (node, pnpm, protoc), package.json (packageManager) and rust-toolchain.toml (Rust); enter_src enforces it.
+# Change together with scripts/vm/mac-guest.sh, .mise.toml (node, pnpm, protoc), package.json (packageManager) and rust-toolchain.toml (Rust); enter_src enforces it.
 NODE_VERSION="26.13.0"
 PNPM_VERSION="12.17.0"
 PROTOC_VERSION="36.2"
