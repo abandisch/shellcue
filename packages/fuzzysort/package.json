@@ -1,9 +1,10 @@
 {
   "name": "@shellcue/fuzzysort",
+  "private": true,
   "version": "0.1.0",
   "license": "MIT",
-  "author": "Amazon Web Services",
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
+  "author": "ShellCue contributors",
+  "repository": "https://github.com/abandisch/shellcue",
   "type": "module",
   "exports": "./fuzzysort.js",
   "types": "./fuzzysort.d.ts",

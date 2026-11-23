@@ -38,7 +38,7 @@ CMD ["tests/bash", "tests/zsh"]
 ```
 In this script you should install dependencies and set up config files
 (`.zshrc`, `.bashrc`, etc.). The helper script `~/install-fig` is
-available to run fig's installation script on any dotfiles you create.
+available to run ShellCue's installation script on any dotfiles you create.
 
 Unless you have a very compelling reason, your Dockerfile should probably
 use the same `FROM` and `ENTRYPOINT` directives defined in the example

@@ -1,9 +1,10 @@
 {
   "name": "@shellcue/shell-parser",
+  "private": true,
   "version": "0.1.0",
   "license": "MIT OR Apache-2.0",
-  "author": "Amazon Web Services",
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
+  "author": "ShellCue contributors",
+  "repository": "https://github.com/abandisch/shellcue",
   "type": "module",
   "exports": "./dist/index.js",
   "files": [
@@ -32,8 +33,5 @@
     "prettier": "^3.4.2",
     "typescript": "^5.8.3",
     "vitest": "^3.0.8"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }

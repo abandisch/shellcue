@@ -2,7 +2,7 @@
   "name": "@shellcue/autocomplete-app",
   "private": true,
   "version": "1.0.0",
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
+  "repository": "https://github.com/abandisch/shellcue",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -1,8 +1,8 @@
 [package]
 name = "fig_desktop"
-authors = ["Amazon Q Devs"]
+authors = ["ShellCue contributors"]
 edition.workspace = true
-homepage = "https://aws.amazon.com/codewhisperer"
+homepage = "https://github.com/abandisch/shellcue"
 publish.workspace = true
 version.workspace = true
 license.workspace = true

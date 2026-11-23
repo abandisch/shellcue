@@ -3,10 +3,10 @@
 We use [protocol buffers](https://developers.google.com/protocol-buffers/) as a
 message format for inter process communication.
 
-This folder defines three main protocols:
+This folder defines four main protocols:
 
 1. `local.proto` - Protocol for communication from local processes like
-   `figterm` and the `fig` CLI to the desktop app
+   `figterm` and the `shellcue` CLI to the desktop app
 2. `fig.proto` - Protocol for communication between client Fig.js apps like
    autocomplete and the desktop app
 3. `figterm.proto` - Protocol for sending commands from the CLI to `figterm`
@@ -34,10 +34,10 @@ brew install protobuf
 To compile protos, run:
 
 ```shell
-./build-ts.sh
+pnpm -C proto build
 ```
 
-## Deprecating an Amazon Q API
+## Deprecating a ShellCue API
 
 1. Edit `fig.proto` and add the `[deprecated=true]` annotation to the relevant
    fields

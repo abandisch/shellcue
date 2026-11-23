@@ -1,10 +1,10 @@
 {
   "name": "@shellcue/eslint-config",
-  "private": "true",
+  "private": true,
   "version": "0.1.0",
   "license": "MIT OR Apache-2.0",
-  "author": "Amazon Web Services",
-  "repository": "https://github.com/aws/amazon-q-developer-cli",
+  "author": "ShellCue contributors",
+  "repository": "https://github.com/abandisch/shellcue",
   "type": "module",
   "exports": {
     "./*": "./dist/*.config.js"

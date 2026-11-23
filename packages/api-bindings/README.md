@@ -1,14 +1,10 @@
 # TS API Bindings
 
-The Typescript definitions for the Amazon Q for command line API.
-
-Note: The protobuf definitions are updated automatically whenever withfig/proto-api is changed.
+The Typescript definitions for the ShellCue API.
 
 ## Documenting the API
 
 We use [TSDocs](https://tsdoc.org) to comment the exported namespaces of the API.
-
-> See `docs-generators/fig-api` folder in `public-site-nextjs` repo for reference.
 
 ### Supported TSDoc tags and custom TSDoc tags
 
@@ -48,8 +44,3 @@ We use [TSDocs](https://tsdoc.org) to comment the exported namespaces of the API
 
 Our API bindings export a list of named namespace objects each one exporting a group of Symbols.
 In our docs file we document each of the exported symbols grouped according to their namespace.
-
-### Publishing
-
-This package will be published automatically when pushed to any branch of
-this repo.
