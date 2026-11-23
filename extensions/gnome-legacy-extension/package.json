@@ -1,9 +1,9 @@
 {
-  "name": "amazon-q-for-cli-legacy-gnome-integration",
-  "author": "Amazon Q Developer",
+  "name": "shellcue-legacy-gnome-integration",
+  "author": "ShellCue contributors",
   "version": "1.0.0",
-  "description": "Adds support for Amazon Q for CLI completions with GNOME shell",
-  "repository": "git@github.com/aws/amazon-q-for-command-line",
+  "description": "Adds support for ShellCue completions with GNOME shell",
+  "repository": "https://github.com/abandisch/shellcue",
   "private": true,
   "type": "module",
   "devDependencies": {

@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<interface domain="amazon-q-for-cli-legacy-gnome-integration">
+<interface domain="shellcue-legacy-gnome-integration">
   <requires lib="gtk" version="3.0"/>
-  <template class="AmazonQForCliLegacyPreferencesWindow" parent="GtkBox">
+  <template class="ShellCueLegacyPreferencesWindow" parent="GtkBox">
     <property name="orientation">vertical</property>
     <property name="margin-top">30</property>
     <property name="margin-bottom">30</property>
@@ -16,7 +16,7 @@
 
     <child>
       <object class="GtkLabel">
-        <property name="label" translatable="yes">Amazon Q for CLI Legacy GNOME Integration</property>
+        <property name="label" translatable="yes">ShellCue Legacy GNOME Integration</property>
         <property name="margin-top">8</property>
         <property name="margin-bottom">6</property>
         <style>
@@ -27,7 +27,7 @@
 
     <child>
       <object class="GtkLabel">
-        <property name="label" translatable="yes">Adds support for Amazon Q for CLI completions with GNOME shell</property>
+        <property name="label" translatable="yes">Adds support for ShellCue completions with GNOME shell</property>
         <property name="margin-bottom">42</property>
       </object>
     </child>
@@ -95,7 +95,7 @@
 
                     <child>
                       <object class="GtkButton" id="other_preferences">
-                        <property name="label" translatable="yes">Open Amazon Q</property>
+                        <property name="label" translatable="yes">Open ShellCue</property>
                         <style>
                           <class name="flat"/>
                         </style>

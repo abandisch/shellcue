@@ -129,7 +129,7 @@ def build_macos_ime(
     targets: Sequence[str] = [],
 ) -> pathlib.Path:
     fig_input_method_bin = build_cargo_bin(release=release, package="fig_input_method", targets=targets)
-    input_method_app = pathlib.Path("build/CodeWhispererInputMethod.app")
+    input_method_app = pathlib.Path("build/ShellCueInputMethod.app")
 
     (input_method_app / "Contents/MacOS").mkdir(parents=True, exist_ok=True)
 
@@ -220,10 +220,10 @@ def build_macos_desktop_app(
     # Specifies the app is an "agent app"
     run_cmd(["defaults", "write", info_plist_path, "LSUIElement", "-bool", "TRUE"])
 
-    info("Copying CodeWhispererInputMethod.app into bundle")
+    info("Copying ShellCueInputMethod.app into bundle")
     helpers_dir = app_path / "Contents/Helpers"
     helpers_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(ime_app, helpers_dir.joinpath("CodeWhispererInputMethod.app"))
+    shutil.copytree(ime_app, helpers_dir.joinpath("ShellCueInputMethod.app"))
 
     info("Copying autocomplete into bundle")
     shutil.copytree(npm_packages.autocomplete_path, app_path / "Contents/Resources/autocomplete")

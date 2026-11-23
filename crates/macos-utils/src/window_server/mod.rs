@@ -78,8 +78,7 @@ const BLOCKED_BUNDLE_IDS: &[&str] = &[
     "com.apple.WebKit.WebContent",
     "com.apple.WebKit.Networking",
     "com.apple.controlcenter",
-    "com.mschrage.fig",
-    "com.amazon.codewhisperer",
+    "com.bandisch-apps.shellcue",
 ];
 
 // TODO: -- should this use fig_util crate Terminal struct?
@@ -204,7 +203,7 @@ trait WindowServerHandler {
     fn did_launch_application(&mut self, notif: &NSNotification);
 }
 
-const OBSERVER_CLASS_NAME: &str = "CodeWhisperer_WindowServerObserver";
+const OBSERVER_CLASS_NAME: &str = "ShellCue_WindowServerObserver";
 
 pub struct Ivars {
     handler: *mut c_void,

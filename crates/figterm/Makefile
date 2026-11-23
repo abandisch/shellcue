@@ -27,7 +27,7 @@ else
 CARGO_BUILD := debug
 endif
 
-BINARY_NAME ?= qterm
+BINARY_NAME ?= shellcue-term
 CRATE_NAME  ?= figterm
 
 ### Build for each platform
@@ -77,22 +77,22 @@ build-native-release:
 
 install-native: build-native
 	mkdir -p $(HOME)/.local/bin/
-	rm -rf $(HOME)/.local/bin/*qterm*
+	rm -rf $(HOME)/.local/bin/*shellcue-term*
 	install $(TARGET_DIR)/debug/$(CRATE_NAME) $(HOME)/.local/bin/$(BINARY_NAME)
 
 install-native-release: build-native-release
 	mkdir -p $(HOME)/.local/bin/
-	rm -rf $(HOME)/.local/bin/*figterm*
+	rm -rf $(HOME)/.local/bin/*shellcue-term*
 	install $(TARGET_DIR)/release/$(CRATE_NAME) $(HOME)/.local/bin/$(BINARY_NAME)
 
 install-native-usr: build-native
-	for exe in $(shell ls /usr/bin | grep figterm | xargs -I % printf "'%'\n") figterm; do \
+	for exe in $(shell ls /usr/bin | grep shellcue-term | xargs -I % printf "'%'\n") shellcue-term; do \
 		sudo rm -f "/usr/bin/$${exe}"; \
 		sudo install $(TARGET_DIR)/debug/$(CRATE_NAME) "/usr/bin/$${exe}"; \
 	done
 
 install-native-usr-release: build-native-release
-	for exe in $(shell ls /usr/bin | grep figterm | xargs -I % printf "'%'\n") figterm; do \
+	for exe in $(shell ls /usr/bin | grep shellcue-term | xargs -I % printf "'%'\n") shellcue-term; do \
 		sudo rm -f "/usr/bin/$${exe}"; \
 		sudo install $(TARGET_DIR)/release/$(CRATE_NAME) "/usr/bin/$${exe}"; \
 	done

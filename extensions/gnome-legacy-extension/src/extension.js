@@ -13,7 +13,7 @@ const PanelMenu = imports.ui.panelMenu;
 
 const Me = ExtensionUtils.getCurrentExtension();
 
-const LOG_PREFIX = "Amazon Q GNOME Integration:";
+const LOG_PREFIX = "ShellCue GNOME Integration:";
 
 /**
  * @param {any[]} messages
@@ -34,7 +34,7 @@ function debug(...messages) {
 }
 
 const RESOURCES_PREFIX =
-  "resource:///org/gnome/shell/extensions/amazon-q-for-cli-legacy-gnome-integration";
+  "resource:///org/gnome/shell/extensions/shellcue-legacy-gnome-integration";
 
 /**
  * @template {string[]} T
@@ -57,7 +57,7 @@ function resource(...resources) {
  * @returns {string} The path to the desktop socket.
  */
 function socket_address() {
-  return `${GLib.getenv("XDG_RUNTIME_DIR")}/cwrun/desktop.sock`;
+  return `${GLib.getenv("XDG_RUNTIME_DIR")}/shellcue/desktop.sock`;
 }
 
 /**
@@ -225,7 +225,7 @@ class Extension extends GObject.Object {
   #disconnecting;
 
   /**
-   * The widget representing the Amazon Q icon in the panel.
+   * The widget representing the ShellCue icon in the panel.
    *
    * @private @property @type {PanelIcon|null}
    */
@@ -236,7 +236,7 @@ class Extension extends GObject.Object {
 
   /**
    * The extension settings, set according to the schema defined under
-   * [../schemas/org.gnome.shell.extensions.amazon-q-for-cli-legacy-gnome-integration.gschema.xml]
+   * [../schemas/org.gnome.shell.extensions.shellcue-legacy-gnome-integration.gschema.xml]
    *
    * @private @property @type {import("../types/.gio").Settings|null}
    */
@@ -310,7 +310,7 @@ class Extension extends GObject.Object {
 
     // Load and register resource files.
     this.#resources = Gio.Resource.load(
-      `${Me.path}/resources/amazon-q-for-cli-legacy-gnome-integration.gresource`,
+      `${Me.path}/resources/shellcue-legacy-gnome-integration.gresource`,
     );
     Gio.resources_register(this.#resources);
 
@@ -333,12 +333,7 @@ class Extension extends GObject.Object {
             GObject.BindingFlags.DEFAULT,
           );
         }
-        Main.panel.addToStatusArea(
-          "AmazonQForCLI",
-          this.#panel_icon,
-          0,
-          "right",
-        );
+        Main.panel.addToStatusArea("ShellCue", this.#panel_icon, 0, "right");
         // If the panel icon exists, destroy it.
       } else if (this.#panel_icon !== null) {
         this.#connected_binding.unbind();
@@ -358,7 +353,7 @@ class Extension extends GObject.Object {
         "connected",
         GObject.BindingFlags.DEFAULT,
       );
-      Main.panel.addToStatusArea("AmazonQForCLI", this.#panel_icon, 0, "right");
+      Main.panel.addToStatusArea("ShellCue", this.#panel_icon, 0, "right");
     }
 
     this.#connect();
@@ -845,7 +840,7 @@ class PanelIcon extends PanelMenu.Button {
   /** @override @method @param {import("../types/.clutter").Event} event @returns {boolean} */
   vfunc_event(event) {
     if (this.menu && event.type() === Clutter.EventType.BUTTON_PRESS)
-      imports.misc.util.spawn(["q"]);
+      imports.misc.util.spawn(["shellcue"]);
 
     return Clutter.EVENT_PROPAGATE;
   }
@@ -977,10 +972,10 @@ class Queue {
  */
 // eslint-disable-next-line no-unused-vars
 function init() {
-  debug("Initializing Amazon Q for CLI Extension");
+  debug("Initializing ShellCue Extension");
   var ExtensionClass = GObject.registerClass(
     {
-      GTypeName: "AmazonQForCLIExtension",
+      GTypeName: "ShellCueExtension",
       Properties: {
         connected: GObject.ParamSpec.boolean(
           "connected",
@@ -996,7 +991,7 @@ function init() {
 
   GObject.registerClass(
     {
-      GTypeName: "AmazonQForCLIPanelIcon",
+      GTypeName: "ShellCuePanelIcon",
       Properties: {
         connected: GObject.ParamSpec.boolean(
           "connected",

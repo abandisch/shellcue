@@ -1,5 +1,5 @@
 /node_modules
 /types/.*.d.ts
-/amazon-q-for-cli-gnome-integration@aws.amazon.com.zip
+/shellcue-gnome-integration@bandisch-apps.com.zip
 /.vscode
 /dist

@@ -393,9 +393,9 @@ mod tests {
 
     const TEST_DESKTOP_ENTRY: &str = r#"[Desktop Entry]
 Categories=Development;
-Exec=q-desktop
-Icon=q-desktop
-Name=q_desktop
+Exec=shellcue-desktop
+Icon=shellcue-desktop
+Name=shellcue-desktop
 Terminal=false
 Type=Application"#;
 
