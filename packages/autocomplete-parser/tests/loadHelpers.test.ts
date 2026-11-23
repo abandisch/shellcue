@@ -1,4 +1,4 @@
-import * as wrappers from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
+import * as wrappers from "@shellcue/api-bindings-wrappers";
 import * as loadHelpers from "../src/loadHelpers";
 import { MOST_USED_SPECS } from "../src/constants";
 import { vi, describe, beforeEach, afterEach, it, expect } from "vitest";

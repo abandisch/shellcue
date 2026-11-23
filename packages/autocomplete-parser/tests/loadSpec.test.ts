@@ -1,9 +1,6 @@
 import logger from "loglevel";
-import {
-  SETTINGS,
-  updateSettings,
-} from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
-import { SpecLocationSource } from "@aws/amazon-q-developer-cli-shared/utils";
+import { SETTINGS, updateSettings } from "@shellcue/api-bindings-wrappers";
+import { SpecLocationSource } from "@shellcue/shared/utils";
 import {
   getSpecPath,
   loadFigSubcommand,
@@ -31,10 +28,8 @@ vi.mock("../src/loadHelpers", () => ({
   isDiffVersionedSpec: vi.fn(),
 }));
 
-vi.mock("@aws/amazon-q-developer-cli-api-bindings-wrappers", async () => ({
-  ...(await vi.importActual(
-    "@aws/amazon-q-developer-cli-api-bindings-wrappers",
-  )),
+vi.mock("@shellcue/api-bindings-wrappers", async () => ({
+  ...(await vi.importActual("@shellcue/api-bindings-wrappers")),
   executeCommand: vi.fn(),
 }));
 

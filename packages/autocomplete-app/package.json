@@ -1,5 +1,5 @@
 {
-  "name": "@amzn/autocomplete-app",
+  "name": "@shellcue/autocomplete-app",
   "private": true,
   "version": "1.0.0",
   "repository": "https://github.com/aws/amazon-q-developer-cli",
@@ -19,11 +19,11 @@
     "Safari >= 11"
   ],
   "dependencies": {
-    "@aws/amazon-q-developer-cli-api-bindings-wrappers": "workspace:^",
-    "@aws/amazon-q-developer-cli-api-bindings": "workspace:~",
-    "@aws/amazon-q-developer-cli-autocomplete-parser": "workspace:^",
-    "@aws/amazon-q-developer-cli-proto": "workspace:^",
-    "@aws/amazon-q-developer-cli-shell-parser": "workspace:^",
+    "@shellcue/api-bindings-wrappers": "workspace:^",
+    "@shellcue/api-bindings": "workspace:~",
+    "@shellcue/autocomplete-parser": "workspace:^",
+    "@shellcue/proto": "workspace:^",
+    "@shellcue/shell-parser": "workspace:^",
     "@bufbuild/protobuf": "2.4.0",
     "@fig/autocomplete-helpers": "^2.0.0",
     "@fig/autocomplete-shared": "^1.1.2",
@@ -39,10 +39,10 @@
     "zustand": "^4.5.6"
   },
   "devDependencies": {
-    "@amzn/eslint-config": "workspace:^",
-    "@amzn/types": "workspace:^",
-    "@aws/amazon-q-developer-cli-fuzzysort": "workspace:^",
-    "@aws/amazon-q-developer-cli-shared": "workspace:^",
+    "@shellcue/eslint-config": "workspace:^",
+    "@shellcue/types": "workspace:^",
+    "@shellcue/fuzzysort": "workspace:^",
+    "@shellcue/shared": "workspace:^",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.15.20",
     "@types/react-dom": "^18.3.5",
@@ -63,7 +63,7 @@
     "vitest": "^3.0.8"
   },
   "bundledDependencies": [
-    "@aws/amazon-q-developer-cli-fuzzysort",
-    "@aws/amazon-q-developer-cli-shared"
+    "@shellcue/fuzzysort",
+    "@shellcue/shared"
   ]
 }

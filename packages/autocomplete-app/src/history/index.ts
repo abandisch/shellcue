@@ -9,21 +9,21 @@ import {
   getSpecPath,
   loadSubcommandCached,
   serializeSpecLocation,
-} from "@aws/amazon-q-developer-cli-autocomplete-parser";
+} from "@shellcue/autocomplete-parser";
 import {
   getAllCommandsWithAlias,
   AliasMap,
   Command,
-} from "@aws/amazon-q-developer-cli-shell-parser";
-import { SpecLocationSource } from "@aws/amazon-q-developer-cli-shared/utils";
-import { Suggestion } from "@aws/amazon-q-developer-cli-shared/internal";
+} from "@shellcue/shell-parser";
+import { SpecLocationSource } from "@shellcue/shared/utils";
+import { Suggestion } from "@shellcue/shared/internal";
 import {
   executeCommand,
   executeLoginShell,
   SETTINGS,
   getSetting,
-} from "@aws/amazon-q-developer-cli-api-bindings-wrappers";
-import { History } from "@aws/amazon-q-developer-cli-api-bindings";
+} from "@shellcue/api-bindings-wrappers";
+import { History } from "@shellcue/api-bindings";
 import {
   AnnotatedCommand,
   HistoryEntry,

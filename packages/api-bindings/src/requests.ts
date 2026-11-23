@@ -43,7 +43,7 @@ import {
   UpdateSettingsPropertyRequestSchema,
   WriteFileRequest,
   WriteFileRequestSchema,
-} from "@aws/amazon-q-developer-cli-proto/fig";
+} from "@shellcue/proto/fig";
 import { sendMessage } from "./core.js";
 import { create } from "@bufbuild/protobuf";
 

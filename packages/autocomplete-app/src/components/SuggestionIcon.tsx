@@ -1,9 +1,6 @@
 import React from "react";
-import {
-  Suggestion,
-  SuggestionType,
-} from "@aws/amazon-q-developer-cli-shared/internal";
-import { localProtocol } from "@aws/amazon-q-developer-cli-shared/utils";
+import { Suggestion, SuggestionType } from "@shellcue/shared/internal";
+import { localProtocol } from "@shellcue/shared/utils";
 import {
   classifyIcon,
   cssUrl,
