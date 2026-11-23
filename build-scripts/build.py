@@ -10,13 +10,13 @@ from util import (
     run_cmd,
     run_cmd_output,
     info,
+    fail,
     set_executable,
     version,
     tauri_product_name,
 )
 from rust import cargo_cmd_name, rust_targets, rust_env, get_target_triple
 from test import run_cargo_tests, run_clippy
-from importlib import import_module
 from const import (
     APP_NAME,
     CLI_BINARY_NAME,
@@ -24,13 +24,11 @@ from const import (
     DESKTOP_BINARY_NAME,
     DESKTOP_PACKAGE_NAME,
     DESKTOP_PACKAGE_PATH,
-    DMG_NAME,
     LINUX_LEGACY_GNOME_EXTENSION_UUID,
     LINUX_MODERN_GNOME_EXTENSION_UUID,
     LINUX_PACKAGE_NAME,
     PTY_BINARY_NAME,
     PTY_PACKAGE_NAME,
-    TAURI_PRODUCT_NAME,
 )
 
 BUILD_DIR_RELATIVE = pathlib.Path(os.environ.get("BUILD_DIR") or "build")
@@ -40,12 +38,6 @@ BUILD_DIR = BUILD_DIR_RELATIVE.absolute()
 @dataclass
 class NpmBuildOutput:
     autocomplete_path: pathlib.Path
-
-
-@dataclass
-class MacOSBuildOutput:
-    dmg_path: pathlib.Path
-    app_gztar_path: pathlib.Path
 
 
 def build_npm_packages(run_test: bool = True) -> NpmBuildOutput:
@@ -101,176 +93,13 @@ def build_cargo_bin(
     else:
         target_subdir = "debug"
 
-    # create "universal" binary for macos
-    if isDarwin():
-        out_path = BUILD_DIR / f"{output_name or package}-universal-apple-darwin"
-        args = [
-            "lipo",
-            "-create",
-            "-output",
-            out_path,
-        ]
-        for target in targets:
-            args.append(pathlib.Path("target") / target / target_subdir / package)
-        run_cmd(args)
-        return out_path
-    else:
-        # linux does not cross compile arch
-        target = targets[0]
-        target_path = pathlib.Path("target") / target / target_subdir / package
-        out_path = BUILD_DIR / "bin" / f"{(output_name or package)}-{target}"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(target_path, out_path)
-        return out_path
-
-
-def build_macos_ime(
-    release: bool,
-    targets: Sequence[str] = [],
-) -> pathlib.Path:
-    fig_input_method_bin = build_cargo_bin(release=release, package="fig_input_method", targets=targets)
-    input_method_app = pathlib.Path("build/ShellCueInputMethod.app")
-
-    (input_method_app / "Contents/MacOS").mkdir(parents=True, exist_ok=True)
-
-    shutil.copy2(
-        fig_input_method_bin,
-        input_method_app / "Contents/MacOS/fig_input_method",
-    )
-    shutil.copy2(
-        "crates/fig_input_method/Info.plist",
-        input_method_app / "Contents/Info.plist",
-    )
-    shutil.copytree(
-        "crates/fig_input_method/resources",
-        input_method_app / "Contents/Resources",
-        dirs_exist_ok=True,
-    )
-
-    return input_method_app
-
-
-def macos_tauri_config(cli_path: pathlib.Path, pty_path: pathlib.Path, target: str) -> str:
-    config = {
-        "tauri": {
-            "bundle": {
-                "externalBin": [
-                    # Note that tauri bundling expects the target triple to be appended to each binary,
-                    # but in the config it must be strippled.
-                    str(cli_path).removesuffix(f"-{target}"),
-                    str(pty_path).removesuffix(f"-{target}"),
-                ],
-            }
-        }
-    }
-    return json.dumps(config)
-
-
-def build_macos_desktop_app(
-    release: bool,
-    pty_path: pathlib.Path,
-    cli_path: pathlib.Path,
-    npm_packages: NpmBuildOutput,
-    features: Mapping[str, Sequence[str]] | None = None,
-    targets: Sequence[str] = [],
-) -> MacOSBuildOutput:
-    target = get_target_triple()
-
-    info("Building macos ime")
-    ime_app = build_macos_ime(release=release, targets=targets)
-
-    info("Building tauri config")
-    tauri_config_path = pathlib.Path(DESKTOP_PACKAGE_PATH) / "build-config.json"
-    tauri_config_path.write_text(macos_tauri_config(cli_path=cli_path, pty_path=pty_path, target=target))
-
-    info("Building", DESKTOP_PACKAGE_NAME)
-
-    cargo_tauri_args = [
-        "cargo-tauri",
-        "build",
-        "--config",
-        "build-config.json",
-        "--target",
-        target,
-    ]
-
-    if features and features.get(DESKTOP_PACKAGE_NAME):
-        cargo_tauri_args.extend(["--features", ",".join(features[DESKTOP_PACKAGE_NAME])])
-
-    run_cmd(
-        cargo_tauri_args,
-        cwd=DESKTOP_PACKAGE_PATH,
-        env={**os.environ, **rust_env(release=release), "BUILD_DIR": BUILD_DIR},
-    )
-
-    # clean up
-    tauri_config_path.unlink(missing_ok=True)
-
-    target_bundle = pathlib.Path(f"target/{target}/release/bundle/macos/{TAURI_PRODUCT_NAME}.app")
-    app_path = BUILD_DIR / f"{APP_NAME}.app"
-    shutil.rmtree(app_path, ignore_errors=True)
-    shutil.copytree(target_bundle, app_path)
-
-    info_plist_path = app_path / "Contents/Info.plist"
-
-    # Change the display name of the app
-    run_cmd(["defaults", "write", info_plist_path, "CFBundleDisplayName", APP_NAME])
-    run_cmd(["defaults", "write", info_plist_path, "CFBundleName", APP_NAME])
-
-    # Specifies the app is an "agent app"
-    run_cmd(["defaults", "write", info_plist_path, "LSUIElement", "-bool", "TRUE"])
-
-    info("Copying ShellCueInputMethod.app into bundle")
-    helpers_dir = app_path / "Contents/Helpers"
-    helpers_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(ime_app, helpers_dir.joinpath("ShellCueInputMethod.app"))
-
-    info("Copying autocomplete into bundle")
-    shutil.copytree(npm_packages.autocomplete_path, app_path / "Contents/Resources/autocomplete")
-
-    info("Copying specs into bundle")
-    shutil.copytree(compiled_specs_path(), app_path / "Contents/Resources/specs")
-
-    # Add symlinks
-    # os.symlink(f"./{CLI_BINARY_NAME}", app_path / "Contents/MacOS/cli")
-    # os.symlink(f"./{PTY_BINARY_NAME}", app_path / "Contents/MacOS/pty")
-
-    dmg_path = BUILD_DIR / f"{DMG_NAME}.dmg"
-    dmg_path.unlink(missing_ok=True)
-
-    dmg_resources_dir = pathlib.Path("bundle/dmg")
-    background_path = dmg_resources_dir / "background.png"
-    icon_path = dmg_resources_dir / "VolumeIcon.icns"
-
-    # we use a dynamic import here so that we dont use this dep
-    # on other platforms
-    dmgbuild = import_module("dmgbuild")
-
-    dmgbuild.build_dmg(
-        volume_name=APP_NAME,
-        filename=dmg_path,
-        settings={
-            "format": "ULFO",
-            "background": str(background_path),
-            "icon": str(icon_path),
-            "text_size": 12,
-            "icon_size": 160,
-            "window_rect": ((100, 100), (660, 400)),
-            "files": [str(app_path)],
-            "symlinks": {"Applications": "/Applications"},
-            "icon_locations": {
-                app_path.name: (180, 170),
-                "Applications": (480, 170),
-            },
-        },
-    )
-
-    info(f"Created dmg at {dmg_path}")
-
-    app_gztar_path = shutil.make_archive(str(BUILD_DIR / APP_NAME), "gztar", app_path.parent, app_path.name)
-    info(f"Created app tar.gz at {app_gztar_path}")
-
-    return MacOSBuildOutput(dmg_path=dmg_path, app_gztar_path=pathlib.Path(app_gztar_path))
+    # linux does not cross compile arch
+    target = targets[0]
+    target_path = pathlib.Path("target") / target / target_subdir / package
+    out_path = BUILD_DIR / "bin" / f"{(output_name or package)}-{target}"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(target_path, out_path)
+    return out_path
 
 
 def linux_tauri_config(
@@ -502,9 +331,7 @@ def build_linux_full(
 
 
 def generate_sha(path: pathlib.Path) -> pathlib.Path:
-    if isDarwin():
-        shasum_output = run_cmd_output(["shasum", "-a", "256", path])
-    elif isLinux():
+    if isLinux():
         shasum_output = run_cmd_output(["sha256sum", path])
     else:
         raise Exception("Unsupported platform")
@@ -527,6 +354,13 @@ def build(
     run_lints: bool = True,
     run_test: bool = True,
 ) -> BinaryPaths:
+    if isDarwin():
+        fail(
+            "macOS packaging is not done by this script; it runs in the macOS build VM, "
+            "driven from this Mac by scripts/vm/mac-host.sh (see: scripts/vm/mac-host.sh --help)"
+        )
+        raise SystemExit(1)
+
     cargo_features: Mapping[str, Sequence[str]] = {}
 
     info(f"Release: {release}")
@@ -568,19 +402,7 @@ def build(
         targets=targets,
     )
 
-    if isDarwin():
-        info(f"Building {DMG_NAME}.dmg")
-        build_paths = build_macos_desktop_app(
-            release=release,
-            cli_path=cli_path,
-            pty_path=pty_path,
-            npm_packages=npm_packages,
-            features=cargo_features,
-            targets=targets,
-        )
-
-        generate_sha(build_paths.dmg_path)
-    elif isLinux():
+    if isLinux():
         build_linux_full(
             release=release,
             cli_path=cli_path,

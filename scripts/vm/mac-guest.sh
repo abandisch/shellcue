@@ -10,12 +10,20 @@ export PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 export CI=true NO_COLOR=1 FORCE_COLOR=0 TERM=dumb TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1
 
 REPO_URL="https://github.com/abandisch/shellcue.git"
+SPECS_REPO_URL="https://github.com/abandisch/shellcue-specs.git"
+SPECS_SRC="$HOME/shellcue-specs"
 TOOLS="$HOME/tools"
 DL="$TOOLS/dl"
 ENV_FILE="$TOOLS/env.sh"
 SRC="$HOME/shellcue"
 LOCK_DIR="$HOME/.shellcue-mac-guest.lock"
 TEST_LIMIT_SECS=5400
+STAMPS="$SRC/build/stamps"
+OUT="$SRC/build/macos"
+APP_BUNDLE_ID="com.bandisch-apps.shellcue"
+IME_BUNDLE_ID="com.bandisch-apps.inputmethod.shellcue"
+# Apple Silicon needs macOS 11 or later; Rust's own floor for this target is the same.
+MIN_MACOS="11.0"
 
 # Change together with scripts/vm/guest.sh, .mise.toml (node, pnpm, protoc), package.json (packageManager) and rust-toolchain.toml (Rust); enter_src enforces it.
 NODE_VERSION="26.13.0"
@@ -35,7 +43,7 @@ PNPM_URL="https://github.com/pnpm/pnpm/releases/download/v$PNPM_VERSION/pnpm-dar
 PROTOC_URL="https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOC_VERSION/protoc-$PROTOC_VERSION-osx-aarch_64.zip"
 RUSTUP_URL="https://static.rust-lang.org/rustup/archive/$RUSTUP_VERSION/$RUST_TRIPLE/rustup-init"
 
-STEPS="tools clone fetch web rust-check rust-test info"
+STEPS="tools clone fetch web specs rust-check rust-test build bundle info"
 
 usage() {
     cat <<'EOF'
@@ -47,10 +55,16 @@ Runs inside the ShellCue macOS build VM (Apple Silicon). Steps:
   clone <branch> <sha>     clone/fetch the public repo into ~/shellcue and check out <sha> detached
   fetch                    cargo fetch --locked --target <host triple> and pnpm install --frozen-lockfile --ignore-scripts
   web                      pnpm run build and pnpm run test:ci (both always run)
+  specs                    fetch the specs repo at the commit in packages/spec-compiler/SPECS_COMMIT and compile it
+                           into ~/shellcue/build/specs; needs 'fetch' first (nothing from the specs repo is installed or run)
   rust-check               cargo check --locked --workspace --all-targets --exclude fig_desktop-fuzz
   rust-test                cargo test --locked --no-fail-fast --workspace --lib --bins --test '*' --exclude fig_desktop-fuzz,
                            with SSH_CLIENT, SSH_CONNECTION and SSH_TTY unset; stopped after 90 minutes
-  info                     OS, arch, Command Line Tools, tool versions, disk free, checked-out commit, git status
+  build                    cargo build --locked --release of the four programs that go into the app (arm64 only)
+  bundle                   assemble ~/shellcue/build/macos/ShellCue.app and ShellCue.dmg from the outputs of web, specs
+                           and build, each of which must have succeeded at the checked-out commit. The app is NOT
+                           signed with a certificate, and it and the disk image stay in the VM.
+  info                    OS, arch, Command Line Tools, tool versions, disk free, checked-out commit, git status
 
 Every step first refuses to run if the VM has a shared or network folder mounted. Every step except info also
 refuses to run while an earlier step, or a cargo, rustc, node or pnpm process it left behind, is still running.
@@ -359,7 +373,7 @@ check_pins() {
 }
 
 enter_src() {
-    [[ -d "$SRC/.git" ]] || die "no checkout at $SRC; run the 'clone' step first"
+    [[ -d "$SRC/.git" ]] || die "no checkout at $SRC; on the Mac run: scripts/vm/mac-host.sh clone"
     cd "$SRC"
     printf '    checkout: %s @ %s\n' "$SRC" "$(git rev-parse HEAD)"
     check_pins
@@ -368,6 +382,34 @@ enter_src() {
         git diff --quiet HEAD -- "$f" \
             || die "$f differs from the committed version; lockfiles are refreshed only in the Linux VM. In the VM's own Terminal run: git -C ~/shellcue checkout HEAD -- $f"
     done
+}
+
+require_clean_tree() {
+    local dirty
+    dirty="$(git status --porcelain=v1 --untracked-files=no)"
+    if [[ -n "$dirty" ]]; then
+        printf '    tracked files modified in %s:\n' "$SRC" >&2
+        printf '%s\n' "$dirty" | sed 's/^/      /' >&2
+        die "refusing to work from modified tracked files. In the VM's own Terminal run: git -C ~/shellcue checkout HEAD -- .   and then run this step again"
+    fi
+}
+
+# A stamp records the commit a step last succeeded at, so bundle never mixes outputs of different commits.
+write_stamp() {
+    mkdir -p -- "$STAMPS"
+    git rev-parse HEAD > "$STAMPS/$1"
+}
+
+require_stamps() {
+    local head name got missing=""
+    head="$(git rev-parse HEAD)"
+    for name in "$@"; do
+        got="$(cat -- "$STAMPS/$name" 2>/dev/null || true)"
+        printf '    stamp %s: %s\n' "$name" "${got:-never}"
+        [[ "$got" == "$head" ]] || missing="$missing $name"
+    done
+    [[ -z "$missing" ]] \
+        || die "these steps have not succeeded at the checked-out commit $head:$missing. On the Mac run, in the order fetch web specs build, scripts/vm/mac-host.sh step NAME for fetch and for each step named here, then this step again"
 }
 
 host_triple() {
@@ -491,9 +533,67 @@ step_web() {
     require_no_args "$@"
     load_env
     enter_src
+    require_clean_tree
+    rm -f -- "$STAMPS/web"
     run_part build pnpm run build
     run_part test:ci pnpm run test:ci
     end_parts
+    write_stamp web
+}
+
+# Nothing in the specs checkout is installed or executed (no pnpm/npm/node there); the compiler only reads it.
+fetch_specs() {
+    local pin="$1" head
+    rm -rf -- "$SPECS_SRC"
+    git init -q "$SPECS_SRC"
+    git -C "$SPECS_SRC" remote add origin "$SPECS_REPO_URL"
+    GIT_TERMINAL_PROMPT=0 git -C "$SPECS_SRC" fetch --depth 1 origin "$pin" \
+        || die "cannot fetch $pin from $SPECS_REPO_URL (is the commit pushed and the repository public?)"
+    git -C "$SPECS_SRC" checkout -q --detach FETCH_HEAD
+    head="$(git -C "$SPECS_SRC" rev-parse HEAD)"
+    [[ "$head" == "$pin" ]] || die "specs HEAD is $head after checkout, expected $pin"
+    git -C "$SPECS_SRC" log -1 --oneline
+}
+
+tree_sha256() {
+    local sum
+    sum="$(cd "$1" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256)"
+    printf '%s' "${sum%% *}"
+}
+
+step_specs() {
+    require_no_args "$@"
+    load_env
+    enter_src
+    require_clean_tree
+    rm -f -- "$STAMPS/specs"
+    local pin_file="packages/spec-compiler/SPECS_COMMIT" sha_re='^[0-9a-f]{40}$' lines pin
+    [[ -f "$pin_file" ]] || die "$pin_file not found"
+    lines="$(wc -l < "$pin_file")"
+    pin="$(< "$pin_file")"
+    [[ "$lines" -eq 1 && "$pin" =~ $sha_re ]] \
+        || die "$pin_file must be exactly one line holding a 40 lowercase hex commit sha"
+    printf '    specs pin: %s\n' "$pin"
+    fetch_specs "$pin"
+
+    local out="$SRC/build/specs" license="$SPECS_SRC/LICENSE" tree
+    rm -rf -- "$out"
+    mkdir -p -- "$SRC/build"
+    [[ -d packages/spec-compiler/node_modules/esbuild ]] \
+        || die "packages/spec-compiler/node_modules/esbuild is missing; run the 'fetch' step first"
+    [[ -d "$SPECS_SRC/src" && ! -L "$SPECS_SRC/src" ]] || die "$SPECS_SRC/src is not a real directory"
+    node packages/spec-compiler/src/cli.js --src "$SPECS_SRC/src" --out "$out"
+    # The checkout is untrusted: a symlinked LICENSE could pull in any file from the VM.
+    [[ -f "$license" && ! -L "$license" ]] || die "$license is not a regular file"
+    cp -P -- "$license" "$out/LICENSE"
+    [[ -f "$out/index.json" ]] || die "the spec compiler wrote no index.json into $out"
+    printf '    .js files: %s\n' "$(find "$out" -type f -name '*.js' | wc -l | tr -d ' ')"
+    printf '    size: %s\n' "$(du -sh -- "$out" | cut -f1)"
+    printf '    index.json sha256: %s\n' "$(sha256_of "$out/index.json")"
+    tree="$(tree_sha256 "$out")"
+    [[ -n "$tree" ]] || die "cannot hash the files under $out"
+    printf '    tree sha256 (sha256 of the sorted per-file sha256 list; the Linux VM prints the same figure): %s\n' "$tree"
+    write_stamp specs
 }
 
 step_rust_check() {
@@ -523,6 +623,194 @@ step_rust_test() {
         printf '    the test run exceeded %s minutes; cargo and the processes it started were stopped (exit status %s)\n' "$((TEST_LIMIT_SECS / 60))" "$rc"
     fi
     [[ $rc -eq 0 ]] || exit "$rc"
+}
+
+# Package name, then the name the program has inside the app; change together with crates/fig_util/src/consts.rs.
+APP_PROGRAMS="fig_desktop:shellcue-desktop q_cli:shellcue figterm:shellcue-term"
+IME_PROGRAM="fig_input_method"
+
+require_arm64() {
+    local archs
+    [[ -f "$1" && ! -L "$1" ]] || die "$1 is missing or is not a regular file"
+    archs="$(lipo -archs "$1")" || die "lipo cannot read $1"
+    [[ "$archs" == "arm64" ]] || die "$1 holds '$archs', expected exactly 'arm64'"
+}
+
+step_build() {
+    require_no_args "$@"
+    load_env
+    enter_src
+    require_clean_tree
+    rm -f -- "$STAMPS/build"
+    local triple pair pkg
+    triple="$(host_triple)"
+    # Same settings as the build script inherited from Amazon, minus the Intel half of its universal build.
+    export MACOSX_DEPLOYMENT_TARGET="$MIN_MACOS" CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_LTO=thin
+    export RUSTFLAGS="-C force-frame-pointers=yes"
+    export SHELLCUE_BUILD_TARGET_TRIPLE="$triple"
+    SHELLCUE_BUILD_HASH="$(git rev-parse HEAD)"
+    # The commit's own time: a changing value would recompile every crate of ours on each run.
+    SHELLCUE_BUILD_DATETIME="$(TZ=UTC git log -1 --date=format-local:%Y-%m-%dT%H:%M:%SZ --format=%cd)"
+    [[ -n "$SHELLCUE_BUILD_DATETIME" ]] || die "cannot read the time of the checked-out commit"
+    export SHELLCUE_BUILD_HASH SHELLCUE_BUILD_DATETIME
+    printf '    target: %s, minimum macOS %s, release profile with thin LTO\n' "$triple" "$MIN_MACOS"
+    printf '    build hash: %s\n    build time (the time of the commit): %s\n' "$SHELLCUE_BUILD_HASH" "$SHELLCUE_BUILD_DATETIME"
+    printf -- '--> cargo build --release is running (well over ten minutes on a first run); the short terminal view shows nothing more until it ends\n'
+    cargo build --locked --release -p fig_desktop -p q_cli -p figterm -p "$IME_PROGRAM"
+    for pair in $APP_PROGRAMS "$IME_PROGRAM:$IME_PROGRAM"; do
+        pkg="${pair%%:*}"
+        require_arm64 "target/release/$pkg"
+        printf '    %s sha256: %s\n' "target/release/$pkg" "$(sha256_of "target/release/$pkg")"
+    done
+    write_stamp build
+}
+
+workspace_version() {
+    local v version_re='^[0-9]+\.[0-9]+\.[0-9]+$'
+    v="$(sed -n '/^\[workspace\.package\]/,/^\[/s/^version = "\(.*\)"$/\1/p' Cargo.toml)"
+    [[ "$v" =~ $version_re ]] || die "cannot read a plain x.y.z version from [workspace.package] in Cargo.toml (got '$v')"
+    printf '%s' "$v"
+}
+
+# Build outputs come from third-party build tools: only plain files and folders are copied into the app.
+copy_plain_tree() {
+    local src="$1" dest="$2" odd
+    [[ -d "$src" && ! -L "$src" ]] || die "$src is not a real directory"
+    odd="$(find "$src" ! -type f ! -type d -print | sed -n 1,5p)"
+    [[ -z "$odd" ]] || die "$src holds something that is neither a plain file nor a folder: $odd"
+    [[ ! -e "$dest" ]] || die "$dest already exists"
+    cp -R -- "$src" "$dest"
+}
+
+plist_value() {
+    plutil -extract "$2" raw -o - -- "$1" || die "$1 has no readable key $2"
+}
+
+require_plist_value() {
+    local got
+    got="$(plist_value "$1" "$2")"
+    [[ "$got" == "$3" ]] || die "$1: $2 is '$got', expected '$3'"
+}
+
+write_app_plist() {
+    local file="$1" version="$2"
+    cat > "$file" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>ShellCue</string>
+    <key>CFBundleExecutable</key>
+    <string>shellcue-desktop</string>
+    <key>CFBundleIconFile</key>
+    <string>icon.icns</string>
+    <key>CFBundleIdentifier</key>
+    <string>$APP_BUNDLE_ID</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>ShellCue</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$version</string>
+    <key>CFBundleVersion</key>
+    <string>$version</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.developer-tools</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>$MIN_MACOS</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>
+EOF
+    plutil -lint -- "$file" >/dev/null || die "$file is not a valid property list"
+}
+
+assemble_app() {
+    local app="$1" version="$2" c="$1/Contents" ime="$1/Contents/Helpers/ShellCueInputMethod.app/Contents"
+    local ime_plist="crates/fig_input_method/Info.plist" pair pkg name
+    mkdir -p -- "$c/MacOS" "$c/Resources" "$ime/MacOS"
+
+    for pair in $APP_PROGRAMS; do
+        pkg="${pair%%:*}"
+        name="${pair##*:}"
+        require_arm64 "target/release/$pkg"
+        cp -- "target/release/$pkg" "$c/MacOS/$name"
+    done
+    write_app_plist "$c/Info.plist" "$version"
+    printf 'APPL????' > "$c/PkgInfo"
+    cp -- crates/fig_desktop/icons/icon.icns "$c/Resources/icon.icns"
+    [[ -f packages/autocomplete-app/dist/index.html ]] || die "packages/autocomplete-app/dist/index.html is missing; run the 'web' step"
+    copy_plain_tree packages/autocomplete-app/dist "$c/Resources/autocomplete"
+    [[ -f build/specs/index.json ]] || die "build/specs/index.json is missing; run the 'specs' step"
+    copy_plain_tree build/specs "$c/Resources/specs"
+
+    # The input method's build.rs writes its Info.plist into the crate folder on every build of that crate.
+    [[ -f "$ime_plist" && ! -L "$ime_plist" ]] || die "$ime_plist is missing; run the 'build' step"
+    plutil -lint -- "$ime_plist" >/dev/null || die "$ime_plist is not a valid property list"
+    require_plist_value "$ime_plist" CFBundleIdentifier "$IME_BUNDLE_ID"
+    require_plist_value "$ime_plist" CFBundleExecutable "$IME_PROGRAM"
+    require_plist_value "$ime_plist" CFBundleShortVersionString "$version"
+    require_arm64 "target/release/$IME_PROGRAM"
+    cp -- "target/release/$IME_PROGRAM" "$ime/MacOS/$IME_PROGRAM"
+    cp -- "$ime_plist" "$ime/Info.plist"
+    copy_plain_tree crates/fig_input_method/resources "$ime/Resources"
+
+    chmod -R u=rwX,go=rX "$app"
+    xattr -cr "$app"
+}
+
+make_dmg() {
+    local app="$1" dmg="$2" root="$OUT/dmg-root"
+    mkdir -- "$root"
+    cp -R -- "$app" "$root/ShellCue.app"
+    ln -s /Applications "$root/Applications"
+    hdiutil create -volname ShellCue -srcfolder "$root" -fs HFS+ -format ULFO -ov "$dmg"
+    hdiutil verify "$dmg"
+    rm -rf -- "$root"
+}
+
+step_bundle() {
+    require_no_args "$@"
+    check_command_line_tools
+    enter_src
+    require_clean_tree
+    require_stamps web specs build
+    local version app="$OUT/ShellCue.app" dmg="$OUT/ShellCue.dmg" f sum tree
+    version="$(workspace_version)"
+    printf -- '--> version %s, bundle id %s\n' "$version" "$APP_BUNDLE_ID"
+
+    [[ "$OUT" == "$HOME/shellcue/build/macos" ]] || die "refusing to clear an unexpected output folder: $OUT"
+    rm -rf -- "$OUT"
+    mkdir -p -- "$OUT"
+    assemble_app "$app" "$version"
+
+    printf '    Info.plist:\n'
+    plutil -p -- "$app/Contents/Info.plist" | sed 's/^/      /'
+    printf '    programs:\n'
+    for f in MacOS/shellcue-desktop MacOS/shellcue MacOS/shellcue-term "Helpers/ShellCueInputMethod.app/Contents/MacOS/$IME_PROGRAM"; do
+        printf '      %s  Contents/%s\n' "$(sha256_of "$app/Contents/$f")" "$f"
+    done
+    printf '    files: %s, size: %s\n' "$(find "$app" -type f | wc -l | tr -d ' ')" "$(du -sh -- "$app" | cut -f1)"
+    tree="$(tree_sha256 "$app")"
+    [[ -n "$tree" ]] || die "cannot hash the files under $app"
+    printf '    app tree sha256: %s\n' "$tree"
+    printf -- '--> assembled %s (not signed with a certificate; signing is a later step)\n' "$app"
+
+    printf -- '--> making the disk image (a minute or two)\n'
+    make_dmg "$app" "$dmg"
+    sum="$(sha256_of "$dmg")"
+    printf '%s  ShellCue.dmg\n' "$sum" > "$dmg.sha256"
+    printf '    disk image size: %s\n' "$(du -h -- "$dmg" | cut -f1)"
+    printf -- '--> disk image %s sha256 %s\n' "$dmg" "$sum"
+    printf -- '--> the app and the disk image stay in the VM; nothing is copied to the Mac\n'
 }
 
 step_info() {
@@ -580,6 +868,9 @@ main() {
         web) step_web "$@" ;;
         rust-check) step_rust_check "$@" ;;
         rust-test) step_rust_test "$@" ;;
+        specs) step_specs "$@" ;;
+        build) step_build "$@" ;;
+        bundle) step_bundle "$@" ;;
         info) step_info "$@" ;;
         *) die "step '$step' is listed in STEPS but has no handler" ;;
     esac

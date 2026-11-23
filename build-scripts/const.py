@@ -8,9 +8,6 @@ DESKTOP_BINARY_NAME = "shellcue-desktop"
 TAURI_PRODUCT_NAME = "shellcue-desktop"
 LINUX_PACKAGE_NAME = "shellcue"
 
-# macos specific
-DMG_NAME = APP_NAME
-
 # Linux specific
 LINUX_LEGACY_GNOME_EXTENSION_UUID = "shellcue-legacy-gnome-integration@bandisch-apps.com"
 LINUX_MODERN_GNOME_EXTENSION_UUID = "shellcue-gnome-integration@bandisch-apps.com"

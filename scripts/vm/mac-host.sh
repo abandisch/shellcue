@@ -1,11 +1,11 @@
 #!/bin/bash
 # Runs on the owner's Mac and drives the throwaway macOS build VM over SSH; must stay compatible with macOS /bin/bash 3.2.
-# Never runs anything the VM produced, never copies a file out of the VM, writes only to ../vm-logs and ../vm-mac/known_hosts.
+# Never runs anything the VM produced, never copies a file out of the VM (the app and disk image stay there), writes only to ../vm-logs and ../vm-mac/known_hosts.
 
 set -euo pipefail
 
 GUEST_FILE="shellcue-mac-guest.sh"
-GUEST_STEPS="tools clone fetch web rust-check rust-test info"
+GUEST_STEPS="tools clone fetch web specs rust-check rust-test build bundle info"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -101,6 +101,12 @@ Typical first session (replace the whole word after "trust" with the SHA256:... 
   scripts/vm/mac-host.sh step web
   scripts/vm/mac-host.sh step rust-check
   scripts/vm/mac-host.sh step rust-test
+
+To build the app and its disk image. Both are unsigned and stay in the VM, in ~/shellcue/build/macos. fetch and web
+above must have succeeded at the same commit; after every new clone repeat fetch, web, specs, build and bundle:
+  scripts/vm/mac-host.sh step specs
+  scripts/vm/mac-host.sh step build
+  scripts/vm/mac-host.sh step bundle
 EOF
 }
 

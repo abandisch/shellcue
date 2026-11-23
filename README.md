@@ -62,7 +62,6 @@ cargo install typos-cli
 For MacOS development make sure the right targets are installed:
 
 ```shell
-rustup target add x86_64-apple-darwin
 rustup target add aarch64-apple-darwin
 ```
 
@@ -148,7 +147,8 @@ Several projects live here:
 Other folder to be aware of
 
 - [`build-scripts/`](build-scripts/) - Contains all python scripts to build
-  and test the project on macOS and Linux
+  and test the project on Linux and to test it on macOS; the macOS app bundle
+  is assembled in the macOS build VM, driven by `scripts/vm/mac-host.sh`
 - [`crates/`](crates/) - Contains all internal rust crates
 - [`packages/`](packages/) - Contains all internal npm packages
 - [`proto/`](proto/) -
