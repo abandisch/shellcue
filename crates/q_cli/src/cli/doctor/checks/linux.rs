@@ -435,7 +435,7 @@ mod tests {
         );
 
         let ctx = Context::builder()
-            .with_process_info(ProcessInfo::from_exes(vec!["q", "bash", "kitty"]))
+            .with_process_info(ProcessInfo::from_exes(vec!["shellcue", "bash", "kitty"]))
             .with_env(Env::from_slice(&[
                 ("XDG_CURRENT_DESKTOP", "ubuntu:GNOME"),
                 ("GTK_IM_MODULE", "ibus"),

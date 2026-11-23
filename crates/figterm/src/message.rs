@@ -32,7 +32,7 @@ use fig_proto::remote::{
     clientbound,
     hostbound,
 };
-use fig_util::env_var::PROCESS_LAUNCHED_BY_Q;
+use fig_util::env_var::PROCESS_LAUNCHED_BY_SHELLCUE;
 use flume::Sender;
 use tokio::process::Command;
 use tracing::{
@@ -124,7 +124,7 @@ fn create_command(executable: impl AsRef<Path>, working_directory: impl AsRef<Pa
     cmd.env_remove("CLICOLOR");
     cmd.env_remove("COLORTERM");
     cmd.envs([
-        (PROCESS_LAUNCHED_BY_Q, "1"),
+        (PROCESS_LAUNCHED_BY_SHELLCUE, "1"),
         ("HISTFILE", ""),
         ("HISTCONTROL", "ignoreboth"),
         ("TERM", "xterm-256color"),
@@ -251,7 +251,7 @@ pub async fn process_figterm_request(
             *INSERT_ON_NEW_CMD.lock().unwrap() = Some((command.text, command.bracketed, command.execute));
             Ok(None)
         },
-        FigtermRequest::SetBuffer(_) => Err(anyhow::anyhow!("SetBuffer is not supported in figterm")),
+        FigtermRequest::SetBuffer(_) => Err(anyhow::anyhow!("SetBuffer is not supported in shellcue-term")),
         FigtermRequest::UpdateShellContext(request) => {
             if request.update_environment_variables {
                 *SHELL_ENVIRONMENT_VARIABLES.lock().unwrap() = request.environment_variables;
@@ -285,10 +285,10 @@ pub async fn process_figterm_message(
                     }
                 },
                 Ok(None) => {},
-                Err(err) => error!(%err, "Failed to process figterm message"),
+                Err(err) => error!(%err, "Failed to process shellcue-term message"),
             }
         },
-        None => warn!("Qterm message with no request"),
+        None => warn!("shellcue-term message with no request"),
     }
     Ok(())
 }

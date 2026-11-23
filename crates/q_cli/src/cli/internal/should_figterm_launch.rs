@@ -9,8 +9,8 @@ use std::process::ExitCode;
 use fig_os_shim::Context;
 use fig_util::Terminal;
 
-const Q_FORCE_FIGTERM_LAUNCH: &str = "Q_FORCE_FIGTERM_LAUNCH";
-const Q_TERM_DISABLED: &str = "Q_TERM_DISABLED";
+const SHELLCUE_FORCE_TERM_LAUNCH: &str = "SHELLCUE_FORCE_TERM_LAUNCH";
+const SHELLCUE_TERM_DISABLED: &str = "SHELLCUE_TERM_DISABLED";
 const INSIDE_EMACS: &str = "INSIDE_EMACS";
 const TERM_PROGRAM: &str = "TERM_PROGRAM";
 const WARP_TERMINAL: &str = "WarpTerminal";
@@ -183,27 +183,27 @@ fn should_launch(ctx: &Context, quiet: bool) -> u8 {
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn should_figterm_launch_exit_status(ctx: &Context, quiet: bool) -> u8 {
-    use fig_util::env_var::PROCESS_LAUNCHED_BY_Q;
+    use fig_util::env_var::PROCESS_LAUNCHED_BY_SHELLCUE;
 
     let env = ctx.env();
 
-    if env.get_os(Q_FORCE_FIGTERM_LAUNCH).is_some() {
+    if env.get_os(SHELLCUE_FORCE_TERM_LAUNCH).is_some() {
         if !quiet {
-            writeln!(stdout(), "✅ {Q_FORCE_FIGTERM_LAUNCH}").ok();
+            writeln!(stdout(), "✅ {SHELLCUE_FORCE_TERM_LAUNCH}").ok();
         }
         return 0;
     }
 
-    if env.get_os(Q_TERM_DISABLED).is_some() {
+    if env.get_os(SHELLCUE_TERM_DISABLED).is_some() {
         if !quiet {
-            writeln!(stdout(), "❌ {Q_TERM_DISABLED}").ok();
+            writeln!(stdout(), "❌ {SHELLCUE_TERM_DISABLED}").ok();
         }
         return 1;
     }
 
-    if env.get_os(PROCESS_LAUNCHED_BY_Q).is_some() {
+    if env.get_os(PROCESS_LAUNCHED_BY_SHELLCUE).is_some() {
         if !quiet {
-            writeln!(stdout(), "❌ {PROCESS_LAUNCHED_BY_Q}").ok();
+            writeln!(stdout(), "❌ {PROCESS_LAUNCHED_BY_SHELLCUE}").ok();
         }
         return 1;
     }
@@ -286,8 +286,8 @@ mod tests {
         Platform,
     };
     use fig_util::env_var::{
-        PROCESS_LAUNCHED_BY_Q,
-        Q_TERM,
+        PROCESS_LAUNCHED_BY_SHELLCUE,
+        SHELLCUE_TERM,
     };
 
     use super::*;
@@ -395,12 +395,14 @@ mod tests {
     #[test]
     fn override_tests() {
         let tests = [
-            test(Q_FORCE_FIGTERM_LAUNCH)
-                .env(&[(Q_FORCE_FIGTERM_LAUNCH, "1")])
+            test(SHELLCUE_FORCE_TERM_LAUNCH)
+                .env(&[(SHELLCUE_FORCE_TERM_LAUNCH, "1")])
                 .expect(0),
-            test(Q_TERM_DISABLED).env(&[(Q_TERM_DISABLED, "1")]).expect(1),
-            test(PROCESS_LAUNCHED_BY_Q)
-                .env(&[(PROCESS_LAUNCHED_BY_Q, "1")])
+            test(SHELLCUE_TERM_DISABLED)
+                .env(&[(SHELLCUE_TERM_DISABLED, "1")])
+                .expect(1),
+            test(PROCESS_LAUNCHED_BY_SHELLCUE)
+                .env(&[(PROCESS_LAUNCHED_BY_SHELLCUE, "1")])
                 .expect(1),
             test(INSIDE_EMACS).env(&[(INSIDE_EMACS, "1")]).expect(1),
             test(WARP_TERMINAL).env(&[(TERM_PROGRAM, WARP_TERMINAL)]).expect(1),
@@ -496,17 +498,17 @@ mod tests {
     #[test]
     fn ssh_session_tests() {
         let tests = [
-            test(format!("In SSH and {Q_TERM} is not set"))
+            test(format!("In SSH and {SHELLCUE_TERM} is not set"))
                 .parent_exe("/usr/bin/zsh")
                 .env(&[("SSH_CLIENT", "1")])
                 .expect(1),
-            test(format!("In SSH and {Q_TERM} is set"))
+            test(format!("In SSH and {SHELLCUE_TERM} is set"))
                 .parent_exe("/usr/bin/zsh")
-                .env(&[("SSH_CONNECTION", "1"), (Q_TERM, "1")])
+                .env(&[("SSH_CONNECTION", "1"), (SHELLCUE_TERM, "1")])
                 .expect(1),
-            test("In SSH with Q_PARENT set")
+            test("In SSH with SHELLCUE_PARENT set")
                 .parent_exe("/usr/bin/zsh")
-                .env(&[("SSH_CLIENT", "1"), ("Q_PARENT", "1")])
+                .env(&[("SSH_CLIENT", "1"), ("SHELLCUE_PARENT", "1")])
                 .expect(1),
             test("on linux in SSH with valid parent and valid grandparent exe")
                 .os(Os::Linux)

@@ -94,7 +94,7 @@ pub enum Processes {
     App,
 }
 
-/// The Amazon Q CLI
+/// ShellCue: terminal autocomplete
 #[deny(missing_docs)]
 #[derive(Debug, PartialEq, Subcommand)]
 pub enum CliRootCommands {
@@ -110,7 +110,7 @@ pub enum CliRootCommands {
     /// Setup cli components
     #[command(alias("install"))]
     Setup(internal::InstallArgs),
-    /// Uninstall Amazon Q
+    /// Uninstall ShellCue
     #[command(hide = true)]
     Uninstall {
         /// Force uninstall
@@ -160,9 +160,9 @@ pub enum CliRootCommands {
 
 const HELP_TEXT: &str = color_print::cstr! {"
 
-<magenta,em>q</magenta,em> (Amazon Q CLI)
+<magenta,em>shellcue</magenta,em> (ShellCue)
 
-<magenta,em>Popular Subcommands</magenta,em>              <black!><em>Usage:</em> q [subcommand]</black!>
+<magenta,em>Popular Subcommands</magenta,em>       <black!><em>Usage:</em> shellcue [subcommand]</black!>
 ╭────────────────────────────────────────────────────╮
 │ <em>doctor</em>       <black!>Debug installation issues</black!>             │ 
 │ <em>settings</em>     <black!>Customize appearance & behavior</black!>       │
@@ -170,7 +170,7 @@ const HELP_TEXT: &str = color_print::cstr! {"
 ╰────────────────────────────────────────────────────╯
 
 <black!>To see all subcommands, use:</black!>
- <black!>❯</black!> q --help-all
+ <black!>❯</black!> shellcue --help-all
 ㅤ
 "};
 
@@ -203,7 +203,7 @@ impl Cli {
                 ),
                 false => None,
             },
-            log_to_stdout: fig_os_shim::Env::new().q_log_stdout() || self.verbose > 0,
+            log_to_stdout: fig_os_shim::Env::new().shellcue_log_stdout() || self.verbose > 0,
             log_file_path: match fig_log::get_log_level_max() >= Level::DEBUG {
                 true => Some("cli.log".to_owned()),
                 false => None,

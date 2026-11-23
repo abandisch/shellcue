@@ -16,7 +16,7 @@ use fig_integrations::shell::{
     When,
 };
 use fig_os_shim::Context;
-use fig_util::env_var::Q_SHELL;
+use fig_util::env_var::SHELLCUE_SHELL;
 use fig_util::{
     CLI_BINARY_NAME,
     PRODUCT_NAME,
@@ -31,7 +31,7 @@ use crate::util::app_path_from_bundle_id;
 
 const SHELL_INTEGRATIONS_ENABLED_STATE_KEY: &str = "shell-integrations.enabled";
 
-static IS_SNAPSHOT_TEST: LazyLock<bool> = LazyLock::new(|| fig_os_shim::Env::new().q_init_snapshot_test());
+static IS_SNAPSHOT_TEST: LazyLock<bool> = LazyLock::new(|| fig_os_shim::Env::new().shellcue_init_snapshot_test());
 
 #[derive(Debug, Args, PartialEq, Eq)]
 pub struct InitArgs {
@@ -124,7 +124,7 @@ async fn shell_init(shell: &Shell, when: &When, rcfile: &Option<String>) -> Resu
     if let Some(parent_process) = get_parent_process_exe() {
         to_source.push(assign_shell_variable(
             shell,
-            Q_SHELL,
+            SHELLCUE_SHELL,
             if *IS_SNAPSHOT_TEST {
                 Path::new("/bin/zsh").display()
             } else {
@@ -140,13 +140,18 @@ async fn shell_init(shell: &Shell, when: &When, rcfile: &Option<String>) -> Resu
         } else {
             should_figterm_launch_exit_status(&Context::new(), true)
         };
-        to_source.push(assign_shell_variable(shell, "SHOULD_QTERM_LAUNCH", status, false));
+        to_source.push(assign_shell_variable(
+            shell,
+            "SHOULD_SHELLCUE_TERM_LAUNCH",
+            status,
+            false,
+        ));
     }
 
     let is_jetbrains_terminal = Terminal::is_jetbrains_terminal();
 
-    if let Some(path) = fig_settings::settings::get_string_opt("qterm.path") {
-        to_source.push(assign_shell_variable(shell, "Q_TERM_PATH", path, false));
+    if let Some(path) = fig_settings::settings::get_string_opt("shellcue-term.path") {
+        to_source.push(assign_shell_variable(shell, "SHELLCUE_TERM_PATH", path, false));
     }
 
     let shell_integration_source = shell.get_fig_integration_source(when);
@@ -180,7 +185,7 @@ async fn shell_init(shell: &Shell, when: &When, rcfile: &Option<String>) -> Resu
             to_source.push(guard_source(
                 shell,
                 false,
-                "Q_JETBRAINS_SHELL_INTEGRATION",
+                "SHELLCUE_JETBRAINS_SHELL_INTEGRATION",
                 GuardAssignment::BeforeSourcing,
                 source,
             ));
@@ -210,7 +215,7 @@ fn shell_integrations_disabled_code(shell: Shell) -> String {
     guard_source(
         &shell,
         false,
-        "Q_SHELL_INTEGRATION_DISABLED",
+        "SHELLCUE_SHELL_INTEGRATION_DISABLED",
         GuardAssignment::AfterSourcing,
         format!(
             "printf '{PRODUCT_NAME} shell integration is disabled.\\nRe-enable by running: {}\\n'",
@@ -224,7 +229,7 @@ fn input_method_prompt_code(shell: Shell, terminal: &Terminal) -> String {
     guard_source(
         &shell,
         false,
-        "Q_INPUT_METHOD_PROMPT",
+        "SHELLCUE_INPUT_METHOD_PROMPT",
         GuardAssignment::AfterSourcing,
         format!(
             "printf '\\n🚀 {PRODUCT_NAME} supports {terminal}!\\n\\nEnable integrations with {terminal} by \

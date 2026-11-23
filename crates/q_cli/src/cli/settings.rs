@@ -54,6 +54,9 @@ impl SettingsArgs {
         match self.cmd {
             Some(SettingsSubcommands::Open) => {
                 let file = directories::settings_path().context("Could not get settings path")?;
+                if let Some(parent) = file.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
                 if cli_context.context().platform().os() == Os::Mac {
                     tokio::process::Command::new("open").arg(file).output().await?;
                     Ok(ExitCode::SUCCESS)
@@ -67,7 +70,8 @@ impl SettingsArgs {
             None => match &self.key {
                 Some(key) => match (&self.value, self.delete) {
                     (Some(_), true) => Err(eyre::eyre!(
-                        "the argument '--delete' cannot be used with '[VALUE]'\n Usage: q settings --delete {key}"
+                        "the argument '--delete' cannot be used with '[VALUE]'\n Usage: {CLI_BINARY_NAME} settings \
+                         --delete {key}"
                     )),
                     (None, false) => match fig_settings::settings::get_value(key)? {
                         Some(value) => {
@@ -126,7 +130,8 @@ impl SettingsArgs {
                 None => {
                     if self.delete {
                         return Err(eyre::eyre!(
-                            "the argument '--delete' requires a <KEY>\n Usage: q settings --delete <KEY>"
+                            "the argument '--delete' requires a <KEY>\n Usage: {CLI_BINARY_NAME} settings \
+                             --delete <KEY>"
                         ));
                     }
 
@@ -159,14 +164,14 @@ mod tests {
     #[test]
     fn settings_overview_text() {
         assert_eq!(
-            settings_overview(Path::new("/home/user/.local/share/amazon-q/settings.json")),
-            "Settings file: /home/user/.local/share/amazon-q/settings.json\n\
+            settings_overview(Path::new("/home/user/.config/shellcue/settings.json")),
+            "Settings file: /home/user/.config/shellcue/settings.json\n\
              \n\
              Usage:\n  \
-             q settings <key>            Print a value\n  \
-             q settings <key> <value>    Set a value\n  \
-             q settings --delete <key>   Remove a value\n  \
-             q settings open             Open the settings file"
+             shellcue settings <key>            Print a value\n  \
+             shellcue settings <key> <value>    Set a value\n  \
+             shellcue settings --delete <key>   Remove a value\n  \
+             shellcue settings open             Open the settings file"
         );
     }
 }

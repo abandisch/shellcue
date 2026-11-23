@@ -1,7 +1,8 @@
 use clap::Parser;
+use fig_util::PTY_BINARY_NAME;
 
 #[derive(Debug, Parser, PartialEq, Eq)]
-#[command(version, about)]
+#[command(version, about, name = PTY_BINARY_NAME)]
 pub struct Cli {
     #[arg(last = true)]
     pub command: Option<Vec<String>>,
@@ -15,6 +16,12 @@ mod tests {
     fn verify_app() {
         use clap::CommandFactory;
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn command_name() {
+        use clap::CommandFactory;
+        assert_eq!(Cli::command().get_name(), "shellcue-term");
     }
 
     #[test]

@@ -9,21 +9,21 @@ pub const APP_PROCESS_NAME: &str = "q-desktop";
 /// The name configured under `"package.productName"` in the tauri.conf.json file.
 pub const TAURI_PRODUCT_NAME: &str = "q_desktop";
 
-pub const CLI_BINARY_NAME: &str = "q";
-pub const PTY_BINARY_NAME: &str = "qterm";
+pub const CLI_BINARY_NAME: &str = "shellcue";
+pub const PTY_BINARY_NAME: &str = "shellcue-term";
 
 pub const CLI_CRATE_NAME: &str = "q_cli";
 
-pub const PRODUCT_NAME: &str = "Amazon Q";
+pub const PRODUCT_NAME: &str = "ShellCue";
 
-pub const RUNTIME_DIR_NAME: &str = "cwrun";
+pub const RUNTIME_DIR_NAME: &str = "shellcue";
 
 /// Data directory name used in paths like ~/.local/share/{DATA_DIR_NAME}
 #[cfg(unix)]
-pub const DATA_DIR_NAME: &str = "amazon-q";
+pub const DATA_DIR_NAME: &str = "shellcue";
 
 /// Backup directory name
-pub const BACKUP_DIR_NAME: &str = ".amazon-q.dotfiles.bak";
+pub const BACKUP_DIR_NAME: &str = ".shellcue.dotfiles.bak";
 
 /// Build time env vars
 pub mod build {
@@ -71,26 +71,26 @@ pub mod env_var {
     }
 
     define_env_vars! {
-        /// The UUID of the current parent qterm instance
-        QTERM_SESSION_ID = "QTERM_SESSION_ID",
+        /// The UUID of the current parent shellcue-term instance
+        SHELLCUE_TERM_SESSION_ID = "SHELLCUE_TERM_SESSION_ID",
 
-        /// Set if qterm is running, contains the version
-        Q_TERM = "Q_TERM",
+        /// Set if shellcue-term is running, contains the version
+        SHELLCUE_TERM = "SHELLCUE_TERM",
 
         /// Sets the current log level
-        Q_LOG_LEVEL = "Q_LOG_LEVEL",
+        SHELLCUE_LOG_LEVEL = "SHELLCUE_LOG_LEVEL",
 
         /// Overrides the ZDOTDIR environment variable
-        Q_ZDOTDIR = "Q_ZDOTDIR",
+        SHELLCUE_ZDOTDIR = "SHELLCUE_ZDOTDIR",
 
-        /// Indicates a process was launched by Amazon Q
-        PROCESS_LAUNCHED_BY_Q = "PROCESS_LAUNCHED_BY_Q",
+        /// Indicates a process was launched by ShellCue
+        PROCESS_LAUNCHED_BY_SHELLCUE = "PROCESS_LAUNCHED_BY_SHELLCUE",
 
-        /// The shell to use in qterm
-        Q_SHELL = "Q_SHELL",
+        /// The shell to use in shellcue-term
+        SHELLCUE_SHELL = "SHELLCUE_SHELL",
 
         /// Indicates the user is debugging the shell
-        Q_DEBUG_SHELL = "Q_DEBUG_SHELL"
+        SHELLCUE_DEBUG_SHELL = "SHELLCUE_DEBUG_SHELL"
     }
 }
 

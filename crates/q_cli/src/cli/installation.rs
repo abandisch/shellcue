@@ -175,15 +175,15 @@ mod tests {
             next_steps(),
             "\nNext steps:\n  \
              1. Open a new terminal window so the shell integration loads.\n  \
-             2. Run `q doctor` if completions do not appear."
+             2. Run `shellcue doctor` if completions do not appear."
         );
         #[cfg(target_os = "macos")]
         assert_eq!(
             next_steps(),
             "\nNext steps:\n  \
              1. Open a new terminal window so the shell integration loads.\n  \
-             2. Grant Amazon Q the Accessibility permission in System Settings > Privacy & Security > Accessibility.\n  \
-             3. Run `q doctor` if completions do not appear."
+             2. Grant ShellCue the Accessibility permission in System Settings > Privacy & Security > Accessibility.\n  \
+             3. Run `shellcue doctor` if completions do not appear."
         );
     }
 }

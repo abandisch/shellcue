@@ -9,6 +9,7 @@ use fig_os_shim::Context;
 use fig_util::directories::{
     fig_data_dir_ctx,
     local_webview_data_dir,
+    settings_dir,
 };
 use tracing::warn;
 
@@ -39,6 +40,13 @@ pub(crate) async fn uninstall_desktop(ctx: &Context) -> Result<(), Error> {
         fs.remove_dir_all(&data_dir_path)
             .await
             .map_err(|err| warn!(?err, "Failed to remove data dir"))
+            .ok();
+    }
+    let settings_dir_path = settings_dir()?;
+    if fs.exists(&settings_dir_path) {
+        fs.remove_dir_all(&settings_dir_path)
+            .await
+            .map_err(|err| warn!(?err, "Failed to remove settings dir"))
             .ok();
     }
     let webview_dir_path = local_webview_data_dir(ctx)?;

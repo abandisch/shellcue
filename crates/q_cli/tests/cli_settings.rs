@@ -21,9 +21,9 @@ fn settings_get() -> Result<()> {
 fn settings_bare_prints_overview() -> Result<()> {
     cli()
         .arg("settings")
-        .env_remove("Q_LOG_STDOUT")
+        .env_remove("SHELLCUE_LOG_STDOUT")
         .assert()
         .success()
-        .stdout(predicate::str::starts_with("Settings file: ").and(predicate::str::contains("q settings open")));
+        .stdout(predicate::str::starts_with("Settings file: ").and(predicate::str::contains("shellcue settings open")));
     Ok(())
 }

@@ -72,7 +72,7 @@ pub fn update(
                 actions: actions.clone(),
                 override_actions: true,
             }) {
-                error!(%err, %session.id, "Failed sending command to figterm session");
+                error!(%err, %session.id, "Failed sending command to shellcue-term session");
             }
         } else {
             session.intercept = InterceptMode::Unlocked;
@@ -83,7 +83,7 @@ pub fn update(
                 actions: vec![],
                 override_actions: false,
             }) {
-                error!(%err, %session.id, "Failed sending command to figterm session");
+                error!(%err, %session.id, "Failed sending command to shellcue-term session");
             }
         }
     }

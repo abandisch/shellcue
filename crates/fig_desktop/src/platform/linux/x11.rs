@@ -232,7 +232,7 @@ fn process_window(
         return Ok(());
     }
 
-    debug!("Selected window is not Fig");
+    debug!("Selected window is not ShellCue");
 
     if let Some(terminal) = WM_CLASS_ALLOWLIST.get(&wm_class.as_str()) {
         *platform_state.active_terminal.lock() = Some(terminal.clone());

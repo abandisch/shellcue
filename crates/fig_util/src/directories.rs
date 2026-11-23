@@ -108,7 +108,7 @@ pub fn home_local_bin_ctx(ctx: &Context) -> Result<PathBuf> {
     Ok(path)
 }
 
-/// The q data directory
+/// The ShellCue data directory
 ///
 /// - Linux: `$XDG_DATA_HOME/{data_dir}` or `$HOME/.local/share/{data_dir}`
 /// - MacOS: `$HOME/Library/Application Support/{data_dir}`
@@ -140,7 +140,7 @@ pub fn local_data_dir<Ctx: FsProvider + EnvProvider + PlatformProvider>(ctx: &Ct
     }
 }
 
-/// The q cache directory
+/// The ShellCue cache directory
 ///
 /// - Linux: `$XDG_CACHE_HOME/{data_dir}` or `$HOME/.cache/{data_dir}`
 /// - MacOS: `$HOME/Library/Caches/{data_dir}`
@@ -184,10 +184,10 @@ pub fn runtime_dir() -> Result<PathBuf> {
     dir.ok_or(DirectoryError::NoRuntimeDirectory)
 }
 
-/// The q sockets directory of the local q installation
+/// The sockets directory of the local ShellCue installation
 ///
-/// - Linux: $XDG_RUNTIME_DIR/cwrun
-/// - MacOS: $TMPDIR/cwrun
+/// - Linux: $XDG_RUNTIME_DIR/shellcue
+/// - MacOS: $TMPDIR/shellcue
 pub fn sockets_dir() -> Result<PathBuf> {
     Ok(runtime_dir()?.join(RUNTIME_DIR_NAME))
 }
@@ -196,8 +196,8 @@ pub fn sockets_dir() -> Result<PathBuf> {
 ///
 /// Returns the same as `sockets_dir`
 ///
-/// - Linux: $XDG_RUNTIME_DIR/cwrun
-/// - MacOS: $TMPDIR/cwrun
+/// - Linux: $XDG_RUNTIME_DIR/shellcue
+/// - MacOS: $TMPDIR/shellcue
 pub fn host_sockets_dir() -> Result<PathBuf> {
     sockets_dir()
 }
@@ -217,15 +217,15 @@ pub fn autocomplete_specs_dir() -> Result<PathBuf> {
     Ok(autocomplete_dir()?.join("specs"))
 }
 
-/// The directory to all the fig logs
-/// - Linux: `/tmp/fig/$USER/logs`
-/// - MacOS: `$TMPDIR/logs`
+/// The directory to all the ShellCue logs
+///
+/// - Linux: `$XDG_RUNTIME_DIR/shellcue/logs`
+/// - MacOS: `$TMPDIR/shellcue/logs`
 pub fn logs_dir() -> Result<PathBuf> {
-    use crate::CLI_BINARY_NAME;
-    Ok(runtime_dir()?.join(format!("{CLI_BINARY_NAME}log")))
+    Ok(sockets_dir()?.join("logs"))
 }
 
-/// The directory where fig places all data-sensitive backups
+/// The directory where ShellCue places all data-sensitive backups
 ///
 /// - Linux/MacOS: `$HOME/{backup_dir}`
 pub fn backups_dir() -> Result<PathBuf> {
@@ -245,25 +245,24 @@ pub fn utc_backup_dir() -> Result<PathBuf> {
 
 /// The desktop app socket path
 ///
-/// - MacOS: `$TMPDIR/cwrun/desktop.sock`
-/// - Linux: `$XDG_RUNTIME_DIR/cwrun/desktop.sock`
+/// - MacOS: `$TMPDIR/shellcue/desktop.sock`
+/// - Linux: `$XDG_RUNTIME_DIR/shellcue/desktop.sock`
 pub fn desktop_socket_path() -> Result<PathBuf> {
     Ok(host_sockets_dir()?.join("desktop.sock"))
 }
 
 /// The path to local remote socket
 ///
-/// - MacOS: `$TMPDIR/cwrun/remote.sock`
-/// - Linux: `$XDG_RUNTIME_DIR/cwrun/remote.sock`
+/// - MacOS: `$TMPDIR/shellcue/remote.sock`
+/// - Linux: `$XDG_RUNTIME_DIR/shellcue/remote.sock`
 pub fn local_remote_socket_path() -> Result<PathBuf> {
     Ok(host_sockets_dir()?.join("remote.sock"))
 }
 
 /// Get path to a figterm socket
 ///
-/// - Linux/Macos: `/var/tmp/fig/%USERNAME%/figterm/$SESSION_ID.sock`
-/// - MacOS: `$TMPDIR/cwrun/t/$SESSION_ID.sock`
-/// - Linux: `$XDG_RUNTIME_DIR/cwrun/t/$SESSION_ID.sock`
+/// - MacOS: `$TMPDIR/shellcue/t/$SESSION_ID.sock`
+/// - Linux: `$XDG_RUNTIME_DIR/shellcue/t/$SESSION_ID.sock`
 pub fn figterm_socket_path(session_id: impl Display) -> Result<PathBuf> {
     Ok(sockets_dir()?.join("t").join(format!("{session_id}.sock")))
 }
@@ -271,7 +270,7 @@ pub fn figterm_socket_path(session_id: impl Display) -> Result<PathBuf> {
 /// The path to the resources directory
 ///
 /// - MacOS: "/Applications/{app_name}.app/Contents/Resources"
-/// - Linux: "/usr/share/fig"
+/// - Linux: "/usr/share/{package_name}"
 pub fn resources_path() -> Result<PathBuf> {
     cfg_if::cfg_if! {
         if #[cfg(all(unix, not(target_os = "macos")))] {
@@ -300,20 +299,26 @@ pub fn resources_path_ctx<Ctx: EnvProvider + PlatformProvider>(ctx: &Ctx) -> Res
     }
 }
 
-/// The path to the fig install manifest
+/// The path to the ShellCue install manifest
 ///
 /// - MacOS: "/Applications/{app_name}.app/Contents/Resources/manifest.json"
-/// - Linux: "/usr/share/fig/manifest.json"
+/// - Linux: "/usr/share/{package_name}/manifest.json"
 pub fn manifest_path() -> Result<PathBuf> {
     Ok(resources_path()?.join("manifest.json"))
 }
 
-/// The path to the fig settings file
+/// The directory that holds the ShellCue settings file
 ///
-/// - Linux: `$HOME/.local/share/{data_dir}/settings.json`
-/// - MacOS: `$HOME/Library/Application Support/{data_dir}/settings.json`
+/// - Linux/MacOS: `$HOME/.config/{data_dir}` (`XDG_CONFIG_HOME` is not consulted)
+pub fn settings_dir() -> Result<PathBuf> {
+    Ok(home_dir()?.join(".config").join(DATA_DIR_NAME))
+}
+
+/// The path to the ShellCue settings file
+///
+/// - Linux/MacOS: `$HOME/.config/{data_dir}/settings.json` (`XDG_CONFIG_HOME` is not consulted)
 pub fn settings_path() -> Result<PathBuf> {
-    Ok(fig_data_dir()?.join("settings.json"))
+    Ok(settings_dir()?.join("settings.json"))
 }
 
 /// The path to the .zip bundle containing the GNOME Shell Extension identified by
@@ -408,6 +413,16 @@ mod linux_tests {
         assert!(logs_dir().is_ok());
         assert!(settings_path().is_ok());
     }
+
+    #[test]
+    fn shellcue_path_names() {
+        assert!(settings_path().unwrap().ends_with(".config/shellcue/settings.json"));
+        assert!(settings_dir().unwrap().ends_with(".config/shellcue"));
+        assert!(logs_dir().unwrap().ends_with("shellcue/logs"));
+        assert_eq!(sockets_dir().unwrap().file_name().unwrap(), "shellcue");
+        assert_eq!(fig_data_dir().unwrap().file_name().unwrap(), "shellcue");
+        assert_eq!(backups_dir().unwrap().file_name().unwrap(), ".shellcue.dotfiles.bak");
+    }
 }
 
 // TODO(grant): Add back path tests on linux
@@ -426,7 +441,7 @@ mod tests {
         #[cfg(unix)]
         assert_eq!(
             host_sockets_dir().unwrap().file_name().unwrap().to_str().unwrap(),
-            format!("cwrun")
+            format!("shellcue")
         );
 
         #[cfg(unix)]
@@ -508,14 +523,14 @@ mod tests {
 
     #[test]
     fn snapshot_fig_data_dir() {
-        linux!(fig_data_dir(), @"$HOME/.local/share/amazon-q");
-        macos!(fig_data_dir(), @"$HOME/Library/Application Support/amazon-q");
+        linux!(fig_data_dir(), @"$HOME/.local/share/shellcue");
+        macos!(fig_data_dir(), @"$HOME/Library/Application Support/shellcue");
     }
 
     #[test]
     fn snapshot_sockets_dir() {
-        linux!(sockets_dir(), @"$XDG_RUNTIME_DIR/cwrun");
-        macos!(sockets_dir(), @"$TMPDIR/cwrun");
+        linux!(sockets_dir(), @"$XDG_RUNTIME_DIR/shellcue");
+        macos!(sockets_dir(), @"$TMPDIR/shellcue");
     }
 
     #[test]
@@ -526,32 +541,32 @@ mod tests {
 
     #[test]
     fn snapshot_backups_dir() {
-        linux!(backups_dir(), @"$HOME/.amazon-q.dotfiles.bak");
-        macos!(backups_dir(), @"$HOME/.amazon-q.dotfiles.bak");
+        linux!(backups_dir(), @"$HOME/.shellcue.dotfiles.bak");
+        macos!(backups_dir(), @"$HOME/.shellcue.dotfiles.bak");
     }
 
     #[test]
     fn snapshot_fig_socket_path() {
-        linux!(desktop_socket_path(), @"$XDG_RUNTIME_DIR/cwrun/desktop.sock");
-        macos!(desktop_socket_path(), @"$TMPDIR/cwrun/desktop.sock");
+        linux!(desktop_socket_path(), @"$XDG_RUNTIME_DIR/shellcue/desktop.sock");
+        macos!(desktop_socket_path(), @"$TMPDIR/shellcue/desktop.sock");
     }
 
     #[test]
     fn snapshot_local_remote_socket_path() {
-        linux!(local_remote_socket_path(), @"$XDG_RUNTIME_DIR/cwrun/remote.sock");
-        macos!(local_remote_socket_path(), @"$TMPDIR/cwrun/remote.sock");
+        linux!(local_remote_socket_path(), @"$XDG_RUNTIME_DIR/shellcue/remote.sock");
+        macos!(local_remote_socket_path(), @"$TMPDIR/shellcue/remote.sock");
     }
 
     #[test]
     fn snapshot_figterm_socket_path() {
-        linux!(figterm_socket_path("$SESSION_ID"), @"$XDG_RUNTIME_DIR/cwrun/t/$SESSION_ID.sock");
-        macos!(figterm_socket_path("$SESSION_ID"), @"$TMPDIR/cwrun/t/$SESSION_ID.sock");
+        linux!(figterm_socket_path("$SESSION_ID"), @"$XDG_RUNTIME_DIR/shellcue/t/$SESSION_ID.sock");
+        macos!(figterm_socket_path("$SESSION_ID"), @"$TMPDIR/shellcue/t/$SESSION_ID.sock");
     }
 
     #[test]
     fn snapshot_settings_path() {
-        linux!(settings_path(), @"$HOME/.local/share/amazon-q/settings.json");
-        macos!(settings_path(), @"$HOME/Library/Application Support/amazon-q/settings.json");
+        linux!(settings_path(), @"$HOME/.config/shellcue/settings.json");
+        macos!(settings_path(), @"$HOME/.config/shellcue/settings.json");
     }
 
     #[test]

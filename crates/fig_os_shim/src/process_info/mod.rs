@@ -63,8 +63,8 @@ impl ProcessInfo {
     /// use fig_os_shim::ProcessInfo;
     ///
     /// // Creates a slice with the following process hierarchy:
-    /// // q <- bash <- wezterm
-    /// let process_info = ProcessInfo::from_exes(vec!["q", "bash", "wezterm"]);
+    /// // shellcue <- bash <- wezterm
+    /// let process_info = ProcessInfo::from_exes(vec!["shellcue", "bash", "wezterm"]);
     /// ```
     pub fn from_exes<T: Into<TestExe>>(exes: Vec<T>) -> Self {
         let exes = exes.into_iter().map(|v| v.into()).collect::<Vec<TestExe>>();
@@ -166,9 +166,9 @@ mod tests {
 
     #[test]
     fn test_from_exe_slice() {
-        let info = ProcessInfo::from_exes(vec!["q", "bash", "wezterm"]);
+        let info = ProcessInfo::from_exes(vec!["shellcue", "bash", "wezterm"]);
         let current = info.current_pid();
-        assert_eq!(current.exe().unwrap(), PathBuf::from_str("q").unwrap());
+        assert_eq!(current.exe().unwrap(), PathBuf::from_str("shellcue").unwrap());
         let parent = current.parent().unwrap();
         assert_eq!(parent.exe().unwrap(), PathBuf::from_str("bash").unwrap());
         let grandparent = parent.parent().unwrap();
@@ -179,12 +179,12 @@ mod tests {
     #[test]
     fn test_from_exe_slice_with_cmdline() {
         let info = ProcessInfo::from_exes(vec![
-            (Some("q"), None),
+            (Some("shellcue"), None),
             (Some("bash"), None),
             (Some("python"), Some("terminator")),
         ]);
         let current = info.current_pid();
-        assert_eq!(current.exe().unwrap(), PathBuf::from_str("q").unwrap());
+        assert_eq!(current.exe().unwrap(), PathBuf::from_str("shellcue").unwrap());
         assert_eq!(current.cmdline(), None);
         let parent = current.parent().unwrap();
         assert_eq!(parent.exe().unwrap(), PathBuf::from_str("bash").unwrap());

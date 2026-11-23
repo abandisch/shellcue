@@ -36,7 +36,7 @@ use fig_ipc::local::{
 };
 use fig_os_shim::Env;
 use fig_util::consts::APP_BUNDLE_ID;
-use fig_util::env_var::Q_DEBUG_SHELL;
+use fig_util::env_var::SHELLCUE_DEBUG_SHELL;
 use fig_util::macos::BUNDLE_CONTENTS_MACOS_PATH;
 use fig_util::{
     APP_BUNDLE_NAME,
@@ -151,7 +151,7 @@ pub enum InputMethodDebugAction {
 pub enum DebugSubcommand {
     /// Debug the app
     App,
-    /// Switch to another branch of a Fig.js app
+    /// Switch to another branch of a ShellCue web app
     Build {
         #[arg(value_enum)]
         app: App,
@@ -710,7 +710,7 @@ impl DebugSubcommand {
                 let tmp_dir = TempDir::new()?;
 
                 let mut command = Command::new(PTY_BINARY_NAME);
-                command.env(Q_DEBUG_SHELL, "1").arg("--");
+                command.env(SHELLCUE_DEBUG_SHELL, "1").arg("--");
 
                 match Shell::current_shell() {
                     Some(shell) => {

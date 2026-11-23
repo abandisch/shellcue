@@ -202,13 +202,13 @@ pub struct ShellState {
     pub cmd_cursor: Option<Point>,
     /// Zsh autosuggestion color
     pub zsh_autosuggestion_color: Option<shell_color::SuggestionColor>,
-    /// Fig autosuggestion color
+    /// ShellCue autosuggestion color
     pub fig_autosuggestion_color: Option<shell_color::SuggestionColor>,
     /// Color support
     pub color_support: Option<shell_color::ColorSupport>,
     /// Command info
     pub command_info: Option<CommandInfo>,
-    /// Fig Log Level
+    /// ShellCue Log Level
     pub fig_log_level: Option<String>,
     /// OSC Lock
     pub osc_lock: bool,
@@ -775,7 +775,7 @@ impl<T> Term<T> {
     }
 
     fn end_prompt_internal(&mut self) {
-        trace!("Fig end prompt");
+        trace!("ShellCue end prompt");
         self.grid.cursor.template.fig_flags.remove(FigFlags::IN_PROMPT);
     }
 
@@ -798,13 +798,13 @@ impl<T> Term<T> {
             }
         }
 
-        trace!("Fig new command");
+        trace!("ShellCue new command");
 
         self.shell_state.cmd_cursor = Some(self.grid().cursor.point);
         trace!("New command cursor: {:?}", self.shell_state.cmd_cursor);
 
         // Add work around for emojis
-        if let Ok(cursor_offset) = fig_os_shim::Env::new().q_prompt_offset_workaround() {
+        if let Ok(cursor_offset) = fig_os_shim::Env::new().shellcue_prompt_offset_workaround() {
             if let Ok(offset) = cursor_offset.parse::<i32>() {
                 self.shell_state.cmd_cursor = self.shell_state.cmd_cursor.map(|cursor| Point {
                     column: Column((cursor.column.0 as i32 - offset).max(0) as usize),
@@ -1679,7 +1679,7 @@ impl<T: EventListener> Handler for Term<T> {
         if self.shell_state.osc_lock {
             return;
         }
-        trace!("Fig start prompt");
+        trace!("ShellCue start prompt");
         self.shell_state.has_seen_prompt = true;
 
         self.grid.cursor.template.fig_flags.insert(FigFlags::IN_PROMPT);
@@ -1698,7 +1698,7 @@ impl<T: EventListener> Handler for Term<T> {
         if self.shell_state.preexec {
             return;
         }
-        trace!("Fig PreExec");
+        trace!("ShellCue PreExec");
         self.shell_state.preexec = true;
         self.event_proxy.send_event(Event::PreExec, &self.shell_state);
         trace!("PreExec event sent");
@@ -1724,7 +1724,7 @@ impl<T: EventListener> Handler for Term<T> {
         if self.shell_state.osc_lock {
             return;
         }
-        trace!("Fig dir: {:?}", directory.display());
+        trace!("ShellCue dir: {:?}", directory.display());
         self.shell_state.get_mut_context().current_working_directory = Some(directory.to_path_buf());
         match env::set_current_dir(directory) {
             Ok(_) => {},
@@ -1745,7 +1745,7 @@ impl<T: EventListener> Handler for Term<T> {
         if self.shell_state.osc_lock {
             return;
         }
-        trace!("Fig exit code: {exit_code}");
+        trace!("ShellCue exit code: {exit_code}");
         if let Some(command) = &mut self.shell_state.command_info {
             command.exit_code = Some(exit_code);
             command.end_time = Some(std::time::SystemTime::now());
@@ -1758,7 +1758,7 @@ impl<T: EventListener> Handler for Term<T> {
             return;
         }
         let shell = shell.trim().to_owned();
-        trace!("Fig shell: {shell:?}");
+        trace!("ShellCue shell: {shell:?}");
         let shell_changed = match &self.shell_state.get_context().shell {
             Some(old_shell) => old_shell.ne(&shell),
             None => true,
@@ -1774,7 +1774,7 @@ impl<T: EventListener> Handler for Term<T> {
         if self.shell_state.osc_lock {
             return;
         }
-        trace!("Fig zsh suggestion color: {color:?}");
+        trace!("ShellCue zsh suggestion color: {color:?}");
 
         if let Some(color_support) = self.shell_state().color_support {
             self.shell_state.zsh_autosuggestion_color = Some(shell_color::parse_suggestion_color_zsh_autosuggest(
@@ -1789,7 +1789,7 @@ impl<T: EventListener> Handler for Term<T> {
         if self.shell_state.osc_lock || color.is_empty() {
             return;
         }
-        trace!("Fig suggestion color: {color:?}");
+        trace!("ShellCue suggestion color: {color:?}");
 
         if let Some(color_support) = self.shell_state().color_support {
             self.shell_state.fig_autosuggestion_color = Some(shell_color::parse_suggestion_color_zsh_autosuggest(
@@ -1805,7 +1805,7 @@ impl<T: EventListener> Handler for Term<T> {
             return;
         }
         let tty = tty.trim().to_owned();
-        trace!("Fig tty: {tty:?}");
+        trace!("ShellCue tty: {tty:?}");
         self.shell_state.get_mut_context().tty = Some(tty);
     }
 
@@ -1814,7 +1814,7 @@ impl<T: EventListener> Handler for Term<T> {
         if self.shell_state.osc_lock {
             return;
         }
-        trace!("Fig pid: {pid}");
+        trace!("ShellCue pid: {pid}");
         self.shell_state.get_mut_context().pid = Some(pid);
     }
 
@@ -1831,7 +1831,7 @@ impl<T: EventListener> Handler for Term<T> {
             return;
         }
         let fig_log_level = fig_log_level.trim().to_owned();
-        trace!("Fig log: {fig_log_level:?}");
+        trace!("ShellCue log: {fig_log_level:?}");
 
         self.shell_state.fig_log_level = Some(fig_log_level.clone());
         self.event_proxy.log_level_event(Some(fig_log_level));
