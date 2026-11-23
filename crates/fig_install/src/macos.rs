@@ -76,6 +76,16 @@ pub(crate) async fn uninstall_desktop(ctx: &fig_os_shim::Context) -> Result<(), 
         }
     }
 
+    // Delete settings dir
+    if let Ok(settings_dir) = directories::settings_dir() {
+        if settings_dir.exists() {
+            fs::remove_dir_all(&settings_dir)
+                .await
+                .map_err(|err| warn!("Failed to remove settings dir: {err}"))
+                .ok();
+        }
+    }
+
     let app_path = fig_util::app_bundle_path();
     if app_path.exists() {
         fs::remove_dir_all(&app_path)

@@ -2,8 +2,8 @@
 source: q_cli/tests/init.rs
 expression: init
 ---
-Q_SHELL="/bin/zsh"
-SHOULD_QTERM_LAUNCH="0"
+SHELLCUE_SHELL="/bin/zsh"
+SHOULD_SHELLCUE_TERM_LAUNCH="0"
 #!/usr/bin/env bash
 
 mkdir -p "${HOME}/.local/bin" > /dev/null 2>&1
@@ -13,48 +13,48 @@ if [[ -d "${HOME}/.local/bin" ]] && [[ ":$PATH:" != *":${HOME}/.local/bin:"* ]];
   PATH="${PATH:+"$PATH:"}${HOME}/.local/bin"
 fi
 
-if [[ -n "${Q_NEW_SESSION:-}" ]]; then
-  unset QTERM_SESSION_ID
-  unset Q_TERM
-  unset Q_NEW_SESSION
+if [[ -n "${SHELLCUE_NEW_SESSION:-}" ]]; then
+  unset SHELLCUE_TERM_SESSION_ID
+  unset SHELLCUE_TERM
+  unset SHELLCUE_NEW_SESSION
 fi
 
-# 0 = Yes, 1 = No, 2 = Fallback to Q_TERM
-if [ -z "${SHOULD_QTERM_LAUNCH:-}" ]; then
-  q _ should-figterm-launch 1>/dev/null 2>&1
-  SHOULD_QTERM_LAUNCH=$?
+# 0 = Yes, 1 = No, 2 = Fallback to SHELLCUE_TERM
+if [ -z "${SHOULD_SHELLCUE_TERM_LAUNCH:-}" ]; then
+  shellcue _ should-figterm-launch 1>/dev/null 2>&1
+  SHOULD_SHELLCUE_TERM_LAUNCH=$?
 fi
 
-# Only launch figterm if current session is not already inside PTY and command exists.
+# Only launch shellcue-term if current session is not already inside PTY and command exists.
 # PWSH var is set when launched by `pwsh -Login`, in which case we don't want to init.
 if   [[ -t 1 ]] \
-  && [[ -z "${PROCESS_LAUNCHED_BY_Q:-}" ]] \
-  && command -v qterm 1>/dev/null 2>&1 \
-  && [[ ("${SHOULD_QTERM_LAUNCH}" -eq 0) || (("${SHOULD_QTERM_LAUNCH}" -eq 2) && (-z "${Q_TERM:-}" || (-z "${Q_TERM_TMUX:-}" && -n "${TMUX:-}"))) ]]
+  && [[ -z "${PROCESS_LAUNCHED_BY_SHELLCUE:-}" ]] \
+  && command -v shellcue-term 1>/dev/null 2>&1 \
+  && [[ ("${SHOULD_SHELLCUE_TERM_LAUNCH}" -eq 0) || (("${SHOULD_SHELLCUE_TERM_LAUNCH}" -eq 2) && (-z "${SHELLCUE_TERM:-}" || (-z "${SHELLCUE_TERM_TMUX:-}" && -n "${TMUX:-}"))) ]]
 then
-  # Pty module sets Q_TERM or Q_TERM_TMUX to avoid running twice.
-  if [ -z "${Q_SHELL:-}" ]; then
-    Q_SHELL=$(q _ get-shell)
+  # Pty module sets SHELLCUE_TERM or SHELLCUE_TERM_TMUX to avoid running twice.
+  if [ -z "${SHELLCUE_SHELL:-}" ]; then
+    SHELLCUE_SHELL=$(shellcue _ get-shell)
   fi
-  Q_IS_LOGIN_SHELL="${Q_IS_LOGIN_SHELL:='0'}"
+  SHELLCUE_IS_LOGIN_SHELL="${SHELLCUE_IS_LOGIN_SHELL:='0'}"
 
   # shellcheck disable=SC2030
   if [[ -n "${ZSH_NAME:-}" && -o login ]]; then
-    Q_IS_LOGIN_SHELL=1
+    SHELLCUE_IS_LOGIN_SHELL=1
   fi
 
-  # Do not launch figterm in non-interactive shells (like VSCode Tasks)
+  # Do not launch shellcue-term in non-interactive shells (like VSCode Tasks)
   if [[ $- == *i* ]]; then
-    Q_TERM_NAME="$(basename "${Q_SHELL}") (qterm)"
-    if [[ -z "${Q_TERM_PATH:-}" ]]; then
-      if [[ -x "${HOME}/.local/bin/${Q_TERM_NAME}" ]]; then
-        Q_TERM_PATH="${HOME}/.local/bin/${Q_TERM_NAME}"
+    SHELLCUE_TERM_NAME="$(basename "${SHELLCUE_SHELL}") (shellcue-term)"
+    if [[ -z "${SHELLCUE_TERM_PATH:-}" ]]; then
+      if [[ -x "${HOME}/.local/bin/${SHELLCUE_TERM_NAME}" ]]; then
+        SHELLCUE_TERM_PATH="${HOME}/.local/bin/${SHELLCUE_TERM_NAME}"
       else
-        Q_TERM_PATH="$(command -v qterm || echo "${HOME}/.local/bin/qterm")"
+        SHELLCUE_TERM_PATH="$(command -v shellcue-term || echo "${HOME}/.local/bin/shellcue-term")"
       fi
     fi
 
-    Q_EXECUTION_STRING="${ZSH_EXECUTION_STRING}"
+    SHELLCUE_EXECUTION_STRING="${ZSH_EXECUTION_STRING}"
 
     # Get initial text.
     INITIAL_TEXT=""
@@ -62,6 +62,6 @@ then
     while read -rt 0; do
       INITIAL_TEXT="${INITIAL_TEXT}${REPLY}\n"
     done
-    Q_EXECUTION_STRING="${Q_EXECUTION_STRING}" Q_START_TEXT="$(printf "%b" "${INITIAL_TEXT}")" Q_SHELL="${Q_SHELL}" Q_IS_LOGIN_SHELL="${Q_IS_LOGIN_SHELL}" exec -a "${Q_TERM_NAME}" "${Q_TERM_PATH}"
+    SHELLCUE_EXECUTION_STRING="${SHELLCUE_EXECUTION_STRING}" SHELLCUE_START_TEXT="$(printf "%b" "${INITIAL_TEXT}")" SHELLCUE_SHELL="${SHELLCUE_SHELL}" SHELLCUE_IS_LOGIN_SHELL="${SHELLCUE_IS_LOGIN_SHELL}" exec -a "${SHELLCUE_TERM_NAME}" "${SHELLCUE_TERM_PATH}"
   fi
 fi

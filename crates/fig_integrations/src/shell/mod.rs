@@ -64,7 +64,7 @@ fn integration_file_name(dotfile_name: &str, when: &When, shell: &Shell) -> Stri
 
 pub trait ShellExt {
     fn get_shell_integrations(&self, env: &Env) -> Result<Vec<Box<dyn ShellIntegration>>>;
-    /// Script integrations are installed into ~/.fig/shell
+    /// Script integrations are installed into the `shell` directory under the data directory
     fn get_script_integrations(&self) -> Result<Vec<ShellScriptShellIntegration>>;
     fn get_fig_integration_source(&self, when: &When) -> String;
 }
@@ -202,9 +202,9 @@ impl ShellScriptShellIntegration {
             } else {
                 let add_to_path_line = match self.shell {
                     Shell::Zsh => indoc::indoc! {r#"
-                        _Q_LOCAL_BIN="$HOME/.local/bin"
-                        [[ ":$PATH:" != *":$_Q_LOCAL_BIN:"* ]] && PATH="${PATH:+"$PATH:"}$_Q_LOCAL_BIN"
-                        unset _Q_LOCAL_BIN
+                        _SHELLCUE_LOCAL_BIN="$HOME/.local/bin"
+                        [[ ":$PATH:" != *":$_SHELLCUE_LOCAL_BIN:"* ]] && PATH="${PATH:+"$PATH:"}$_SHELLCUE_LOCAL_BIN"
+                        unset _SHELLCUE_LOCAL_BIN
                     "#},
                 };
 
@@ -446,7 +446,7 @@ impl Integration for DotfileShellIntegration {
             // Remove comments and empty lines.
             Ok(contents) => {
                 // Check for existence of ignore flag
-                if Regex::new(r"(?mi)^\s*#\s*fig ignore\s?.*$")
+                if Regex::new(r"(?mi)^\s*#\s*shellcue ignore\s?.*$")
                     .unwrap()
                     .is_match(&contents)
                 {
@@ -655,6 +655,24 @@ mod test {
         let result = integration.matches_text(&text, When::Pre);
         assert!(matches!(result, Err(Error::NotInstalled(_))));
         assert_eq!(integration.remove_from_text(text.as_str(), When::Pre).unwrap(), text);
+    }
+
+    #[tokio::test]
+    async fn ignore_marker_opts_out() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let integration = DotfileShellIntegration {
+            dotfile_directory: tempdir.path().to_path_buf(),
+            ..zshrc_integration()
+        };
+        for (text, ignored) in [
+            ("# shellcue ignore\n", true),
+            ("#shellcue ignore\n", true),
+            ("# fig ignore\n", false),
+            ("echo user\n", false),
+        ] {
+            std::fs::write(integration.dotfile_path(), text).unwrap();
+            assert_eq!(integration.is_installed().await.is_ok(), ignored, "{text:?}");
+        }
     }
 
     #[cfg(target_os = "linux")]

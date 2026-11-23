@@ -93,7 +93,7 @@ use crate::{
     utils,
 };
 
-pub const AUTOCOMPLETE_WINDOW_TITLE: &str = "Fig Autocomplete";
+pub const AUTOCOMPLETE_WINDOW_TITLE: &str = "ShellCue Autocomplete";
 
 fn map_theme(theme: &str) -> Option<WryTheme> {
     match theme {
@@ -359,7 +359,7 @@ impl WebviewManager {
             }
 
             match event {
-                WryEvent::NewEvents(StartCause::Init) => info!("Fig has started"),
+                WryEvent::NewEvents(StartCause::Init) => info!("ShellCue has started"),
                 WryEvent::WindowEvent { event, window_id, .. } => {
                     if let Some(window_state) = self.window_id_map.get(&window_id) {
                         match event {

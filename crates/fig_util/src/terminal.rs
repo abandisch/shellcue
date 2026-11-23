@@ -816,20 +816,20 @@ mod tests {
     fn test_from_process_info() {
         Terminal::from_process_info(&Context::new(), &MACOS_TERMINALS.to_vec());
 
-        let ctx = make_context(Os::Linux, vec!["q", "fish", "wezterm"]);
+        let ctx = make_context(Os::Linux, vec!["shellcue", "fish", "wezterm"]);
         assert_eq!(
             Terminal::from_process_info(&ctx, &LINUX_TERMINALS.to_vec()),
             Some(Terminal::WezTerm)
         );
 
-        let ctx = make_context(Os::Linux, vec!["q", "bash", "tmux"]);
+        let ctx = make_context(Os::Linux, vec!["shellcue", "bash", "tmux"]);
         assert_eq!(
             Terminal::from_process_info(&ctx, &LINUX_TERMINALS.to_vec()),
             None,
             "Special terminals should return None"
         );
 
-        let ctx = make_context(Os::Linux, vec!["cargo", "cargo", "q", "bash", "tmux", "wezterm"]);
+        let ctx = make_context(Os::Linux, vec!["cargo", "cargo", "shellcue", "bash", "tmux", "wezterm"]);
         assert_eq!(
             Terminal::from_process_info(&ctx, &LINUX_TERMINALS.to_vec()),
             None,
@@ -837,7 +837,7 @@ mod tests {
         );
 
         let ctx = make_context(Os::Linux, vec![
-            (Some("q"), None),
+            (Some("shellcue"), None),
             (Some("python3"), Some("/usr/bin/python3 /usr/bin/terminator")),
         ]);
         assert_eq!(
@@ -847,7 +847,7 @@ mod tests {
         );
 
         let ctx = make_context(Os::Linux, vec![
-            (Some("q"), None),
+            (Some("shellcue"), None),
             (Some("python3"), Some("/usr/bin/python3 /usr/bin/guake")),
         ]);
         assert_eq!(

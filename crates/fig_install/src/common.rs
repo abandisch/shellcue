@@ -105,7 +105,7 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
             .output()
             .await;
         if let Err(err) = quit_res {
-            tracing::warn!("Failed to quit running Fig app: {err}");
+            tracing::warn!("Failed to quit running ShellCue app: {err}");
         }
     }
 

@@ -11,8 +11,8 @@ use fig_remote_ipc::figterm::{
     FigtermState,
 };
 use fig_util::env_var::{
-    PROCESS_LAUNCHED_BY_Q,
-    Q_TERM,
+    PROCESS_LAUNCHED_BY_SHELLCUE,
+    SHELLCUE_TERM,
 };
 use tokio::process::Command;
 use tokio::time::timeout;
@@ -22,8 +22,8 @@ use uuid::Uuid;
 use super::RequestResult;
 
 fn set_fig_vars(cmd: &mut Command) {
-    cmd.env(Q_TERM, env!("CARGO_PKG_VERSION"));
-    cmd.env(PROCESS_LAUNCHED_BY_Q, "1");
+    cmd.env(SHELLCUE_TERM, env!("CARGO_PKG_VERSION"));
+    cmd.env(PROCESS_LAUNCHED_BY_SHELLCUE, "1");
 
     cmd.env("HISTFILE", "");
     cmd.env("HISTCONTROL", "ignoreboth");
@@ -59,7 +59,7 @@ pub async fn run(request: RunProcessRequest, state: &FigtermState) -> RequestRes
         );
         session_sender
             .send(message)
-            .map_err(|err| format!("failed sending command to figterm: {err}"))?;
+            .map_err(|err| format!("failed sending command to shellcue-term: {err}"))?;
         drop(session_sender);
 
         let timeout_duration = request
@@ -70,8 +70,8 @@ pub async fn run(request: RunProcessRequest, state: &FigtermState) -> RequestRes
 
         let response = timeout(timeout_duration, rx)
             .await
-            .map_err(|_err| "Timed out waiting for figterm response")?
-            .map_err(|err| format!("Failed to receive figterm response: {err}"))?;
+            .map_err(|_err| "Timed out waiting for shellcue-term response")?
+            .map_err(|err| format!("Failed to receive shellcue-term response: {err}"))?;
 
         if let hostbound::response::Response::RunProcess(response) = response {
             RequestResult::Ok(Box::new(ServerOriginatedSubMessage::RunProcessResponse(

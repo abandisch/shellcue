@@ -147,7 +147,7 @@ impl Env {
     }
 
     pub fn in_ci(&self) -> bool {
-        self.get_os("CI").is_some() || self.get_os("Q_CI").is_some()
+        self.get_os("CI").is_some() || self.get_os("SHELLCUE_CI").is_some()
     }
 
     /// Whether or not the current executable is run from an AppImage.
@@ -157,33 +157,33 @@ impl Env {
         self.get_os("APPIMAGE").is_some()
     }
 
-    // Q-specific environment variable methods
-    pub fn q_log_level(&self) -> Result<String, VarError> {
-        self.get("Q_LOG_LEVEL")
+    // ShellCue-specific environment variable methods
+    pub fn shellcue_log_level(&self) -> Result<String, VarError> {
+        self.get("SHELLCUE_LOG_LEVEL")
     }
 
-    pub fn q_log_stdout(&self) -> bool {
-        self.get_os("Q_LOG_STDOUT").is_some()
+    pub fn shellcue_log_stdout(&self) -> bool {
+        self.get_os("SHELLCUE_LOG_STDOUT").is_some()
     }
 
-    pub fn q_cli_client_application(&self) -> Result<String, VarError> {
-        self.get("Q_CLI_CLIENT_APPLICATION")
+    pub fn shellcue_cli_client_application(&self) -> Result<String, VarError> {
+        self.get("SHELLCUE_CLI_CLIENT_APPLICATION")
     }
 
-    pub fn q_term(&self) -> Result<String, VarError> {
-        self.get("Q_TERM")
+    pub fn shellcue_term(&self) -> Result<String, VarError> {
+        self.get("SHELLCUE_TERM")
     }
 
-    pub fn q_init_snapshot_test(&self) -> bool {
-        self.get_os("Q_INIT_SNAPSHOT_TEST").is_some()
+    pub fn shellcue_init_snapshot_test(&self) -> bool {
+        self.get_os("SHELLCUE_INIT_SNAPSHOT_TEST").is_some()
     }
 
-    pub fn q_backend(&self) -> Result<String, VarError> {
-        self.get("Q_BACKEND")
+    pub fn shellcue_backend(&self) -> Result<String, VarError> {
+        self.get("SHELLCUE_BACKEND")
     }
 
-    pub fn q_prompt_offset_workaround(&self) -> Result<String, VarError> {
-        self.get("Q_PROMPT_OFFSET_WORKAROUND")
+    pub fn shellcue_prompt_offset_workaround(&self) -> Result<String, VarError> {
+        self.get("SHELLCUE_PROMPT_OFFSET_WORKAROUND")
     }
 }
 

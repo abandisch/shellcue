@@ -51,7 +51,7 @@ use fig_proto::hooks::{
 use fig_proto::local::EnvironmentVariable;
 use fig_proto::util::get_shell;
 use fig_util::directories::figterm_socket_path;
-use fig_util::env_var::QTERM_SESSION_ID;
+use fig_util::env_var::SHELLCUE_TERM_SESSION_ID;
 use fig_util::{
     CLI_BINARY_NAME,
     directories,
@@ -97,10 +97,10 @@ pub struct InstallArgs {
     /// Don't confirm automatic installation.
     #[arg(long)]
     pub no_confirm: bool,
-    /// Force installation of q
+    /// Force installation of shellcue
     #[arg(long)]
     pub force: bool,
-    /// Install q globally
+    /// Install shellcue globally
     #[arg(long)]
     pub global: bool,
 }
@@ -132,7 +132,7 @@ pub enum StateComponent {
 #[command(hide = true, alias = "_")]
 pub enum InternalSubcommand {
     /// Command that is run during the PreCmd section of
-    /// the Amazon Q integrations.
+    /// the ShellCue integrations.
     PreCmd {
         #[arg(long, allow_hyphen_values = true)]
         alias: Option<String>,
@@ -141,9 +141,9 @@ pub enum InternalSubcommand {
     LocalState(local_state::LocalStateArgs),
     /// Callback used for the internal pseudoterminal
     Callback(CallbackArgs),
-    /// Install the Amazon Q cli
+    /// Install the ShellCue cli
     Install(InstallArgs),
-    /// Uninstall the Amazon Q cli
+    /// Uninstall the ShellCue cli
     Uninstall {
         /// Uninstall only the shell integrations
         #[arg(long)]
@@ -157,12 +157,12 @@ pub enum InternalSubcommand {
     },
     GetShell,
     Hostname,
-    /// Detects if Figterm should be launched
+    /// Detects if shellcue-term should be launched
     ///
     /// Exit code:
-    /// - 0 execute figterm
-    /// - 1 dont execute figterm
-    /// - 2 fallback to Q_TERM env
+    /// - 0 execute shellcue-term
+    /// - 1 dont execute shellcue-term
+    /// - 2 fallback to SHELLCUE_TERM env
     ShouldFigtermLaunch,
     Event {
         /// Name of the event.
@@ -246,7 +246,7 @@ impl InternalSubcommand {
                     InstallComponents::all()
                 };
                 if components.contains(InstallComponents::BINARY) {
-                    if option_env!("Q_IS_PACKAGE_MANAGED").is_some() {
+                    if option_env!("SHELLCUE_IS_PACKAGE_MANAGED").is_some() {
                         println!("Please uninstall using your package manager");
                     } else {
                         fig_install::uninstall(InstallComponents::BINARY, Arc::clone(&ctx)).await?;
@@ -581,7 +581,7 @@ impl InternalSubcommand {
 }
 
 pub async fn pre_cmd(alias: Option<String>) -> ExitCode {
-    let Ok(session_id) = std::env::var(QTERM_SESSION_ID) else {
+    let Ok(session_id) = std::env::var(SHELLCUE_TERM_SESSION_ID) else {
         return ExitCode::FAILURE;
     };
 
@@ -602,19 +602,19 @@ pub async fn pre_cmd(alias: Option<String>) -> ExitCode {
                     })),
                 };
                 if let Err(err) = figterm_stream.send_message(message).await {
-                    error!(%err, %session_id, "Failed to send UpdateShellContext to Figterm");
+                    error!(%err, %session_id, "Failed to send UpdateShellContext to shellcue-term");
                     ExitCode::FAILURE
                 } else {
                     ExitCode::SUCCESS
                 }
             },
             Err(err) => {
-                error!(%err, %session_id, "Failed to connect to Figterm socket");
+                error!(%err, %session_id, "Failed to connect to shellcue-term socket");
                 ExitCode::FAILURE
             },
         },
         Err(err) => {
-            error!(%err, %session_id, "Failed to get Figterm socket path");
+            error!(%err, %session_id, "Failed to get shellcue-term socket path");
             ExitCode::FAILURE
         },
     }
@@ -633,6 +633,13 @@ async fn remove_data_dir(ctx: Arc<OsContext>, force: bool) -> Result<ExitCode> {
         Ok(_) => (),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
         Err(err) => bail!("Failed to remove data dir: {:?}", err),
+    }
+
+    let settings_dir = directories::settings_dir()?;
+    match ctx.fs().remove_dir_all(&settings_dir).await {
+        Ok(_) => (),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
+        Err(err) => bail!("Failed to remove settings dir: {:?}", err),
     }
 
     let webview_dir = directories::local_webview_data_dir(&ctx)?;

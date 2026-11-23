@@ -10,7 +10,10 @@ use eyre::{
     eyre,
 };
 use fig_ipc::local::restart_settings_listener;
-use fig_util::PRODUCT_NAME;
+use fig_util::{
+    CLI_BINARY_NAME,
+    PRODUCT_NAME,
+};
 use serde_json::json;
 
 use crate::cli::OutputFormat;
@@ -52,7 +55,7 @@ impl LocalStateArgs {
                 println!(
                     "\n{}\n{PRODUCT_NAME} might not be running, to launch {PRODUCT_NAME} run: {}\n",
                     format!("Unable to connect to {PRODUCT_NAME}").bold(),
-                    "fig launch".magenta()
+                    format!("{CLI_BINARY_NAME} launch").magenta()
                 )
             };
         }
