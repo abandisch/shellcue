@@ -5,7 +5,7 @@
 set -euo pipefail
 
 GUEST_FILE="shellcue-mac-guest.sh"
-GUEST_STEPS="tools clone fetch web specs rust-check rust-test build bundle info"
+GUEST_STEPS="tools clone fetch web specs rust-check rust-test build sign-setup bundle info"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -102,8 +102,14 @@ Typical first session (replace the whole word after "trust" with the SHA256:... 
   scripts/vm/mac-host.sh step rust-check
   scripts/vm/mac-host.sh step rust-test
 
-To build the app and its disk image. Both are unsigned and stay in the VM, in ~/shellcue/build/macos. fetch and web
-above must have succeeded at the same commit; after every new clone repeat fetch, web, specs, build and bundle:
+Once per VM, make the signing identity: a self-signed certificate whose key stays in the VM, in ~/shellcue-signing,
+with no copy anywhere. It refuses to run a second time, because a new certificate makes macOS forget the
+permissions granted to ShellCue:
+  scripts/vm/mac-host.sh step sign-setup
+
+To build the app and its disk image. The app is signed with that identity (not notarised); both stay in the VM, in
+~/shellcue/build/macos. fetch and web above must have succeeded at the same commit; after every new clone repeat
+fetch, web, specs, build and bundle:
   scripts/vm/mac-host.sh step specs
   scripts/vm/mac-host.sh step build
   scripts/vm/mac-host.sh step bundle
