@@ -342,7 +342,6 @@ pub async fn run(trigger: Trigger) {
 /// Whether every shell integration is installed, and the files of those that are not.
 #[cfg(target_os = "macos")]
 async fn shell_status(env: &fig_os_shim::Env) -> (bool, Vec<String>) {
-    use fig_integrations::Integration as _;
     use fig_integrations::shell::ShellExt;
     use fig_util::Shell;
     use tracing::warn;
