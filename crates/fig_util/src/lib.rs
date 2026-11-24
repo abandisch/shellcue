@@ -1,3 +1,4 @@
+pub mod accessibility_wait;
 pub mod directories;
 mod install_method;
 pub mod manifest;

@@ -57,6 +57,10 @@ pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {
         "quit" => {
             proxy.send_event(Event::ControlFlow(ControlFlow::Exit)).unwrap();
         },
+        #[cfg(target_os = "macos")]
+        "setup" => {
+            tokio::runtime::Handle::current().spawn(crate::first_launch::run(crate::first_launch::Trigger::Menu));
+        },
         "settings" => {
             tokio::runtime::Handle::current().spawn(open_settings_file());
         },
@@ -281,13 +285,23 @@ impl MenuElement {
 }
 
 fn menu() -> Vec<MenuElement> {
-    vec![
-        MenuElement::entry(None, None, "Settings", "settings"),
-        MenuElement::Separator,
-        MenuElement::info(None, format!("Version: {}", env!("CARGO_PKG_VERSION"))),
-        MenuElement::Separator,
-        MenuElement::entry(None, None, format!("Quit {PRODUCT_NAME}"), "quit"),
-    ]
+    cfg_if! {
+        if #[cfg(target_os = "macos")] {
+            let setup = Some(MenuElement::entry(None, None, format!("Set up {PRODUCT_NAME}…"), "setup"));
+        } else {
+            let setup = None;
+        }
+    }
+    setup
+        .into_iter()
+        .chain([
+            MenuElement::entry(None, None, "Settings", "settings"),
+            MenuElement::Separator,
+            MenuElement::info(None, format!("Version: {}", env!("CARGO_PKG_VERSION"))),
+            MenuElement::Separator,
+            MenuElement::entry(None, None, format!("Quit {PRODUCT_NAME}"), "quit"),
+        ])
+        .collect()
 }
 
 #[cfg(test)]
@@ -306,6 +320,9 @@ mod tests {
                 MenuElement::SubMenu { .. } => "submenu",
             })
             .collect();
+        #[cfg(target_os = "macos")]
+        assert_eq!(shape, ["setup", "settings", "---", "info", "---", "quit"]);
+        #[cfg(not(target_os = "macos"))]
         assert_eq!(shape, ["settings", "---", "info", "---", "quit"]);
     }
 }
