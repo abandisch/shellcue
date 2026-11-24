@@ -2,6 +2,8 @@ mod cli;
 mod event;
 // mod figterm;
 mod file_watcher;
+#[cfg(any(target_os = "macos", test))]
+mod first_launch;
 mod install;
 mod local_ipc;
 pub mod notification_bus;
@@ -123,6 +125,9 @@ async fn main() -> ExitCode {
 
     let ctx = Context::new();
     install::run_install(Arc::clone(&ctx)).await;
+
+    #[cfg(target_os = "macos")]
+    tokio::spawn(first_launch::run(first_launch::Trigger::Launch));
 
     #[cfg(target_os = "linux")]
     {

@@ -437,6 +437,13 @@ impl PlatformStateImpl {
                     _visible_windows: BOOL,
                 ) -> BOOL {
                     trace!("application_should_handle_reopen");
+                    // A panic must not unwind across this `extern "C"` boundary.
+                    match tokio::runtime::Handle::try_current() {
+                        Ok(handle) => {
+                            handle.spawn(crate::first_launch::run(crate::first_launch::Trigger::Reopen));
+                        },
+                        Err(err) => trace!(%err, "No runtime to start the setup flow"),
+                    }
                     YES
                 }
 
