@@ -24,6 +24,20 @@ APP_BUNDLE_ID="com.bandisch-apps.shellcue"
 IME_BUNDLE_ID="com.bandisch-apps.inputmethod.shellcue"
 # Apple Silicon needs macOS 11 or later; Rust's own floor for this target is the same.
 MIN_MACOS="11.0"
+# The signing identity lives outside the checkout and is never copied out of the VM.
+SIGN_DIR="$HOME/shellcue-signing"
+SIGN_KEYCHAIN="$SIGN_DIR/signing.keychain-db"
+SIGN_PASS_FILE="$SIGN_DIR/keychain-password"
+SIGN_CERT="$SIGN_DIR/certificate.pem"
+SIGN_READY="$SIGN_DIR/ready"
+SIGN_WORK="$SIGN_DIR/work"
+SIGN_NAME="ShellCue Local Signing"
+SIGN_DAYS=3650
+SIGN_LIMIT_SECS=300
+# macOS ties the permissions it grants to these identifiers and the certificate; changing either loses the grants.
+CLI_SIGN_ID="$APP_BUNDLE_ID.cli"
+TERM_SIGN_ID="$APP_BUNDLE_ID.term"
+SIGN_REPAIR="If it cannot be put right, the identity has to be replaced: in the VM's own Terminal run: rm -rf $SIGN_DIR   and then, on the Mac: scripts/vm/mac-host.sh step sign-setup   That destroys the key (it has no copy) and macOS forgets every permission granted to ShellCue"
 
 # Change together with scripts/vm/guest.sh, .mise.toml (node, pnpm, protoc), package.json (packageManager) and rust-toolchain.toml (Rust); enter_src enforces it.
 NODE_VERSION="26.13.0"
@@ -43,7 +57,7 @@ PNPM_URL="https://github.com/pnpm/pnpm/releases/download/v$PNPM_VERSION/pnpm-dar
 PROTOC_URL="https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOC_VERSION/protoc-$PROTOC_VERSION-osx-aarch_64.zip"
 RUSTUP_URL="https://static.rust-lang.org/rustup/archive/$RUSTUP_VERSION/$RUST_TRIPLE/rustup-init"
 
-STEPS="tools clone fetch web specs rust-check rust-test build bundle info"
+STEPS="tools clone fetch web specs rust-check rust-test build sign-setup bundle info"
 
 usage() {
     cat <<'EOF'
@@ -61,10 +75,14 @@ Runs inside the ShellCue macOS build VM (Apple Silicon). Steps:
   rust-test                cargo test --locked --no-fail-fast --workspace --lib --bins --test '*' --exclude fig_desktop-fuzz,
                            with SSH_CLIENT, SSH_CONNECTION and SSH_TTY unset; stopped after 90 minutes
   build                    cargo build --locked --release of the four programs that go into the app (arm64 only)
-  bundle                   assemble ~/shellcue/build/macos/ShellCue.app and ShellCue.dmg from the outputs of web, specs
-                           and build, each of which must have succeeded at the checked-out commit. The app is NOT
-                           signed with a certificate, and it and the disk image stay in the VM.
-  info                    OS, arch, Command Line Tools, tool versions, disk free, checked-out commit, git status
+  sign-setup               once per VM: make a self-signed code-signing certificate and its key, in their own keychain
+                           under ~/shellcue-signing, and prove the identity by signing and running a throwaway program.
+                           Refuses to replace an existing identity. The key has no copy outside this VM.
+  bundle                   assemble ~/shellcue/build/macos/ShellCue.app from the outputs of web, specs and build, each of
+                           which must have succeeded at the checked-out commit; sign it with the identity from sign-setup
+                           (hardened runtime, no entitlements, no timestamp, not notarised); then make ShellCue.dmg.
+                           The disk image itself is not signed. The app and the disk image stay in the VM.
+  info                    OS, arch, Command Line Tools, tool versions, disk free, signing identity, checked-out commit, git status
 
 Every step first refuses to run if the VM has a shared or network folder mounted. Every step except info also
 refuses to run while an earlier step, or a cargo, rustc, node or pnpm process it left behind, is still running.
@@ -81,10 +99,15 @@ die() {
 CURRENT_STEP=""
 STEP_START=0
 LOCK_HELD=0
+SIGN_UNLOCKED=0
+SIGN_WORK_OWNED=0
 
 # Must stay the last thing printed, whatever ended the run.
 print_verdict() {
     local rc=$? secs=$((SECONDS - STEP_START))
+    if [[ $SIGN_UNLOCKED -eq 1 ]]; then security lock-keychain "$SIGN_KEYCHAIN" >/dev/null 2>&1 || true; fi
+    # The work folder holds the private key; only the sign-setup run that made it may remove it.
+    if [[ $SIGN_WORK_OWNED -eq 1 ]]; then rm -rf -- "$SIGN_WORK" || true; fi
     if [[ $LOCK_HELD -eq 1 ]]; then rm -rf -- "$LOCK_DIR" || true; fi
     if [[ $rc -eq 0 ]]; then
         printf '==> ok: %s (%ss)\n' "$CURRENT_STEP" "$secs"
@@ -767,10 +790,295 @@ assemble_app() {
     xattr -cr "$app"
 }
 
+# The passwords must reach neither a command line (ps) nor the log: security reads the whole command from stdin, and
+# what it prints is logged only after every secret named here is cut out. Its exit status is logged, never relied on.
+security_stdin() {
+    local label="$1" line="$2" out rc=0 secret
+    shift 2
+    out="$(printf '%s\n' "$line" | security -i 2>&1 | LC_ALL=C tr -d '\000-\010\013-\037\177')" || rc=$?
+    for secret in "$@"; do
+        out="${out//$secret/[hidden]}"
+    done
+    # Second net, should security echo a secret in a form the exact match misses.
+    out="$(printf '%s\n' "$out" | sed -E 's/[0-9a-fA-F]{32,}/[hidden]/g')"
+    printf '    security %s: exit status %s\n' "$label" "$rc"
+    [[ -z "$out" ]] || printf '%s\n' "$out" | sed 's/^/      /'
+}
+
+# Paths are written into a line that security splits into words itself.
+require_plain_sign_dir() {
+    case "$SIGN_DIR" in
+        *[!A-Za-z0-9._/-]*) die "the path $SIGN_DIR has characters outside A-Z a-z 0-9 . _ / -, which this script will not pass to security" ;;
+    esac
+}
+
+# Earlier build steps run other people's code as this user; a planted link must not be followed. Empty mode: any.
+require_private() {
+    local path="$1" kind="$2" mode="$3" got want
+    if [[ "$kind" == "d" ]]; then
+        [[ -d "$path" && ! -L "$path" ]] || die "$path is missing or is not a real folder. $SIGN_REPAIR"
+    else
+        [[ -f "$path" && ! -L "$path" ]] || die "$path is missing or is not a regular file. $SIGN_REPAIR"
+    fi
+    if [[ -n "$mode" ]]; then
+        got="$(stat -f '%u %Lp' "$path")"
+        want="$(id -u) $mode"
+    else
+        got="$(stat -f '%u' "$path")"
+        want="$(id -u)"
+    fi
+    [[ "$got" == "$want" ]] \
+        || die "$path has owner and mode '$got', expected '$want'. If you changed it by hand in the VM, put it back (chmod ${mode:-600} $path). Otherwise: $SIGN_REPAIR"
+}
+
+# Prints the recorded certificate SHA-1; whatever else the file holds is never printed.
+read_sign_ready() {
+    local v hex_re='^[0-9A-F]{40}$'
+    [[ -f "$SIGN_READY" && ! -L "$SIGN_READY" ]] || return 1
+    v="$(< "$SIGN_READY")"
+    [[ "$v" =~ $hex_re ]] || return 1
+    printf '%s' "$v"
+}
+
+cert_sha1() {
+    local out hex hex_re='^[0-9A-F]{40}$'
+    out="$(/usr/bin/openssl x509 -in "$1" -noout -fingerprint -sha1)" || die "cannot read the certificate $1"
+    hex="$(printf '%s' "${out#*=}" | tr -d ':' | tr 'a-f' 'A-F')"
+    [[ "$hex" =~ $hex_re ]] || die "cannot read a SHA-1 fingerprint from the certificate $1"
+    printf '%s' "$hex"
+}
+
+read_sign_password() {
+    local pw pw_re='^[0-9a-f]{64}$'
+    require_private "$SIGN_PASS_FILE" f 600
+    pw="$(< "$SIGN_PASS_FILE")"
+    [[ "$pw" =~ $pw_re ]] || die "$SIGN_PASS_FILE does not hold the 64 hex characters sign-setup wrote. $SIGN_REPAIR"
+    printf '%s' "$pw"
+}
+
+# An unlock does not reliably outlive the SSH session, so every step that signs unlocks first; print_verdict locks
+# again. Must not be called inside $( ), or SIGN_UNLOCKED is lost.
+unlock_sign_keychain() {
+    local pw
+    require_plain_sign_dir
+    pw="$(read_sign_password)"
+    SIGN_UNLOCKED=1
+    security_stdin unlock-keychain "unlock-keychain -p $pw $SIGN_KEYCHAIN" "$pw"
+}
+
+lock_sign_keychain() {
+    security lock-keychain "$SIGN_KEYCHAIN" || die "cannot lock $SIGN_KEYCHAIN"
+    SIGN_UNLOCKED=0
+}
+
+# security does not say whether an unlock worked, so the key is proven usable by signing a scratch copy of a
+# system program (never run).
+prove_key_usable() {
+    local sha1="$1" dir
+    dir="$(mktemp -d "$SIGN_DIR/probe.XXXXXX")"
+    cp -- /usr/bin/true "$dir/probe"
+    if ! run_limited "$SIGN_LIMIT_SECS" codesign --force --keychain "$SIGN_KEYCHAIN" --sign "$sha1" --timestamp=none "$dir/probe"; then
+        rm -rf -- "$dir"
+        die "the signing key could not be used right after unlocking. Either the keychain did not unlock with the password in $SIGN_PASS_FILE, or codesign is not allowed to use the key, or macOS refuses the certificate; codesign's own lines and the 'security unlock-keychain' lines are above in the log. Nothing was changed to make macOS trust the certificate. Stop here and have the log reviewed before trying anything else"
+    fi
+    rm -rf -- "$dir"
+    printf '    the key is usable: a scratch copy of /usr/bin/true was signed with the certificate %s\n' "$sha1"
+}
+
+require_identity_listed() {
+    local sha1="$1" found
+    found="$(security find-identity -p codesigning "$SIGN_KEYCHAIN" 2>&1)" || die "security find-identity failed for $SIGN_KEYCHAIN: $found"
+    printf '    identities in the signing keychain:\n'
+    printf '%s\n' "$found" | sed 's/^/      /'
+    case "$found" in
+        *"$sha1"*) ;;
+        *) die "the signing keychain does not list an identity for the certificate $sha1 (the 'security' lines above in the log say why, if security said anything). Stop here and have the log reviewed" ;;
+    esac
+}
+
+# No entitlements, no timestamp server, hardened runtime; trust is never granted to the certificate here.
+sign_one() {
+    local item="$1" id="$2" sha1="$3"
+    printf '    signing %s as %s\n' "$item" "$id"
+    run_limited "$SIGN_LIMIT_SECS" codesign --force --keychain "$SIGN_KEYCHAIN" --sign "$sha1" --identifier "$id" --options runtime --timestamp=none "$item" \
+        || die "codesign could not sign $item with the certificate $sha1 (or did not finish within $SIGN_LIMIT_SECS seconds); codesign's own lines are above in the log. Nothing was changed to make macOS trust the certificate, and nothing half-signed is kept: the next run starts afresh. Stop here and have the log reviewed before trying anything else"
+}
+
+check_signed() {
+    local item="$1" id="$2" sha1="$3" info ent runtime_re='flags=0x[0-9a-f]+\([^)]*runtime[^)]*\)'
+    codesign --verify --strict -R "=identifier \"$id\" and certificate leaf = H\"$sha1\"" "$item" \
+        || die "$item does not verify as '$id' signed by the certificate $sha1. Stop here and have the log reviewed"
+    info="$(codesign -d --verbose=2 -r- "$item" 2>&1)" || die "codesign cannot describe $item: $info"
+    printf '%s\n' "$info" | sed 's/^/      /'
+    [[ "$info" =~ $runtime_re ]] || die "$item is not signed with the hardened runtime (the flags line above lacks 'runtime'). Stop here and have the log reviewed"
+    ent="$(codesign -d --entitlements - "$item" 2>/dev/null)" || die "codesign cannot read the entitlements of $item"
+    [[ -z "$ent" ]] || die "$item carries entitlements, and none are meant to be applied: $ent"
+}
+
+write_cert_request() {
+    cat > "$1" <<EOF
+[req]
+distinguished_name = dn
+prompt = no
+x509_extensions = ext
+[dn]
+CN = $SIGN_NAME
+[ext]
+basicConstraints = critical,CA:FALSE
+keyUsage = critical,digitalSignature
+extendedKeyUsage = critical,codeSigning
+subjectKeyIdentifier = hash
+EOF
+}
+
+# create-keychain adds the new keychain to the user's search list; nothing else in the VM is meant to find it there.
+restore_keychain_search() {
+    local before="$1" before_default="$2" line now paths=()
+    while IFS= read -r line; do
+        line="${line#"${line%%[![:space:]]*}"}"
+        line="${line#\"}"
+        line="${line%\"}"
+        [[ -z "$line" || "$line" == "$SIGN_KEYCHAIN" ]] || paths+=("$line")
+    done <<< "$before"
+    security list-keychains -d user -s ${paths[@]+"${paths[@]}"} >/dev/null
+    now="$(security list-keychains -d user)"
+    printf '    keychain search list of this user, before and after:\n'
+    printf '%s\n--\n%s\n' "$before" "$now" | sed 's/^/      /'
+    case "$now" in
+        *"$SIGN_KEYCHAIN"*) die "the signing keychain is still in this user's keychain search list after putting the list back. Stop here and have the log reviewed" ;;
+    esac
+    now="$(security default-keychain -d user 2>/dev/null || true)"
+    [[ "$now" == "$before_default" ]] \
+        || die "making the signing keychain changed this user's default keychain from '$before_default' to '$now'. Stop here and have the log reviewed"
+}
+
+step_sign_setup() {
+    require_no_args "$@"
+    check_command_line_tools
+    require_plain_sign_dir
+    local pw p12pw sha1 before_list before_default
+    if [[ -e "$SIGN_READY" || -L "$SIGN_READY" ]]; then
+        die "this VM already has a signing identity (certificate SHA-1 $(read_sign_ready || printf 'unreadable')), and this step never replaces one: a new certificate makes macOS forget every permission granted to ShellCue. To replace it on purpose, in the VM's own Terminal run: rm -rf $SIGN_DIR   and then, on the Mac: scripts/vm/mac-host.sh step sign-setup   That destroys the old key, which has no copy, and bundle cannot sign until sign-setup has succeeded again"
+    fi
+    if [[ -e "$SIGN_DIR" || -L "$SIGN_DIR" ]]; then
+        printf -- '--> removing what a sign-setup that did not finish left behind: %s\n' "$SIGN_DIR"
+        rm -rf -- "$SIGN_DIR"
+    fi
+    printf -- '--> if this step fails, nothing usable is left and it is safe to run again: scripts/vm/mac-host.sh step sign-setup\n'
+    umask 077
+    mkdir -- "$SIGN_DIR"
+    mkdir -- "$SIGN_WORK"
+    SIGN_WORK_OWNED=1
+    printf '    openssl: %s\n' "$(/usr/bin/openssl version)"
+
+    printf -- '--> making the key and the self-signed certificate "%s" (RSA 2048, %s days)\n' "$SIGN_NAME" "$SIGN_DAYS"
+    write_cert_request "$SIGN_WORK/req.cnf"
+    /usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days "$SIGN_DAYS" -config "$SIGN_WORK/req.cnf" \
+        -keyout "$SIGN_WORK/key.pem" -out "$SIGN_CERT"
+    sha1="$(cert_sha1 "$SIGN_CERT")"
+    /usr/bin/openssl rand -hex 32 > "$SIGN_WORK/p12-password"
+    /usr/bin/openssl pkcs12 -export -inkey "$SIGN_WORK/key.pem" -in "$SIGN_CERT" -name "$SIGN_NAME" \
+        -out "$SIGN_WORK/identity.p12" -passout "file:$SIGN_WORK/p12-password"
+    p12pw="$(< "$SIGN_WORK/p12-password")"
+
+    printf -- '--> making the signing keychain %s\n' "$SIGN_KEYCHAIN"
+    /usr/bin/openssl rand -hex 32 > "$SIGN_PASS_FILE"
+    pw="$(read_sign_password)"
+    before_list="$(security list-keychains -d user)"
+    before_default="$(security default-keychain -d user 2>/dev/null || true)"
+    security_stdin create-keychain "create-keychain -p $pw $SIGN_KEYCHAIN" "$pw"
+    [[ -f "$SIGN_KEYCHAIN" ]] || die "security did not create $SIGN_KEYCHAIN; its own lines are above in the log"
+    restore_keychain_search "$before_list" "$before_default"
+    # No time limit and no lock on sleep; the keychain is locked by the step that unlocked it.
+    security set-keychain-settings "$SIGN_KEYCHAIN"
+    unlock_sign_keychain
+    # -x: not exportable again. -T and the partition list let codesign use the key with no dialog, which SSH cannot answer.
+    security_stdin import "import $SIGN_WORK/identity.p12 -k $SIGN_KEYCHAIN -f pkcs12 -P $p12pw -x -T /usr/bin/codesign" "$p12pw" "$pw"
+    security_stdin set-key-partition-list "set-key-partition-list -S apple-tool:,apple: -s -k $pw $SIGN_KEYCHAIN" "$pw"
+    rm -f -- "$SIGN_WORK/key.pem" "$SIGN_WORK/identity.p12" "$SIGN_WORK/p12-password"
+    printf '    the key file and its packaged copy are deleted; the key now exists only in the keychain\n'
+    printf '    (limit: on this kind of disk a deleted file is unlinked, not overwritten)\n'
+    require_identity_listed "$sha1"
+    prove_key_usable "$sha1"
+
+    printf -- '--> trial: signing and running a throwaway program with the new identity\n'
+    printf 'int main(void) { return 0; }\n' > "$SIGN_WORK/trial.c"
+    xcrun clang -o "$SIGN_WORK/trial" "$SIGN_WORK/trial.c"
+    sign_one "$SIGN_WORK/trial" "$APP_BUNDLE_ID.trial" "$sha1"
+    check_signed "$SIGN_WORK/trial" "$APP_BUNDLE_ID.trial" "$sha1"
+    run_limited 60 "$SIGN_WORK/trial" \
+        || die "the signed trial program did not start (exit status $?): a program signed this way (with Apple's 'hardened runtime' protection) does not run. No identity was recorded. Stop here and have the log reviewed; do not run bundle"
+    printf '    the signed trial program started and exited 0\n'
+
+    # What bundle does in a later session: start locked, unlock from the password file, use the key.
+    lock_sign_keychain
+    unlock_sign_keychain
+    prove_key_usable "$sha1"
+    lock_sign_keychain
+    rm -rf -- "$SIGN_WORK"
+    SIGN_WORK_OWNED=0
+
+    printf '%s\n' "$sha1" > "$SIGN_READY"
+    printf '    certificate:\n'
+    /usr/bin/openssl x509 -in "$SIGN_CERT" -noout -subject -dates -fingerprint -sha256 | sed 's/^/      /'
+    printf -- '--> signing identity ready in %s: a self-signed certificate, fingerprint (SHA-1) %s\n' "$SIGN_DIR" "$sha1"
+    printf -- '--> every bundle run prints that fingerprint; it must never change between runs\n'
+    printf -- '--> the key stays in this VM and has no copy: if the VM is lost, a new certificate is made and ShellCue must be granted its permissions again\n'
+    printf -- '--> next, on the Mac (after specs and build): scripts/vm/mac-host.sh step bundle\n'
+}
+
+require_sign_identity() {
+    local sha1 want
+    [[ -e "$SIGN_DIR" || -L "$SIGN_DIR" ]] \
+        || die "this VM has no signing identity yet. On the Mac run: scripts/vm/mac-host.sh step sign-setup   and then: scripts/vm/mac-host.sh step bundle"
+    require_private "$SIGN_DIR" d 700
+    want="$(read_sign_ready)" \
+        || die "$SIGN_READY is missing or does not hold a certificate fingerprint. If sign-setup has never succeeded in this VM, run on the Mac: scripts/vm/mac-host.sh step sign-setup   and then: scripts/vm/mac-host.sh step bundle   Otherwise the signing folder was changed after it was made. $SIGN_REPAIR"
+    require_private "$SIGN_KEYCHAIN" f ""
+    require_private "$SIGN_CERT" f 600
+    sha1="$(cert_sha1 "$SIGN_CERT")"
+    [[ "$sha1" == "$want" ]] || die "$SIGN_CERT has SHA-1 $sha1 but sign-setup recorded $want; the signing folder was changed after it was made. $SIGN_REPAIR"
+    printf '%s' "$sha1"
+}
+
+sign_app() {
+    local app="$1" sha1="$2" version="$3" c="$1/Contents" ime_app="$1/Contents/Helpers/ShellCueInputMethod.app" said
+    unlock_sign_keychain
+    require_identity_listed "$sha1"
+    prove_key_usable "$sha1"
+    # Inside out: nested code is signed before the bundle whose seal covers it. Every program in APP_PROGRAMS but the
+    # main one needs its own line here and below.
+    sign_one "$ime_app" "$IME_BUNDLE_ID" "$sha1"
+    sign_one "$c/MacOS/shellcue" "$CLI_SIGN_ID" "$sha1"
+    sign_one "$c/MacOS/shellcue-term" "$TERM_SIGN_ID" "$sha1"
+    sign_one "$app" "$APP_BUNDLE_ID" "$sha1"
+    # Verifying needs no key.
+    lock_sign_keychain
+
+    printf '    verifying the whole app:\n'
+    codesign --verify --strict --deep --verbose=2 "$app" 2>&1 | sed 's/^/      /' \
+        || die "$app does not verify after signing. Stop here and have the log reviewed"
+    check_signed "$ime_app" "$IME_BUNDLE_ID" "$sha1"
+    check_signed "$c/MacOS/shellcue" "$CLI_SIGN_ID" "$sha1"
+    check_signed "$c/MacOS/shellcue-term" "$TERM_SIGN_ID" "$sha1"
+    check_signed "$app" "$APP_BUNDLE_ID" "$sha1"
+    # Proves a program signed this way still starts; --version prints and exits before the program does anything else.
+    said="$(cd / && run_limited 60 env -i HOME="$HOME" PATH="$PATH" "$c/MacOS/shellcue" --version)" \
+        || die "the signed command-line program did not start, or did not exit within 60 seconds. Stop here and have the log reviewed"
+    printf '    the signed command-line program starts and says: %s\n' "${said:0:200}"
+    case "$said" in
+        *"$version"*) ;;
+        *) die "the signed command-line program did not report version $version" ;;
+    esac
+}
+
 make_dmg() {
-    local app="$1" dmg="$2" root="$OUT/dmg-root"
+    local app="$1" dmg="$2" tree="$3" root="$OUT/dmg-root"
     mkdir -- "$root"
     cp -R -- "$app" "$root/ShellCue.app"
+    # The copy, not the app that was checked, is what goes into the image.
+    codesign --verify --strict --deep "$root/ShellCue.app" || die "the copy of the app made for the disk image does not verify"
+    [[ "$(tree_sha256 "$root/ShellCue.app")" == "$tree" ]] || die "the copy of the app made for the disk image differs from the signed app"
     ln -s /Applications "$root/Applications"
     hdiutil create -volname ShellCue -srcfolder "$root" -fs HFS+ -format ULFO -ov "$dmg"
     hdiutil verify "$dmg"
@@ -783,9 +1091,10 @@ step_bundle() {
     enter_src
     require_clean_tree
     require_stamps web specs build
-    local version app="$OUT/ShellCue.app" dmg="$OUT/ShellCue.dmg" f sum tree
+    local version app="$OUT/ShellCue.app" dmg="$OUT/ShellCue.dmg" f sum tree sha1
     version="$(workspace_version)"
-    printf -- '--> version %s, bundle id %s\n' "$version" "$APP_BUNDLE_ID"
+    sha1="$(require_sign_identity)"
+    printf -- '--> version %s, bundle id %s, signing certificate SHA-1 %s\n' "$version" "$APP_BUNDLE_ID" "$sha1"
 
     [[ "$OUT" == "$HOME/shellcue/build/macos" ]] || die "refusing to clear an unexpected output folder: $OUT"
     rm -rf -- "$OUT"
@@ -794,6 +1103,10 @@ step_bundle() {
 
     printf '    Info.plist:\n'
     plutil -p -- "$app/Contents/Info.plist" | sed 's/^/      /'
+    printf -- '--> assembled %s; signing it\n' "$app"
+    sign_app "$app" "$sha1" "$version"
+
+    # Signing rewrites the programs and adds the seal, so these figures describe the signed app.
     printf '    programs:\n'
     for f in MacOS/shellcue-desktop MacOS/shellcue MacOS/shellcue-term "Helpers/ShellCueInputMethod.app/Contents/MacOS/$IME_PROGRAM"; do
         printf '      %s  Contents/%s\n' "$(sha256_of "$app/Contents/$f")" "$f"
@@ -802,10 +1115,10 @@ step_bundle() {
     tree="$(tree_sha256 "$app")"
     [[ -n "$tree" ]] || die "cannot hash the files under $app"
     printf '    app tree sha256: %s\n' "$tree"
-    printf -- '--> assembled %s (not signed with a certificate; signing is a later step)\n' "$app"
+    printf -- '--> signed %s with the self-signed certificate %s (not notarised; another Mac will not trust it by itself)\n' "$app" "$sha1"
 
     printf -- '--> making the disk image (a minute or two)\n'
-    make_dmg "$app" "$dmg"
+    make_dmg "$app" "$dmg" "$tree"
     sum="$(sha256_of "$dmg")"
     printf '%s  ShellCue.dmg\n' "$sum" > "$dmg.sha256"
     printf '    disk image size: %s\n' "$(du -h -- "$dmg" | cut -f1)"
@@ -833,6 +1146,7 @@ step_info() {
     fi
     printf '    disk:\n'
     df -h "$HOME" | sed 's/^/      /'
+    printf '    signing identity: %s\n' "$(read_sign_ready || printf 'none, or not readable (made by: scripts/vm/mac-host.sh step sign-setup)')"
     if [[ -n "$dir" && -d "$SRC/.git" ]]; then
         printf '    checkout: %s\n' "$(git -C "$SRC" log -1 --format='%H %s')"
         printf '    git status --short:\n'
@@ -870,6 +1184,7 @@ main() {
         rust-test) step_rust_test "$@" ;;
         specs) step_specs "$@" ;;
         build) step_build "$@" ;;
+        sign-setup) step_sign_setup "$@" ;;
         bundle) step_bundle "$@" ;;
         info) step_info "$@" ;;
         *) die "step '$step' is listed in STEPS but has no handler" ;;
