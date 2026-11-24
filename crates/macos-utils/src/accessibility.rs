@@ -1,4 +1,12 @@
-use accessibility_sys::AXIsProcessTrusted;
+use accessibility_sys::{
+    AXIsProcessTrusted,
+    AXIsProcessTrustedWithOptions,
+    kAXTrustedCheckOptionPrompt,
+};
+use core_foundation::base::TCFType;
+use core_foundation::boolean::CFBoolean;
+use core_foundation::dictionary::CFDictionary;
+use core_foundation::string::CFString;
 use objc2::ClassType;
 use objc2_app_kit::NSWorkspace;
 use objc2_foundation::{
@@ -22,4 +30,10 @@ pub fn open_accessibility() -> bool {
 
 pub fn accessibility_is_enabled() -> bool {
     unsafe { AXIsProcessTrusted() }
+}
+
+pub fn prompt_accessibility() -> bool {
+    let key = unsafe { CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt) };
+    let options = CFDictionary::from_CFType_pairs(&[(key, CFBoolean::true_value())]);
+    unsafe { AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef()) }
 }

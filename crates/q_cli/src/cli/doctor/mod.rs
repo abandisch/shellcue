@@ -1061,8 +1061,10 @@ impl DoctorCheck<DiagnosticsResponse> for CliPathCheck {
     }
 }
 
+#[cfg(target_os = "macos")]
 struct AccessibilityCheck;
 
+#[cfg(target_os = "macos")]
 #[async_trait]
 impl DoctorCheck<DiagnosticsResponse> for AccessibilityCheck {
     fn name(&self) -> Cow<'static, str> {
@@ -1070,29 +1072,32 @@ impl DoctorCheck<DiagnosticsResponse> for AccessibilityCheck {
     }
 
     async fn check(&self, diagnostics: &DiagnosticsResponse) -> Result<(), DoctorError> {
+        use crate::util::accessibility::{
+            ACCESSIBILITY_WAIT_LIMIT,
+            AccessibilityOutcome,
+            CtrlC,
+            grant_instructions,
+            prompt_and_wait_for_accessibility,
+        };
+
         if diagnostics.accessibility != "true" {
             Err(DoctorError::Error {
                 reason: "Accessibility is disabled".into(),
                 info: vec![],
-                fix: command_fix(
-                    vec![CLI_BINARY_NAME, "debug", "prompt-accessibility"],
-                    Duration::from_secs(1),
-                ),
-                // fix: Some(DoctorFix::Sync(Box::new(move || {
-                //     println!("1. Try enabling accessibility in System Settings");
-                //     if !Command::new(CLI_BINARY_NAME)
-                //         .args(["debug", "prompt-accessibility"])
-                //         .status()?
-                //         .success()
-                //     {
-                //         bail!("Failed to open accessibility in System Settings: {CLI_BINARY_NAME} debug
-                // prompt-accessibility");     }
-
-                //     println!("2. Restarting");
-                //     println!("3. Reset accessibility");
-
-                //     Ok(())
-                // }))),
+                fix: Some(DoctorFix::Async(
+                    async move {
+                        for line in grant_instructions() {
+                            println!("{line}");
+                        }
+                        match prompt_and_wait_for_accessibility(ACCESSIBILITY_WAIT_LIMIT, CtrlC::LeaveToCaller).await? {
+                            AccessibilityOutcome::AlreadyGranted | AccessibilityOutcome::Granted => Ok(()),
+                            AccessibilityOutcome::TimedOut | AccessibilityOutcome::Interrupted => eyre::bail!(
+                                "{PRODUCT_NAME} has not been granted the Accessibility permission yet. Grant it in System Settings > Privacy & Security > Accessibility, then run `{CLI_BINARY_NAME} doctor` again."
+                            ),
+                        }
+                    }
+                    .boxed(),
+                )),
                 error: None,
             })
         } else {
