@@ -2,7 +2,7 @@
 
 mod completion;
 mod debug;
-mod diagnostics;
+pub(crate) mod diagnostics;
 mod doctor;
 mod hook;
 mod init;
@@ -452,6 +452,24 @@ mod test {
     fn stream_from_socket_is_rejected() {
         assert!(Cli::try_parse_from([CLI_BINARY_NAME, "_", "stream-from-socket"]).is_err());
         assert!(Cli::try_parse_from([CLI_BINARY_NAME, "_", "sockets-dir"]).is_ok());
+    }
+
+    #[test]
+    fn test_setup() {
+        let setup = |dotfiles, input_method, no_confirm| {
+            CliRootCommands::Setup(internal::InstallArgs {
+                dotfiles,
+                input_method,
+                no_confirm,
+                force: false,
+                global: false,
+            })
+        };
+        assert_parse!(["setup"], setup(false, false, false));
+        assert_parse!(["setup", "--no-confirm"], setup(false, false, true));
+        assert_parse!(["setup", "--dotfiles"], setup(true, false, false));
+        assert_parse!(["setup", "--input-method"], setup(false, true, false));
+        assert_parse!(["install"], setup(false, false, false));
     }
 
     #[test]

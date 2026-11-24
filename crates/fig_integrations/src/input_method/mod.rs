@@ -7,7 +7,6 @@ use std::path::{
     Path,
     PathBuf,
 };
-use std::process::Command;
 use std::ptr;
 
 use async_trait::async_trait;
@@ -121,6 +120,9 @@ unsafe extern "C" {
 
     pub fn TISRegisterInputSource(location: CFURLRef) -> OSStatus;
 }
+
+/// One-second attempts to finish the installation, so the user has two minutes to click OK.
+const FINISH_INSTALLATION_ATTEMPTS: u32 = 120;
 
 pub struct InputMethod {
     pub bundle_path: PathBuf,
@@ -530,11 +532,6 @@ impl Integration for InputMethod {
             // Register input source
             InputMethod::register(&destination)?;
 
-            debug!("Launch Input Method...");
-            if let Some(dest) = destination.to_str() {
-                Command::new("open").arg(dest);
-            }
-
             run_on_main(|| {
                 let source = self.input_source()?;
                 source.enable()?;
@@ -552,6 +549,7 @@ impl Integration for InputMethod {
             .join("MacOS")
             .join(CLI_BINARY_NAME);
 
+        let mut attempts = 0;
         loop {
             let out = tokio::process::Command::new(&q_cli_path)
                 .args(["_", "attempt-to-finish-input-method-installation"])
@@ -569,6 +567,16 @@ impl Integration for InputMethod {
                     Some(error) => debug!("{error}"),
                     None => debug!("Could not parse output as known error: {err}"),
                 }
+            }
+
+            attempts += 1;
+            if attempts >= FINISH_INSTALLATION_ATTEMPTS {
+                return Err(crate::Error::Custom(
+                    format!(
+                        "Timed out waiting for the input method to be enabled. Run `{CLI_BINARY_NAME} integrations install input-method` to try again."
+                    )
+                    .into(),
+                ));
             }
 
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;

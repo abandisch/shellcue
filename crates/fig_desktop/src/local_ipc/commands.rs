@@ -113,13 +113,26 @@ pub async fn diagnostic(_: DiagnosticsCommand, figterm_state: &FigtermState) -> 
 pub async fn prompt_for_accessibility_permission() -> LocalResult {
     cfg_if::cfg_if! {
         if #[cfg(target_os = "macos")] {
+            use std::sync::atomic::{
+                AtomicBool,
+                Ordering,
+            };
+
             use macos_utils::accessibility::{
                 accessibility_is_enabled,
                 open_accessibility,
+                prompt_accessibility,
             };
 
+            // macOS may show its dialog only once, so later requests open the pane.
+            static PROMPTED: AtomicBool = AtomicBool::new(false);
+
             if !accessibility_is_enabled() {
-                open_accessibility();
+                if PROMPTED.swap(true, Ordering::Relaxed) {
+                    open_accessibility();
+                } else {
+                    prompt_accessibility();
+                }
             }
             Ok(LocalResponse::Success(None))
         } else {
