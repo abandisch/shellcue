@@ -111,7 +111,7 @@
 
     if (enabled) {
       setMark("input-method", "done");
-      setText("input-method-status", "The input method link is in place. Restart any terminal that uses it.");
+      setText("input-method-status", "The input method is on. Restart any terminal that uses it.");
     } else if (status === "working") {
       setMark("input-method", "busy");
       setText("input-method-status", "Enabling the input method…");

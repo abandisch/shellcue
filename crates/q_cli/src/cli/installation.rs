@@ -144,7 +144,8 @@ pub async fn install_cli(
                     println!("To enable support for some terminals like Kitty, Alacritty, and Wezterm,");
                     println!("you must enable our Input Method integration.");
                     println!();
-                    println!("To enable the integration, select \"yes\" below and then click Ok in the popup.");
+                    println!("To enable the integration, select \"yes\" below and then choose Allow when macOS asks.");
+                    println!("macOS warns about typing; the input method only asks the terminal where the cursor is.");
                     println!();
 
                     match choose("Do you want to enable support for input method backed terminals?", &["Yes", "No"])? {

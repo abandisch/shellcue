@@ -1352,8 +1352,6 @@ impl DoctorCheck<SupportedTerminalCheckContext> for ImeStatusCheck {
 
         let input_method = InputMethod::default();
         if let Err(e) = input_method.is_installed().await {
-            fig_settings::state::set_value("input-method.enabled", true).ok();
-
             match e {
                 InstallationError::InputMethod(InputMethodError::NotRunning) => {
                     return Err(doctor_fix!({
