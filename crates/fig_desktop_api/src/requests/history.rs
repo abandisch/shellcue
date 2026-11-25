@@ -1,32 +1,19 @@
-use fig_proto::fig::history_query_request::param::Type;
 use fig_proto::fig::server_originated_message::Submessage as ServerOriginatedSubMessage;
 use fig_proto::fig::{
     HistoryQueryRequest,
     HistoryQueryResponse,
 };
 use fig_settings::history::History;
-use fig_settings::history::rusqlite::params_from_iter;
-use fig_settings::history::rusqlite::types::Value;
 
 use super::RequestResult;
 
-pub async fn query(request: HistoryQueryRequest) -> RequestResult {
-    let history = History::new();
-    let mut params: Vec<Value> = Vec::with_capacity(request.params.len());
-    for (i, param) in request.params.iter().enumerate() {
-        let param = match &param.r#type {
-            Some(Type::Null(())) => Value::Null,
-            Some(Type::Integer(i)) => Value::Integer(*i),
-            Some(Type::Float(f)) => Value::Real(*f),
-            Some(Type::String(s)) => Value::Text(s.clone()),
-            Some(Type::Blob(b)) => Value::Blob(b.clone()),
-            None => return Err(format!("History query parameter {i} is missing type").into()),
-        };
-        params.push(param);
-    }
+/// The only history query the page can trigger; the JSON row keys are what the page parses.
+const HISTORY_QUERY: &str = "SELECT command, shell, session_id, cwd, start_time, exit_code FROM history";
 
+pub async fn query(_request: HistoryQueryRequest) -> RequestResult {
+    let history = History::new();
     let results = history
-        .query(&request.query, params_from_iter(params))
+        .query(HISTORY_QUERY)
         .map_err(|err| format!("Failed querying history: {err}"))?;
 
     let json_array =
@@ -34,4 +21,24 @@ pub async fn query(request: HistoryQueryRequest) -> RequestResult {
 
     let response = ServerOriginatedSubMessage::HistoryQueryResponse(HistoryQueryResponse { json_array });
     Ok(response.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_history_query_is_fixed_select() {
+        assert_eq!(
+            HISTORY_QUERY,
+            "SELECT command, shell, session_id, cwd, start_time, exit_code FROM history"
+        );
+        assert!(HISTORY_QUERY.starts_with("SELECT "));
+        assert!(HISTORY_QUERY.ends_with(" FROM history"));
+        assert!(!HISTORY_QUERY.contains('?'));
+        assert!(!HISTORY_QUERY.contains(':'));
+        assert!(!HISTORY_QUERY.contains('@'));
+        assert!(!HISTORY_QUERY.contains('$'));
+        assert!(!HISTORY_QUERY.contains(';'));
+    }
 }

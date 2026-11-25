@@ -1,5 +1,9 @@
-import logger from "loglevel";
-import { SETTINGS, updateSettings } from "@shellcue/api-bindings-wrappers";
+import {
+  executeCommand,
+  fread,
+  SettingsMap,
+  updateSettings,
+} from "@shellcue/api-bindings-wrappers";
 import { SpecLocationSource } from "@shellcue/shared/utils";
 import {
   getSpecPath,
@@ -18,23 +22,29 @@ import {
   afterEach,
 } from "vitest";
 
-const { importSpecFromFile } = loadHelpers;
-
 vi.mock("../src/loadHelpers", () => ({
-  importSpecFromFile: vi
+  importFromBundledSpecs: vi
     .fn()
-    .mockResolvedValue({ default: { name: "loadFromFile" } }),
-  getPrivateSpec: vi.fn().mockReturnValue(undefined),
+    .mockResolvedValue({ default: { name: "loadFromBundle" } }),
+  publicSpecExists: vi.fn(async (name: string) => name === "git"),
+  getVersionFromFullFile: vi.fn(),
   isDiffVersionedSpec: vi.fn(),
 }));
 
 vi.mock("@shellcue/api-bindings-wrappers", async () => ({
   ...(await vi.importActual("@shellcue/api-bindings-wrappers")),
   executeCommand: vi.fn(),
+  fread: vi.fn(),
 }));
 
-// TODO: remove this statement and move fig dir to shared
-const FIG_DIR = "~/.fig";
+const LEGACY_DEV_SETTINGS: Record<string, unknown> = {
+  "autocomplete.developerMode": true,
+  "autocomplete.developerModeNPM": true,
+  "autocomplete.developerModeNPMInvalidateCache": true,
+  "autocomplete.devCompletionsFolder": "~/some-folder/",
+  "autocomplete.devCompletionsServerPort": 3005,
+  "autocomplete.personalShortcutsToken": "+",
+};
 
 beforeAll(() => {
   updateSettings({});
@@ -100,25 +110,35 @@ describe("getSpecPath", () => {
     });
   });
 
-  it("works properly with ? commands", async () => {
+  it("resolves ? as an ordinary name without running a command", async () => {
     expect(await getSpecPath("?", cwd)).toEqual({
-      type: SpecLocationSource.LOCAL,
-      path: `${cwd}/`,
-      name: "_shortcuts",
+      type: SpecLocationSource.GLOBAL,
+      name: "?",
     });
+    expect(executeCommand).not.toHaveBeenCalled();
   });
 
-  it("works properly with + commands", async () => {
+  it("resolves + as an ordinary name", async () => {
+    updateSettings(LEGACY_DEV_SETTINGS as SettingsMap);
     expect(await getSpecPath("+", cwd)).toEqual({
-      type: SpecLocationSource.LOCAL,
+      type: SpecLocationSource.GLOBAL,
       name: "+",
-      path: "~/",
     });
+    updateSettings({});
   });
 });
 
 describe("loadFigSubcommand", () => {
-  window.URL.createObjectURL = vi.fn();
+  const cwd = "test_cwd";
+
+  const expectNoSpec = async (specLocation: Fig.SpecLocation) => {
+    await expect(loadFigSubcommand(specLocation)).rejects.toThrow(
+      "No spec found",
+    );
+    expect(loadHelpers.importFromBundledSpecs).not.toHaveBeenCalled();
+    expect(fread).not.toHaveBeenCalled();
+    expect(executeCommand).not.toHaveBeenCalled();
+  };
 
   beforeEach(() => {
     (loadHelpers.isDiffVersionedSpec as Mock).mockResolvedValue(false);
@@ -126,62 +146,75 @@ describe("loadFigSubcommand", () => {
   });
 
   afterEach(() => {
-    (loadHelpers.isDiffVersionedSpec as Mock).mockClear();
+    vi.clearAllMocks();
+    updateSettings({});
   });
 
-  it("works with expected input", async () => {
+  it("loads a spec from the bundled index", async () => {
     const result = await loadFigSubcommand({
-      name: "path",
-      type: SpecLocationSource.LOCAL,
+      name: "git",
+      type: SpecLocationSource.GLOBAL,
     });
     expect(loadHelpers.isDiffVersionedSpec).toHaveBeenCalledTimes(1);
-    expect(result.name).toBe("loadFromFile");
+    expect(loadHelpers.importFromBundledSpecs).toHaveBeenCalledTimes(1);
+    expect(loadHelpers.importFromBundledSpecs).toHaveBeenCalledWith("git");
+    expect(result.name).toBe("loadFromBundle");
+    expect(fread).not.toHaveBeenCalled();
   });
 
-  it("works in dev mode", async () => {
-    const devPath = "~/some-folder/";
-    const specLocation: Fig.SpecLocation = {
+  it("loads no spec for a local location", async () => {
+    await expectNoSpec(await getSpecPath("./dir/test", cwd));
+    await expectNoSpec(await getSpecPath("~/test", cwd));
+    await expectNoSpec({ name: "git", type: SpecLocationSource.LOCAL });
+  });
+
+  it("loads no spec for the ? token", async () => {
+    await expectNoSpec(await getSpecPath("?", cwd));
+  });
+
+  it("loads no spec for the + token", async () => {
+    await expectNoSpec(await getSpecPath("+", cwd));
+  });
+
+  it("loads no spec for a name absent from the bundled index", async () => {
+    await expectNoSpec({
+      name: "not-bundled",
+      type: SpecLocationSource.GLOBAL,
+    });
+    expect(loadHelpers.publicSpecExists).toHaveBeenCalledWith("not-bundled");
+  });
+
+  it("ignores former developer-mode settings", async () => {
+    updateSettings(LEGACY_DEV_SETTINGS as SettingsMap);
+
+    const result = await loadFigSubcommand({
       name: "git",
-      type: SpecLocationSource.LOCAL,
-    };
-
-    updateSettings({
-      [SETTINGS.DEV_COMPLETIONS_FOLDER]: devPath,
-      [SETTINGS.DEV_MODE_NPM]: false,
-      [SETTINGS.DEV_MODE]: false,
+      type: SpecLocationSource.GLOBAL,
     });
-    await loadFigSubcommand(specLocation);
-    expect(importSpecFromFile).toHaveBeenLastCalledWith(
-      "git",
-      `${FIG_DIR}/autocomplete/build/`,
-      logger,
-    );
+    expect(result.name).toBe("loadFromBundle");
+    expect(loadHelpers.importFromBundledSpecs).toHaveBeenCalledTimes(1);
+    expect(loadHelpers.importFromBundledSpecs).toHaveBeenCalledWith("git");
+    expect(fread).not.toHaveBeenCalled();
+    expect(executeCommand).not.toHaveBeenCalled();
 
-    updateSettings({
-      [SETTINGS.DEV_COMPLETIONS_FOLDER]: devPath,
-      [SETTINGS.DEV_MODE_NPM]: true,
-      [SETTINGS.DEV_MODE]: false,
-    });
-    await loadFigSubcommand(specLocation);
-    expect(importSpecFromFile).toHaveBeenLastCalledWith("git", devPath, logger);
+    vi.clearAllMocks();
+    (loadHelpers.isDiffVersionedSpec as Mock).mockResolvedValue(false);
+    await expectNoSpec({ name: "git", type: SpecLocationSource.LOCAL });
+    await expectNoSpec(await getSpecPath("+", cwd));
+  });
 
-    updateSettings({
-      [SETTINGS.DEV_COMPLETIONS_FOLDER]: devPath,
-      [SETTINGS.DEV_MODE_NPM]: false,
-      [SETTINGS.DEV_MODE]: true,
-    });
-    await loadFigSubcommand(specLocation);
-    expect(importSpecFromFile).toHaveBeenLastCalledWith("git", devPath, logger);
+  it("ignores former developer-mode settings when loading through the cache", async () => {
+    updateSettings(LEGACY_DEV_SETTINGS as SettingsMap);
 
-    updateSettings({
-      [SETTINGS.DEV_COMPLETIONS_FOLDER]: "~/some-folder/",
-      [SETTINGS.DEV_MODE_NPM]: false,
-      [SETTINGS.DEV_MODE]: true,
-    });
-    await loadFigSubcommand(specLocation);
-    expect(importSpecFromFile).toHaveBeenLastCalledWith("git", devPath, logger);
-
-    expect(loadHelpers.isDiffVersionedSpec).toHaveBeenCalledTimes(4);
+    await expect(
+      loadSubcommandCached({
+        name: "not-bundled",
+        type: SpecLocationSource.GLOBAL,
+      }),
+    ).rejects.toThrow("No spec found");
+    expect(loadHelpers.importFromBundledSpecs).not.toHaveBeenCalled();
+    expect(fread).not.toHaveBeenCalled();
+    expect(executeCommand).not.toHaveBeenCalled();
   });
 });
 

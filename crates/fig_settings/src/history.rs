@@ -228,14 +228,12 @@ impl History {
     }
 
     /// A raw sql query that returns a json array of objects
-    pub fn query<P: rusqlite::Params>(
-        &self,
-        query: &str,
-        params: P,
-    ) -> Result<Vec<serde_json::Map<String, serde_json::Value>>> {
+    ///
+    /// `&'static str` so request data can never be passed in as SQL.
+    pub fn query(&self, query: &'static str) -> Result<Vec<serde_json::Map<String, serde_json::Value>>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(query)?;
-        let rows = stmt.query_map(params, |row| {
+        let rows = stmt.query_map([], |row| {
             let row_count = row.as_ref().column_count();
             let mut map = serde_json::Map::with_capacity(row_count);
             for i in 0..row_count {
@@ -534,7 +532,7 @@ mod tests {
         assert_eq!(row.len(), 2);
 
         // while we're here, test the `query` method
-        let row = history.query("SELECT * FROM history ORDER BY id ASC", ()).unwrap();
+        let row = history.query("SELECT * FROM history ORDER BY id ASC").unwrap();
 
         assert_eq!(row.len(), 3);
 

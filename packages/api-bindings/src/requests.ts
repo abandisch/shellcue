@@ -3,16 +3,6 @@
  */
 
 import {
-  AppendToFileRequest,
-  AppendToFileRequestSchema,
-  ContentsOfDirectoryRequest,
-  ContentsOfDirectoryRequestSchema,
-  ContentsOfDirectoryResponse,
-  CreateDirectoryRequest,
-  CreateDirectoryRequestSchema,
-  DestinationOfSymbolicLinkRequest,
-  DestinationOfSymbolicLinkRequestSchema,
-  DestinationOfSymbolicLinkResponse,
   GetLocalStateRequest,
   GetLocalStateRequestSchema,
   GetLocalStateResponse,
@@ -37,12 +27,6 @@ import {
   RunProcessResponse,
   UpdateApplicationPropertiesRequest,
   UpdateApplicationPropertiesRequestSchema,
-  UpdateLocalStateRequest,
-  UpdateLocalStateRequestSchema,
-  UpdateSettingsPropertyRequest,
-  UpdateSettingsPropertyRequestSchema,
-  WriteFileRequest,
-  WriteFileRequestSchema,
 } from "@shellcue/proto/fig";
 import { sendMessage } from "./core.js";
 import { create } from "@bufbuild/protobuf";
@@ -105,35 +89,6 @@ export async function sendReadFileRequest(
   });
 }
 
-export async function sendContentsOfDirectoryRequest(
-  request: Omit<ContentsOfDirectoryRequest, "$typeName" | "$unknown">,
-): Promise<ContentsOfDirectoryResponse> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      {
-        case: "contentsOfDirectoryRequest",
-        value: create(ContentsOfDirectoryRequestSchema, request),
-      },
-      (response) => {
-        switch (response?.case) {
-          case "contentsOfDirectoryResponse":
-            resolve(response.value);
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'ContentsOfDirectoryRequest'`,
-              ),
-            );
-        }
-      },
-    );
-  });
-}
-
 export async function sendGetSettingsPropertyRequest(
   request: Omit<GetSettingsPropertyRequest, "$typeName" | "$unknown">,
 ): Promise<GetSettingsPropertyResponse> {
@@ -155,35 +110,6 @@ export async function sendGetSettingsPropertyRequest(
             reject(
               Error(
                 `Invalid response '${response?.case}' for 'GetSettingsPropertyRequest'`,
-              ),
-            );
-        }
-      },
-    );
-  });
-}
-
-export async function sendDestinationOfSymbolicLinkRequest(
-  request: Omit<DestinationOfSymbolicLinkRequest, "$typeName" | "$unknown">,
-): Promise<DestinationOfSymbolicLinkResponse> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      {
-        case: "destinationOfSymbolicLinkRequest",
-        value: create(DestinationOfSymbolicLinkRequestSchema, request),
-      },
-      (response) => {
-        switch (response?.case) {
-          case "destinationOfSymbolicLinkResponse":
-            resolve(response.value);
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'DestinationOfSymbolicLinkRequest'`,
               ),
             );
         }
@@ -279,35 +205,6 @@ export async function sendHistoryQueryRequest(
   });
 }
 
-export async function sendWriteFileRequest(
-  request: Omit<WriteFileRequest, "$typeName" | "$unknown">,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      {
-        case: "writeFileRequest",
-        value: create(WriteFileRequestSchema, request),
-      },
-      (response) => {
-        switch (response?.case) {
-          case "success":
-            resolve();
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'WriteFileRequest'`,
-              ),
-            );
-        }
-      },
-    );
-  });
-}
-
 export async function sendNotificationRequest(
   request: Omit<NotificationRequest, "$typeName" | "$unknown">,
 ): Promise<void> {
@@ -329,35 +226,6 @@ export async function sendNotificationRequest(
             reject(
               Error(
                 `Invalid response '${response?.case}' for 'NotificationRequest'`,
-              ),
-            );
-        }
-      },
-    );
-  });
-}
-
-export async function sendUpdateSettingsPropertyRequest(
-  request: Omit<UpdateSettingsPropertyRequest, "$typeName" | "$unknown">,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      {
-        case: "updateSettingsPropertyRequest",
-        value: create(UpdateSettingsPropertyRequestSchema, request),
-      },
-      (response) => {
-        switch (response?.case) {
-          case "success":
-            resolve();
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'UpdateSettingsPropertyRequest'`,
               ),
             );
         }
@@ -416,93 +284,6 @@ export async function sendUpdateApplicationPropertiesRequest(
             reject(
               Error(
                 `Invalid response '${response?.case}' for 'UpdateApplicationPropertiesRequest'`,
-              ),
-            );
-        }
-      },
-    );
-  });
-}
-
-export async function sendAppendToFileRequest(
-  request: Omit<AppendToFileRequest, "$typeName" | "$unknown">,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      {
-        case: "appendToFileRequest",
-        value: create(AppendToFileRequestSchema, request),
-      },
-      (response) => {
-        switch (response?.case) {
-          case "success":
-            resolve();
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'AppendToFileRequest'`,
-              ),
-            );
-        }
-      },
-    );
-  });
-}
-
-export async function sendUpdateLocalStateRequest(
-  request: Omit<UpdateLocalStateRequest, "$typeName" | "$unknown">,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      {
-        case: "updateLocalStateRequest",
-        value: create(UpdateLocalStateRequestSchema, request),
-      },
-      (response) => {
-        switch (response?.case) {
-          case "success":
-            resolve();
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'UpdateLocalStateRequest'`,
-              ),
-            );
-        }
-      },
-    );
-  });
-}
-
-export async function sendCreateDirectoryRequest(
-  request: Omit<CreateDirectoryRequest, "$typeName" | "$unknown">,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    sendMessage(
-      {
-        case: "createDirectoryRequest",
-        value: create(CreateDirectoryRequestSchema, request),
-      },
-      (response) => {
-        switch (response?.case) {
-          case "success":
-            resolve();
-            break;
-          case "error":
-            reject(Error(response.value));
-            break;
-          default:
-            reject(
-              Error(
-                `Invalid response '${response?.case}' for 'CreateDirectoryRequest'`,
               ),
             );
         }

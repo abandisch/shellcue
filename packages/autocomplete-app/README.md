@@ -30,7 +30,7 @@ following times:
 - We receive an autocomplete event from the fig.js API. We call
   `setFigState` to update the current buffer, cwd, etc. in our `autocompleteState`
 - The buffer has changed. We must re-parse the new buffer. This is
-  done asynchronous because of the need to load spec files from disk.
+  done asynchronous because of the need to load spec files.
   When the parser is complete we call `updateParserResult`.
 - A generator has completed. If the results aren't stale, we must update
   our generator state with the new results, calling

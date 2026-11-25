@@ -14,7 +14,6 @@ import {
   executeCommand,
   executeLoginShell,
   getSetting,
-  isInDevMode,
   SETTINGS,
 } from "@shellcue/api-bindings-wrappers";
 import { Command, substituteAlias } from "@shellcue/shell-parser";
@@ -621,10 +620,6 @@ const getGenerateSpecCacheKey = (
     }
   }
 
-  // Return this late to ensure any generateSpecCacheKey side effects still happen
-  if (isInDevMode()) {
-    return undefined;
-  }
   if (typeof cacheKey === "string") {
     // Prepend the spec name to the cacheKey to avoid collisions between specs.
     return `${tokenArray[0]}:${cacheKey}`;
@@ -797,9 +792,8 @@ const parseArgumentsCached = async (
   for (let i = 0; i < locations.length; i += 1) {
     cacheKey = getCacheKey(tokenText, context, locations[i]);
     if (
-      !isInDevMode() &&
-      (parseArgumentsCache.has(cacheKey) ||
-        parseArgumentsGenerateSpecCache.has(cacheKey))
+      parseArgumentsCache.has(cacheKey) ||
+      parseArgumentsGenerateSpecCache.has(cacheKey)
     ) {
       return (
         (parseArgumentsGenerateSpecCache.get(

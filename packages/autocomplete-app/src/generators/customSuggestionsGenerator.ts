@@ -1,7 +1,6 @@
 import logger from "loglevel";
 
 import { executeCommand } from "@shellcue/api-bindings-wrappers";
-import { runPipingConsoleMethods } from "../utils";
 import {
   runCachedGenerator,
   GeneratorContext,
@@ -35,16 +34,14 @@ export async function getCustomSuggestions(
       generator,
       context,
       () =>
-        runPipingConsoleMethods(() =>
-          generator.custom!(tokenArray, executeCommand, {
-            currentWorkingDirectory,
-            currentProcess,
-            sshPrefix: "",
-            searchTerm,
-            environmentVariables,
-            isDangerous,
-          }),
-        ),
+        generator.custom!(tokenArray, executeCommand, {
+          currentWorkingDirectory,
+          currentProcess,
+          sshPrefix: "",
+          searchTerm,
+          environmentVariables,
+          isDangerous,
+        }),
       generator.cache?.cacheKey,
     );
 

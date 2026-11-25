@@ -1,52 +1,21 @@
 import logger, { Logger } from "loglevel";
-import { Settings } from "@shellcue/api-bindings";
 import { convertSubcommand, initializeDefault } from "@fig/autocomplete-shared";
 import {
   withTimeout,
   SpecLocationSource,
   splitPath,
-  ensureTrailingSlash,
 } from "@shellcue/shared/utils";
 import { Subcommand, SpecLocation } from "@shellcue/shared/internal";
-import {
-  SETTINGS,
-  getSetting,
-  executeCommand,
-  isInDevMode,
-} from "@shellcue/api-bindings-wrappers";
+import { SETTINGS, getSetting } from "@shellcue/api-bindings-wrappers";
 import {
   importFromBundledSpecs,
   publicSpecExists,
   SpecFileImport,
-  importSpecFromFile,
   isDiffVersionedSpec,
-  importFromLocalhost,
 } from "./loadHelpers.js";
 import { DisabledSpecError, MissingSpecError } from "./errors.js";
 import { specCache } from "./caches.js";
 import { tryResolveSpecToSubcommand } from "./tryResolveSpecToSubcommand.js";
-
-/**
- * This searches for the first directory containing a .fig/ folder in the parent directories
- */
-const searchFigFolder = async (currentDirectory: string) => {
-  try {
-    return ensureTrailingSlash(
-      (
-        await executeCommand({
-          command: "bash",
-          args: [
-            "-c",
-            `until [[ -f .fig/autocomplete/build/_shortcuts.js ]] || [[ $PWD = $HOME ]] || [[ $PWD = "/" ]]; do cd ..; done; echo $PWD`,
-          ],
-          cwd: currentDirectory,
-        })
-      ).stdout,
-    );
-  } catch {
-    return ensureTrailingSlash(currentDirectory);
-  }
-};
 
 export const serializeSpecLocation = (location: SpecLocation): string => {
   if (location.type === SpecLocationSource.GLOBAL) {
@@ -60,18 +29,6 @@ export const getSpecPath = async (
   cwd: string,
   isScript?: boolean,
 ): Promise<SpecLocation> => {
-  if (name === "?") {
-    // If the user is searching for _shortcuts.js by using "?"
-    const path = await searchFigFolder(cwd);
-    return { name: "_shortcuts", type: SpecLocationSource.LOCAL, path };
-  }
-
-  const personalShortcutsToken =
-    getSetting(SETTINGS.PERSONAL_SHORTCUTS_TOKEN) || "+";
-  if (name === personalShortcutsToken) {
-    return { name: "+", type: SpecLocationSource.LOCAL, path: "~/" };
-  }
-
   const [path, basename] = splitPath(name);
 
   if (!isScript) {
@@ -113,51 +70,11 @@ export const importSpecFromLocation = async (
   specFile: SpecFileImport;
   resolvedLocation?: ResolvedSpecLocation;
 }> => {
-  // Try loading spec from `devCompletionsFolder` first.
-  const devPath = isInDevMode()
-    ? (getSetting(SETTINGS.DEV_COMPLETIONS_FOLDER) as string)
-    : undefined;
-
-  const devPort = isInDevMode()
-    ? getSetting(SETTINGS.DEV_COMPLETIONS_SERVER_PORT)
-    : undefined;
-
   let specFile: SpecFileImport | undefined;
   let resolvedLocation: ResolvedSpecLocation | undefined;
 
-  if (typeof devPort === "string" || typeof devPort === "number") {
-    const { diffVersionedFile, name } = specLocation;
-    specFile = await importFromLocalhost(
-      diffVersionedFile ? `${name}/${diffVersionedFile}` : name,
-      devPort,
-    );
-  }
-
-  if (!specFile && devPath) {
-    try {
-      const { diffVersionedFile, name } = specLocation;
-      const spec = await importSpecFromFile(
-        diffVersionedFile ? `${name}/${diffVersionedFile}` : name,
-        devPath,
-        localLogger,
-      );
-      specFile = spec;
-    } catch {
-      // fallback to loading other specs in dev mode.
-    }
-  }
-
-  if (!specFile && specLocation.type === SpecLocationSource.LOCAL) {
-    // If we couldn't successfully load a dev spec try loading from specPath.
-    const { name, path } = specLocation;
-    const [dirname, basename] = splitPath(`${path || "~/"}${name}`);
-
-    specFile = await importSpecFromFile(
-      basename,
-      `${dirname}.fig/autocomplete/build/`,
-      localLogger,
-    );
-  } else if (!specFile) {
+  // Bundled specs only: no other location may supply spec code.
+  if (specLocation.type === SpecLocationSource.GLOBAL) {
     const { name, diffVersionedFile: versionFileName } = specLocation;
 
     if (await publicSpecExists(name)) {
@@ -171,16 +88,6 @@ export const importSpecFromLocation = async (
       } catch (err) {
         localLogger.error("Unable to load bundled spec", err);
         throw err;
-      }
-    } else {
-      try {
-        specFile = await importSpecFromFile(
-          name,
-          `~/.fig/autocomplete/build/`,
-          localLogger,
-        );
-      } catch (_err) {
-        /* empty */
       }
     }
   }
@@ -224,10 +131,7 @@ export const loadSubcommandCached = async (
   }
 
   const key = [source, path || "", name].join(",");
-  if (getSetting(SETTINGS.DEV_MODE_NPM_INVALIDATE_CACHE)) {
-    specCache.clear();
-    Settings.set(SETTINGS.DEV_MODE_NPM_INVALIDATE_CACHE, false);
-  } else if (!getSetting(SETTINGS.DEV_MODE_NPM) && specCache.has(key)) {
+  if (specCache.has(key)) {
     return specCache.get(key) as Subcommand;
   }
 

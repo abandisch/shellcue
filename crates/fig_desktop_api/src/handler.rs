@@ -130,10 +130,6 @@ where
     match message.submessage {
         Some(submessage) => {
             use ClientOriginatedSubMessage::{
-                AppendToFileRequest,
-                ContentsOfDirectoryRequest,
-                CreateDirectoryRequest,
-                DestinationOfSymbolicLinkRequest,
                 GetLocalStateRequest,
                 GetSettingsPropertyRequest,
                 HistoryQueryRequest,
@@ -143,9 +139,6 @@ where
                 ReadFileRequest,
                 RunProcessRequest,
                 UpdateApplicationPropertiesRequest,
-                UpdateLocalStateRequest,
-                UpdateSettingsPropertyRequest,
-                WriteFileRequest,
             };
             use requests::*;
 
@@ -154,13 +147,6 @@ where
                 InsertTextRequest(request) => event_handler.insert_text(request!(request)).await,
                 // fs
                 ReadFileRequest(request) => fs::read_file(request, ctx.env(), ctx.fs()).await,
-                WriteFileRequest(request) => fs::write_file(request, ctx.env(), ctx.fs()).await,
-                AppendToFileRequest(request) => fs::append_to_file(request, ctx.env()).await,
-                DestinationOfSymbolicLinkRequest(request) => {
-                    requests::fs::destination_of_symbolic_link(request, ctx.env()).await
-                },
-                ContentsOfDirectoryRequest(request) => fs::contents_of_directory(request, ctx.env()).await,
-                CreateDirectoryRequest(request) => fs::create_directory_request(request, ctx.env(), ctx.fs()).await,
                 // notifications
                 NotificationRequest(request) => event_handler.notification(request!(request)).await,
                 // process
@@ -171,10 +157,8 @@ where
                 },
                 // state
                 GetLocalStateRequest(request) => state::get(request).await,
-                UpdateLocalStateRequest(request) => state::update(request).await,
                 // settings
                 GetSettingsPropertyRequest(request) => settings::get(request).await,
-                UpdateSettingsPropertyRequest(request) => settings::update(request).await,
                 // window
                 PositionWindowRequest(request) => event_handler.position_window(request!(request)).await,
                 // history

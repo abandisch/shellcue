@@ -1,14 +1,8 @@
-import logger, { Logger } from "loglevel";
 import * as semver from "semver";
-import { ensureTrailingSlash, withTimeout } from "@shellcue/shared/utils";
-import {
-  executeCommand,
-  fread,
-  isInDevMode,
-} from "@shellcue/api-bindings-wrappers";
+import { withTimeout } from "@shellcue/shared/utils";
+import { executeCommand } from "@shellcue/api-bindings-wrappers";
 import z from "zod";
 import { MOST_USED_SPECS } from "./constants.js";
-import { LoadLocalSpecError } from "./errors.js";
 
 export type SpecFileImport =
   | {
@@ -19,50 +13,6 @@ export type SpecFileImport =
       default: Fig.Subcommand;
       versions: Fig.VersionDiffMap;
     };
-
-const stringImportCache = new Map<string, unknown>();
-
-export const importString = async (str: string) => {
-  if (stringImportCache.has(str)) {
-    return stringImportCache.get(str);
-  }
-  const result = await import(
-    /* @vite-ignore */
-    URL.createObjectURL(new Blob([str], { type: "text/javascript" }))
-  );
-
-  stringImportCache.set(str, result);
-  return result;
-};
-
-/*
- * Deprecated: eventually will just use importLocalSpec above
- * Load a spec import("{path}/{name}")
- */
-export async function importSpecFromFile(
-  name: string,
-  path: string,
-  localLogger: Logger = logger,
-): Promise<SpecFileImport> {
-  const importFromPath = async (fullPath: string) => {
-    localLogger.info(`Loading spec from ${fullPath}`);
-    const contents = await fread(fullPath);
-    if (!contents) {
-      throw new LoadLocalSpecError(`Failed to read file: ${fullPath}`);
-    }
-    return contents;
-  };
-
-  let result: string;
-  const joinedPath = `${ensureTrailingSlash(path)}${name}`;
-  try {
-    result = await importFromPath(`${joinedPath}.js`);
-  } catch (_) {
-    result = await importFromPath(`${joinedPath}/index.js`);
-  }
-
-  return importString(result);
-}
 
 // TODO: this is a problem for diff-versioned specs
 export async function importFromBundledSpecs<T = SpecFileImport>(
@@ -81,20 +31,6 @@ async function jsonFromBundledSpecs(path: string): Promise<unknown> {
   return fetch(`spec://localhost/${path}.json`).then((res) => res.json());
 }
 
-// TODO: this is a problem for diff-versioned specs
-export async function importFromLocalhost<T = SpecFileImport>(
-  name: string,
-  port: number | string,
-): Promise<T> {
-  return withTimeout(
-    20000,
-    import(
-      /* @vite-ignore */
-      `http://localhost:${port}/${name}.js`
-    ),
-  );
-}
-
 const cachedCLIVersions: Record<string, string | undefined> = {};
 
 export const getCachedCLIVersion = (key: string) =>
@@ -109,7 +45,7 @@ export async function getVersionFromFullFile(
     try {
       const storageKey = `cliVersion-${name}`;
       const version = getCachedCLIVersion(storageKey);
-      if (!isInDevMode() && version !== null) {
+      if (version !== null) {
         return version;
       }
 
