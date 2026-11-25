@@ -58,9 +58,7 @@ pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {
             proxy.send_event(Event::ControlFlow(ControlFlow::Exit)).unwrap();
         },
         #[cfg(target_os = "macos")]
-        "setup" => {
-            tokio::runtime::Handle::current().spawn(crate::first_launch::run(crate::first_launch::Trigger::Menu));
-        },
+        "setup" => crate::setup::show(crate::setup::Trigger::Menu, proxy),
         "settings" => {
             tokio::runtime::Handle::current().spawn(open_settings_file());
         },

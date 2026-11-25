@@ -2,6 +2,8 @@ use std::borrow::Cow;
 use std::fmt;
 
 pub const AUTOCOMPLETE_ID: WindowId = WindowId(Cow::Borrowed("autocomplete"));
+#[cfg(target_os = "macos")]
+pub const SETUP_ID: WindowId = WindowId(Cow::Borrowed("setup"));
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WindowId(pub Cow<'static, str>);

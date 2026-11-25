@@ -84,6 +84,8 @@ pub use crate::webview::window_id::{
     AUTOCOMPLETE_ID,
     WindowId,
 };
+#[cfg(target_os = "macos")]
+pub use crate::webview::window_id::SETUP_ID;
 use crate::{
     EventLoop,
     EventLoopProxy,
@@ -103,12 +105,21 @@ fn map_theme(theme: &str) -> Option<WryTheme> {
     }
 }
 
-fn to_tao_theme(theme: WryTheme) -> Option<TaoTheme> {
+pub(crate) fn to_tao_theme(theme: WryTheme) -> Option<TaoTheme> {
     match theme {
         WryTheme::Dark => Some(TaoTheme::Dark),
         WryTheme::Light => Some(TaoTheme::Light),
         WryTheme::Auto => None,
     }
+}
+
+/// The setup window takes nothing from the rest of the app but its theme.
+fn delivers(window_state: &WindowState, window_event: &WindowEvent) -> bool {
+    #[cfg(target_os = "macos")]
+    if window_state.window_id == SETUP_ID {
+        return matches!(window_event, WindowEvent::SetTheme(_));
+    }
+    window_state.enabled() || window_event.is_allowed_while_disabled()
 }
 
 pub static THEME: LazyLock<Option<WryTheme>> = LazyLock::new(|| {
@@ -364,6 +375,10 @@ impl WebviewManager {
                     if let Some(window_state) = self.window_id_map.get(&window_id) {
                         match event {
                             WryWindowEvent::CloseRequested => {
+                                #[cfg(target_os = "macos")]
+                                if window_state.window_id == SETUP_ID {
+                                    crate::setup::close(&proxy);
+                                }
                                 // This is async so we need to pass 'visible' explicitly
                                 window_state.window.set_visible(false);
                             },
@@ -381,6 +396,10 @@ impl WebviewManager {
                                         })
                                         .unwrap();
                                 }
+                                #[cfg(target_os = "macos")]
+                                if focused && window_state.window_id == SETUP_ID {
+                                    crate::setup::refresh(&proxy);
+                                }
                             },
                             _ => (),
                         }
@@ -393,7 +412,7 @@ impl WebviewManager {
                             window_event,
                         } => match self.fig_id_map.get(&window_id) {
                             Some(window_state) => {
-                                if window_state.enabled() || window_event.is_allowed_while_disabled() {
+                                if delivers(window_state, &window_event) {
                                     window_state.handle(
                                         window_event,
                                         &self.figterm_state,
@@ -418,7 +437,7 @@ impl WebviewManager {
                         },
                         Event::WindowEventAll { window_event } => {
                             for (_window_id, window_state) in self.window_id_map.iter() {
-                                if window_state.enabled() || window_event.is_allowed_while_disabled() {
+                                if delivers(window_state, &window_event) {
                                     window_state.handle(
                                         window_event.clone(),
                                         &self.figterm_state,
@@ -468,8 +487,55 @@ impl WebviewManager {
                                 debug!(%err, "Failed to handle native event");
                             }
                         },
+                        #[cfg(target_os = "macos")]
+                        Event::Setup(setup_event) => match setup_event {
+                            crate::setup::SetupEvent::Show => {
+                                let created = !self.fig_id_map.contains_key(&SETUP_ID);
+                                if created {
+                                    match crate::setup::build_window(window_target, proxy.clone()) {
+                                        Ok(window_state) => {
+                                            let window_state = Rc::new(window_state);
+                                            self.fig_id_map.insert(SETUP_ID, window_state.clone());
+                                            self.window_id_map.insert(window_state.window.id(), window_state);
+                                        },
+                                        Err(err) => error!(%err, "Failed to build the setup window"),
+                                    }
+                                }
+                                if let Some(window_state) = self.fig_id_map.get(&SETUP_ID) {
+                                    // `set_focus` acts only on a visible window.
+                                    window_state.window.set_visible(true);
+                                    window_state.window.set_focus();
+                                    // A new page asks for its view once loaded.
+                                    if !created {
+                                        crate::setup::refresh(&proxy);
+                                    }
+                                }
+                            },
+                            crate::setup::SetupEvent::Command(command) => {
+                                crate::setup::handle_command(command, &proxy);
+                            },
+                            crate::setup::SetupEvent::Push(view) => match self.fig_id_map.get(&SETUP_ID) {
+                                Some(window_state) => match crate::setup::update_script(&view) {
+                                    Ok(script) => {
+                                        if let Err(err) = window_state.webview.evaluate_script(&script) {
+                                            warn!(%err, "Failed to update the setup page");
+                                        }
+                                    },
+                                    Err(err) => error!(%err, "Failed to serialise the setup view"),
+                                },
+                                None => debug!("Setup window closed; view not shown"),
+                            },
+                            crate::setup::SetupEvent::Close => {
+                                if let Some(window_state) = self.fig_id_map.remove(&SETUP_ID) {
+                                    self.window_id_map.remove(&window_state.window.id());
+                                    window_state.window.set_visible(false);
+                                }
+                            },
+                        },
                     }
                 },
+                #[cfg(target_os = "macos")]
+                WryEvent::Reopen { .. } => crate::setup::show(crate::setup::Trigger::Reopen, &proxy),
                 WryEvent::MainEventsCleared | WryEvent::NewEvents(StartCause::WaitCancelled { .. }) => {},
                 event => trace!(?event, "Unhandled event"),
             }

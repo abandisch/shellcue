@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Set up ShellCue</title>
+<link rel="stylesheet" href="setup.css">
+</head>
+<body class="loading">
+<div class="window">
+  <main class="content">
+    <header class="masthead">
+      <img class="app-icon" src="icon.png" alt="" width="56" height="56">
+      <div class="masthead-text">
+        <h1>Set up ShellCue</h1>
+        <p class="lede">ShellCue shows completions as you type in your terminal.</p>
+      </div>
+    </header>
+
+    <ol class="steps" aria-label="Setup steps">
+      <li class="step" id="shell" data-mark="idle">
+        <div class="mark" aria-hidden="true">
+          <span class="mark-number">1</span>
+          <span class="mark-spinner"></span>
+          <svg class="mark-tick" viewBox="0 0 16 16"><path d="M4.5 8.4 6.9 10.8 11.5 5.6"/></svg>
+          <svg class="mark-warn" viewBox="0 0 16 16"><path d="M8 4.6v4.2"/><circle cx="8" cy="11.4" r="0.95"/></svg>
+        </div>
+        <div class="step-body">
+          <h2>Shell integration</h2>
+          <p class="detail" id="shell-detail">Adds a short block at the top and another at the bottom of each file listed here, creating a file if it does not exist. Existing files are backed up first. It also writes its helper scripts in <span class="path" id="shell-scripts-dir"></span>.</p>
+          <ul class="files" id="shell-files" aria-label="Files that will be edited"></ul>
+          <p class="detail" id="shell-no-files" hidden>ShellCue could not work out which files.</p>
+          <div class="action-row">
+            <button type="button" class="button primary" id="shell-button" disabled>Set up shell</button>
+            <p class="status" id="shell-status" aria-live="polite"></p>
+          </div>
+          <div class="failure" id="shell-failure" hidden>
+            <p class="error" id="shell-error"></p>
+            <p class="detail">You can run setup in a terminal instead:</p>
+            <p class="command" id="shell-command"></p>
+          </div>
+        </div>
+      </li>
+
+      <li class="step" id="accessibility" data-mark="idle">
+        <div class="mark" aria-hidden="true">
+          <span class="mark-number">2</span>
+          <span class="mark-spinner"></span>
+          <svg class="mark-tick" viewBox="0 0 16 16"><path d="M4.5 8.4 6.9 10.8 11.5 5.6"/></svg>
+          <svg class="mark-warn" viewBox="0 0 16 16"><path d="M8 4.6v4.2"/><circle cx="8" cy="11.4" r="0.95"/></svg>
+        </div>
+        <div class="step-body">
+          <h2>Accessibility permission</h2>
+          <p class="detail" id="accessibility-detail">ShellCue needs the macOS Accessibility permission to place the completion window at your cursor. The button asks macOS for it; you then switch ShellCue on in System Settings &gt; Privacy &amp; Security &gt; Accessibility. macOS may ask for your password.</p>
+          <div class="action-row">
+            <button type="button" class="button primary" id="accessibility-button" disabled>Request permission</button>
+            <p class="status" id="accessibility-status" aria-live="polite"></p>
+          </div>
+        </div>
+      </li>
+    </ol>
+
+    <section class="optional" aria-labelledby="optional-label">
+      <p class="section-label" id="optional-label">Optional</p>
+      <div class="step quiet" id="input-method" data-mark="idle">
+        <div class="mark" aria-hidden="true">
+          <span class="mark-number">3</span>
+          <span class="mark-spinner"></span>
+          <svg class="mark-tick" viewBox="0 0 16 16"><path d="M4.5 8.4 6.9 10.8 11.5 5.6"/></svg>
+          <svg class="mark-warn" viewBox="0 0 16 16"><path d="M8 4.6v4.2"/><circle cx="8" cy="11.4" r="0.95"/></svg>
+        </div>
+        <div class="step-body">
+          <h2>Input method</h2>
+          <p class="detail" id="input-method-detail">Some terminals, such as Kitty, Alacritty, WezTerm and Ghostty, need it to tell ShellCue where your cursor is. The button puts a link to the ShellCue input method in <span class="path" id="input-method-directory"></span>, replacing any file or link of that name, then turns it on and selects it. macOS may ask you to confirm; ShellCue waits up to two minutes.</p>
+          <div class="action-row">
+            <button type="button" class="button" id="input-method-button" disabled>Enable input method</button>
+            <p class="status" id="input-method-status" aria-live="polite"></p>
+          </div>
+          <div class="failure" id="input-method-failure" hidden>
+            <p class="error" id="input-method-error"></p>
+            <p class="detail">To try again later, run <span class="path">shellcue integrations install input-method</span>.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer" id="footer">
+    <div class="footer-pending" id="footer-pending">
+      <p class="footer-note">Nothing is changed until you press a button.</p>
+      <button type="button" class="button plain" id="not-now-button">Not now</button>
+    </div>
+    <div class="footer-ready" id="footer-ready" hidden>
+      <div class="footer-ready-text" aria-live="polite">
+        <p class="footer-title">ShellCue is ready</p>
+        <p class="footer-note" id="running-note"></p>
+      </div>
+      <button type="button" class="button primary" id="done-button">Done</button>
+    </div>
+  </footer>
+</div>
+<script src="setup.js"></script>
+</body>
+</html>
