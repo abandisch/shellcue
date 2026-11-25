@@ -14,6 +14,7 @@ use eyre::{
 use fig_install::{
     InstallComponents,
     install,
+    install_script_integrations,
 };
 use fig_os_shim::Env;
 use fig_util::{
@@ -70,12 +71,16 @@ pub async fn install_cli(
                 eyre::bail!("You must run with --no-confirm if unattended");
             }
 
-            match choose(
-                format!(
-                    "Do you want {CLI_BINARY_NAME} to modify your shell config (you will have to manually do this otherwise)?",
-                ),
-                &["Yes", "No"],
-            )? {
+            #[cfg(target_os = "macos")]
+            let prompt = format!(
+                "Do you want {CLI_BINARY_NAME} to modify your shell config and link the {CLI_BINARY_NAME} and {} commands into ~/.local/bin, replacing anything there with those names (you will have to manually do this otherwise)?",
+                fig_util::PTY_BINARY_NAME,
+            );
+            #[cfg(not(target_os = "macos"))]
+            let prompt = format!(
+                "Do you want {CLI_BINARY_NAME} to modify your shell config (you will have to manually do this otherwise)?",
+            );
+            match choose(prompt, &["Yes", "No"])? {
                 Some(1) => true,
                 Some(_) => false,
                 None => bail!("No option selected"),
@@ -104,8 +109,14 @@ pub async fn install_cli(
             println!("At the bottom of your .zshrc file:");
             println!("zsh:     . \"$HOME/{shell_dir}/zshrc.post.zsh\"");
             println!();
+            #[cfg(target_os = "macos")]
+            {
+                let commands_dir = fig_install::macos::commands_dir().ok();
+                println!("{}", manual_link_instructions(commands_dir.as_deref()));
+                println!();
+            }
 
-            if let Err(err) = install(InstallComponents::SHELL_INTEGRATIONS, &env).await {
+            if let Err(err) = install_script_integrations().await {
                 println!("Could not install required files:");
                 println!("{err}");
             }
@@ -234,6 +245,20 @@ fn should_guide_accessibility(install_components: InstallComponents, no_confirm:
     install_components == InstallComponents::all() && !no_confirm && !global
 }
 
+/// The script files run nothing until these links exist.
+#[cfg(any(target_os = "macos", test))]
+fn manual_link_instructions(commands_dir: Option<&std::path::Path>) -> String {
+    let dir = match commands_dir {
+        Some(dir) => dir.display().to_string(),
+        None => format!("<path to {}>/Contents/MacOS", fig_util::consts::APP_BUNDLE_NAME),
+    };
+    let links: String = [CLI_BINARY_NAME, fig_util::PTY_BINARY_NAME]
+        .into_iter()
+        .map(|name| format!("\nln -s \"{dir}/{name}\" \"$HOME/.local/bin/{name}\""))
+        .collect();
+    format!("To link the commands into ~/.local/bin, run:\nmkdir -p \"$HOME/.local/bin\"{links}")
+}
+
 fn closing_text(accessibility: AccessibilityStep) -> String {
     let new_terminal = "Open a new terminal window so the shell integration loads.".to_owned();
     let doctor = format!("Run `{CLI_BINARY_NAME} doctor` if completions do not appear.");
@@ -359,5 +384,25 @@ mod tests {
         assert!(!should_guide_accessibility(InstallComponents::all(), false, true));
         assert!(!should_guide_accessibility(InstallComponents::SHELL_INTEGRATIONS, false, false));
         assert!(!should_guide_accessibility(InstallComponents::INPUT_METHOD, false, false));
+    }
+
+    #[test]
+    fn manual_link_instructions_name_both_links() {
+        let dir = std::path::Path::new("/Applications/ShellCue.app/Contents/MacOS");
+        let text = manual_link_instructions(Some(dir));
+        assert_eq!(
+            text,
+            "To link the commands into ~/.local/bin, run:\n\
+             mkdir -p \"$HOME/.local/bin\"\n\
+             ln -s \"/Applications/ShellCue.app/Contents/MacOS/shellcue\" \"$HOME/.local/bin/shellcue\"\n\
+             ln -s \"/Applications/ShellCue.app/Contents/MacOS/shellcue-term\" \"$HOME/.local/bin/shellcue-term\""
+        );
+        assert!(!text.contains("zshrc") && !text.contains("zprofile"));
+
+        let fallback = manual_link_instructions(None);
+        for name in ["shellcue", "shellcue-term"] {
+            let line = format!("ln -s \"<path to ShellCue.app>/Contents/MacOS/{name}\" \"$HOME/.local/bin/{name}\"");
+            assert!(fallback.contains(&line), "{fallback}");
+        }
     }
 }

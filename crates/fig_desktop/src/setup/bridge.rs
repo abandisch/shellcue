@@ -13,6 +13,7 @@ pub enum SetupAction {
     Shell,
     Accessibility,
     InputMethod,
+    LaunchAtLogin,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,7 +24,7 @@ pub enum SetupCommand {
     Close,
 }
 
-const TOKENS: [(&str, SetupCommand); 6] = [
+const TOKENS: [(&str, SetupCommand); 7] = [
     ("ready", SetupCommand::Ready),
     ("set-up-shell", SetupCommand::Action(SetupAction::Shell)),
     (
@@ -31,6 +32,10 @@ const TOKENS: [(&str, SetupCommand); 6] = [
         SetupCommand::Action(SetupAction::Accessibility),
     ),
     ("enable-input-method", SetupCommand::Action(SetupAction::InputMethod)),
+    (
+        "enable-launch-at-login",
+        SetupCommand::Action(SetupAction::LaunchAtLogin),
+    ),
     ("not-now", SetupCommand::NotNow),
     ("close", SetupCommand::Close),
 ];
@@ -78,6 +83,10 @@ mod tests {
             parse_command("enable-input-method"),
             Some(SetupCommand::Action(SetupAction::InputMethod))
         );
+        assert_eq!(
+            parse_command("enable-launch-at-login"),
+            Some(SetupCommand::Action(SetupAction::LaunchAtLogin))
+        );
         assert_eq!(parse_command("not-now"), Some(SetupCommand::NotNow));
         assert_eq!(parse_command("close"), Some(SetupCommand::Close));
     }
@@ -100,6 +109,23 @@ mod tests {
             "{\"command\":\"ready\"}",
             "[\"close\"]",
             "ready;close",
+        ] {
+            assert_eq!(parse_command(message), None, "{message:?}");
+        }
+    }
+
+    #[test]
+    fn launch_at_login_token_is_exact() {
+        assert_eq!(
+            parse_command("enable-launch-at-login"),
+            Some(SetupCommand::Action(SetupAction::LaunchAtLogin))
+        );
+        for message in [
+            "launch-at-login",
+            "enable-launch_at_login",
+            "Enable-Launch-At-Login",
+            "enable-launch-at-login ",
+            "disable-launch-at-login",
         ] {
             assert_eq!(parse_command(message), None, "{message:?}");
         }

@@ -25,9 +25,17 @@
   }
 
   var current = null;
+  var frame = document.querySelector(".window");
+  var content = document.querySelector(".content");
+
+  /* The window cannot grow, so content cut off at the bottom must not look like the end. */
+  function markMoreBelow() {
+    frame.classList.toggle("more-below", content.scrollHeight - content.scrollTop - content.clientHeight > 1);
+  }
 
   function renderShell(shell, busy) {
     setText("shell-scripts-dir", shell.scripts_dir);
+    setText("shell-bin-dir", shell.bin_dir);
 
     var list = byId("shell-files");
     list.replaceChildren();
@@ -117,6 +125,39 @@
     }
   }
 
+  function renderLaunchAtLogin(launchAtLogin, busy, menuBarIconHidden) {
+    var status = launchAtLogin.status;
+    var enabled = status === "enabled";
+    setText("launch-at-login-file", launchAtLogin.file);
+    show("launch-at-login-detail", !enabled);
+    show("launch-at-login-button", !enabled);
+    byId("launch-at-login-button").disabled = busy;
+    show("launch-at-login-failure", status === "failed");
+
+    if (enabled) {
+      setMark("launch-at-login", "done");
+      setText(
+        "launch-at-login-status",
+        menuBarIconHidden
+          ? "ShellCue starts when you log in. To turn it off, set app.launchOnStartup to false in the ShellCue settings file."
+          : "ShellCue starts when you log in. Turn it off from the ShellCue menu bar menu."
+      );
+    } else if (status === "working") {
+      setMark("launch-at-login", "busy");
+      setText("launch-at-login-status", "Turning on launch at login…");
+    } else if (status === "failed") {
+      setMark("launch-at-login", "warn");
+      setText("launch-at-login-status", "");
+      setText(
+        "launch-at-login-error",
+        "Launch at login could not be turned on: " + (launchAtLogin.error || "unknown error")
+      );
+    } else {
+      setMark("launch-at-login", "idle");
+      setText("launch-at-login-status", "");
+    }
+  }
+
   function renderFooter(view) {
     var ready = view.shell.status === "done" && view.accessibility.status === "granted";
     show("footer-pending", !ready);
@@ -142,13 +183,18 @@
     renderShell(view.shell, view.busy);
     renderAccessibility(view.accessibility, view.busy);
     renderInputMethod(view.input_method, view.busy);
+    renderLaunchAtLogin(view.launch_at_login, view.busy, view.menu_bar_icon_hidden);
     renderFooter(view);
     reveal("shell", previous && previous.shell.status, view.shell.status, "failed");
     reveal("accessibility", previous && previous.accessibility.status, view.accessibility.status, "timed_out");
     reveal("input-method", previous && previous.input_method.status, view.input_method.status, "failed");
+    reveal("launch-at-login", previous && previous.launch_at_login.status, view.launch_at_login.status, "failed");
+    markMoreBelow();
   }
 
   window.shellcueSetup = Object.freeze({ update: update });
+
+  content.addEventListener("scroll", markMoreBelow);
 
   byId("shell-button").addEventListener("click", function () {
     send("set-up-shell");
@@ -158,6 +204,9 @@
   });
   byId("input-method-button").addEventListener("click", function () {
     send("enable-input-method");
+  });
+  byId("launch-at-login-button").addEventListener("click", function () {
+    send("enable-launch-at-login");
   });
   byId("not-now-button").addEventListener("click", function () {
     send("not-now");

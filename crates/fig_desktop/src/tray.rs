@@ -9,6 +9,8 @@ use fig_settings::{
 use fig_util::consts::PRODUCT_NAME;
 use fig_util::directories;
 use muda::{
+    CheckMenuItem,
+    CheckMenuItemBuilder,
     IconMenuItem,
     Menu,
     MenuEvent,
@@ -29,6 +31,10 @@ use tray_icon::{
 };
 
 use crate::event::Event;
+use crate::launch_at_login::{
+    launch_at_login_enabled,
+    toggle_launch_at_login,
+};
 use crate::{
     EventLoopProxy,
     EventLoopWindowTarget,
@@ -62,9 +68,33 @@ pub fn handle_event(menu_event: &MenuEvent, proxy: &EventLoopProxy) {
         "settings" => {
             tokio::runtime::Handle::current().spawn(open_settings_file());
         },
+        "launch-at-login" => launch_at_login_clicked(proxy),
         id => {
             trace!(?id, "Unhandled tray event");
         },
+    }
+}
+
+/// muda flips the tick on click; it is reset from the real state once the change is done.
+fn launch_at_login_clicked(proxy: &EventLoopProxy) {
+    let proxy = proxy.clone();
+    tokio::runtime::Handle::current().spawn_blocking(move || match toggle_launch_at_login() {
+        Ok(enabled) => send_launch_at_login(&proxy, enabled),
+        Err(err) => {
+            warn!("Failed to change launch at login: {err:#}");
+            show_launch_at_login(&proxy);
+        },
+    });
+}
+
+/// Sets the tray tick to the real state; blocks on file and settings reads.
+pub fn show_launch_at_login(proxy: &EventLoopProxy) {
+    send_launch_at_login(proxy, launch_at_login_enabled());
+}
+
+fn send_launch_at_login(proxy: &EventLoopProxy, enabled: bool) {
+    if proxy.send_event(Event::SetLaunchAtLoginChecked(enabled)).is_err() {
+        warn!("Event loop closed; launch at login tick not updated");
     }
 }
 
@@ -109,12 +139,14 @@ fn load_icon(path: impl AsRef<std::path::Path>) -> Option<Icon> {
 pub async fn build_tray(
     _event_loop_window_target: &EventLoopWindowTarget,
     _figterm_state: &FigtermState,
-) -> tray_icon::Result<TrayIcon> {
-    TrayIconBuilder::new()
+) -> tray_icon::Result<(TrayIcon, Option<CheckMenuItem>)> {
+    let (menu, launch_at_login) = get_context_menu();
+    let tray = TrayIconBuilder::new()
         .with_icon(get_icon())
         .with_icon_as_template(true)
-        .with_menu(Box::new(get_context_menu()))
-        .build()
+        .with_menu(Box::new(menu))
+        .build()?;
+    Ok((tray, launch_at_login))
 }
 
 pub fn get_icon() -> Icon {
@@ -138,15 +170,19 @@ pub fn get_icon() -> Icon {
     Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
 }
 
-pub fn get_context_menu() -> Menu {
+/// The menu, and its launch at login item so the tick can follow changes made elsewhere.
+pub fn get_context_menu() -> (Menu, Option<CheckMenuItem>) {
     let mut tray_menu = Menu::new();
+    let mut launch_at_login = None;
 
-    let elements = menu();
+    let elements = menu(launch_at_login_enabled());
     for elem in elements {
-        elem.add_to_menu(&mut tray_menu);
+        if let Some(item) = elem.add_to_menu(&mut tray_menu) {
+            launch_at_login = Some(item);
+        }
     }
 
-    tray_menu
+    (tray_menu, launch_at_login)
 }
 
 enum MenuElement {
@@ -159,6 +195,11 @@ enum MenuElement {
         image_icon: Option<muda::Icon>,
         text: Cow<'static, str>,
         id: Cow<'static, str>,
+    },
+    Check {
+        text: Cow<'static, str>,
+        id: Cow<'static, str>,
+        checked: bool,
     },
     Separator,
     #[allow(dead_code)]
@@ -190,6 +231,23 @@ impl MenuElement {
         }
     }
 
+    fn check(text: impl Into<Cow<'static, str>>, id: impl Into<Cow<'static, str>>, checked: bool) -> Self {
+        Self::Check {
+            text: text.into(),
+            id: id.into(),
+            checked,
+        }
+    }
+
+    fn check_item(text: &str, id: &str, checked: bool) -> CheckMenuItem {
+        CheckMenuItemBuilder::new()
+            .text(text)
+            .id(MenuId::new(id))
+            .enabled(true)
+            .checked(checked)
+            .build()
+    }
+
     // fn sub_menu(title: impl Into<Cow<'static, str>>, elements: Vec<MenuElement>) -> Self {
     //     Self::SubMenu {
     //         title: title.into(),
@@ -197,7 +255,8 @@ impl MenuElement {
     //     }
     // }
 
-    fn add_to_menu(&self, menu: &mut Menu) {
+    /// Returns the item when it is a check item.
+    fn add_to_menu(&self, menu: &mut Menu) -> Option<CheckMenuItem> {
         match self {
             MenuElement::Info { text, image_icon } => {
                 let menu_item = IconMenuItem::new(
@@ -227,6 +286,11 @@ impl MenuElement {
                     .build();
                 menu.append(&menu_item).unwrap();
             },
+            MenuElement::Check { text, id, checked } => {
+                let menu_item = Self::check_item(text, id, *checked);
+                menu.append(&menu_item).unwrap();
+                return Some(menu_item);
+            },
             MenuElement::Separator => {
                 menu.append(&PredefinedMenuItem::separator()).unwrap();
             },
@@ -239,6 +303,7 @@ impl MenuElement {
                 menu.append(&sub_menu).unwrap();
             },
         }
+        None
     }
 
     fn add_to_submenu(&self, submenu: &Submenu) {
@@ -267,6 +332,9 @@ impl MenuElement {
                     .build();
                 submenu.append(&menu_item).unwrap();
             },
+            MenuElement::Check { text, id, checked } => {
+                submenu.append(&Self::check_item(text, id, *checked)).unwrap();
+            },
             MenuElement::Separator => {
                 submenu.append(&PredefinedMenuItem::separator()).unwrap();
             },
@@ -282,7 +350,7 @@ impl MenuElement {
     }
 }
 
-fn menu() -> Vec<MenuElement> {
+fn menu(launch_at_login: bool) -> Vec<MenuElement> {
     cfg_if! {
         if #[cfg(target_os = "macos")] {
             let setup = Some(MenuElement::entry(None, None, format!("Set up {PRODUCT_NAME}…"), "setup"));
@@ -294,6 +362,7 @@ fn menu() -> Vec<MenuElement> {
         .into_iter()
         .chain([
             MenuElement::entry(None, None, "Settings", "settings"),
+            MenuElement::check("Launch at login", "launch-at-login", launch_at_login),
             MenuElement::Separator,
             MenuElement::info(None, format!("Version: {}", env!("CARGO_PKG_VERSION"))),
             MenuElement::Separator,
@@ -308,19 +377,34 @@ mod tests {
 
     #[test]
     fn menu_shape_is_fixed() {
-        let elements = menu();
+        let elements = menu(false);
         let shape: Vec<&str> = elements
             .iter()
             .map(|element| match element {
-                MenuElement::Entry { id, .. } => &**id,
+                MenuElement::Entry { id, .. } | MenuElement::Check { id, .. } => &**id,
                 MenuElement::Info { .. } => "info",
                 MenuElement::Separator => "---",
                 MenuElement::SubMenu { .. } => "submenu",
             })
             .collect();
         #[cfg(target_os = "macos")]
-        assert_eq!(shape, ["setup", "settings", "---", "info", "---", "quit"]);
+        assert_eq!(shape, ["setup", "settings", "launch-at-login", "---", "info", "---", "quit"]);
         #[cfg(not(target_os = "macos"))]
-        assert_eq!(shape, ["settings", "---", "info", "---", "quit"]);
+        assert_eq!(shape, ["settings", "launch-at-login", "---", "info", "---", "quit"]);
+    }
+
+    #[test]
+    fn launch_at_login_tick_shows_the_state() {
+        for state in [false, true] {
+            let elements = menu(state);
+            let checks: Vec<(&str, &str, bool)> = elements
+                .iter()
+                .filter_map(|element| match element {
+                    MenuElement::Check { text, id, checked } => Some((&**text, &**id, *checked)),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(checks, [("Launch at login", "launch-at-login", state)]);
+        }
     }
 }

@@ -36,7 +36,7 @@ pub fn build_window(window_target: &EventLoopWindowTarget, proxy: EventLoopProxy
     let url = Url::parse(PAGE_URL)?;
     let window = WindowBuilder::new()
         .with_title(format!("Set up {PRODUCT_NAME}"))
-        .with_inner_size(LogicalSize::new(560.0, 760.0))
+        .with_inner_size(LogicalSize::new(720.0, 760.0))
         .with_resizable(false)
         .with_maximizable(false)
         .with_visible(false)

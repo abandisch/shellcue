@@ -17,8 +17,12 @@ use fig_settings::{
     State,
 };
 use fig_util::PRODUCT_NAME;
-use fig_util::consts::APP_PROCESS_NAME;
 use fig_util::consts::linux::DESKTOP_ENTRY_NAME;
+use fig_util::consts::{
+    APP_PROCESS_NAME,
+    LAUNCH_ON_STARTUP_DEFAULT,
+    LAUNCH_ON_STARTUP_KEY,
+};
 use fig_util::directories::home_dir_ctx;
 
 use crate::Integration;
@@ -378,7 +382,7 @@ pub fn should_install_autostart_entry<Ctx: EnvProvider>(env: &Ctx, settings: &Se
     if env.env().in_appimage() && !state.get_bool_or("appimage.manageDesktopEntry", false) {
         return false;
     }
-    settings.get_bool_or("app.launchOnStartup", true)
+    settings.get_bool_or(LAUNCH_ON_STARTUP_KEY, LAUNCH_ON_STARTUP_DEFAULT)
 }
 
 #[cfg(test)]
@@ -542,7 +546,7 @@ Type=Application"#;
     fn test_should_install_autostart_entry() {
         // Test structure: (env, settings, state, expected_result, test_name)
         let testcases = &[
-            (vec![], vec![], vec![], true, "Default should install"),
+            (vec![], vec![], vec![], false, "Default should not install"),
             (
                 vec![],
                 vec![("app.launchOnStartup", true.into())],
@@ -568,8 +572,15 @@ Type=Application"#;
                 vec![("APPIMAGE", "/app.appimage")],
                 vec![],
                 vec![("appimage.manageDesktopEntry", true.into())],
+                false,
+                "AppImage should not install by default even if user has granted permission",
+            ),
+            (
+                vec![("APPIMAGE", "/app.appimage")],
+                vec![("app.launchOnStartup", true.into())],
+                vec![("appimage.manageDesktopEntry", true.into())],
                 true,
-                "AppImage should install by default if user has granted permission",
+                "AppImage should install if launchOnStartup is true and user has granted permission",
             ),
             (
                 vec![("APPIMAGE", "/app.appimage")],
@@ -591,5 +602,16 @@ Type=Application"#;
                 message
             );
         }
+    }
+
+    #[test]
+    fn autostart_is_off_without_the_setting() {
+        assert_eq!(LAUNCH_ON_STARTUP_KEY, "app.launchOnStartup");
+        assert!(!LAUNCH_ON_STARTUP_DEFAULT);
+        assert!(!should_install_autostart_entry(
+            &Env::from_slice(&[]),
+            &Settings::new_fake(),
+            &State::new_fake()
+        ));
     }
 }

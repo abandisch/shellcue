@@ -34,12 +34,22 @@ pub enum InputMethodStatus {
     Failed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LaunchAtLoginStatus {
+    NotEnabled,
+    Working,
+    Enabled,
+    Failed,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ShellStep {
     pub status: ShellStatus,
     /// The integration files not yet set up, with the home directory shown as `~/`.
     pub files: Vec<String>,
     pub scripts_dir: String,
+    pub bin_dir: String,
     pub error: Option<String>,
     pub command: String,
 }
@@ -57,10 +67,18 @@ pub struct InputMethodStep {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LaunchAtLoginStep {
+    pub status: LaunchAtLoginStatus,
+    pub file: String,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SetupView {
     pub shell: ShellStep,
     pub accessibility: AccessibilityStep,
     pub input_method: InputMethodStep,
+    pub launch_at_login: LaunchAtLoginStep,
     pub menu_bar_icon_hidden: bool,
     pub busy: bool,
 }
@@ -71,6 +89,7 @@ impl SetupView {
             SetupAction::Shell => self.shell.status == ShellStatus::Done,
             SetupAction::Accessibility => self.accessibility.status == AccessibilityStatus::Granted,
             SetupAction::InputMethod => self.input_method.status == InputMethodStatus::Enabled,
+            SetupAction::LaunchAtLogin => self.launch_at_login.status == LaunchAtLoginStatus::Enabled,
         }
     }
 }
@@ -95,6 +114,10 @@ pub fn begin(view: &mut SetupView, action: SetupAction) {
             view.input_method.status = InputMethodStatus::Working;
             view.input_method.error = None;
         },
+        SetupAction::LaunchAtLogin => {
+            view.launch_at_login.status = LaunchAtLoginStatus::Working;
+            view.launch_at_login.error = None;
+        },
     }
 }
 
@@ -117,6 +140,12 @@ pub fn keep_outcomes(previous: Option<&SetupView>, mut fresh: SetupView) -> Setu
     {
         fresh.input_method.status = InputMethodStatus::Failed;
         fresh.input_method.error.clone_from(&previous.input_method.error);
+    }
+    if fresh.launch_at_login.status == LaunchAtLoginStatus::NotEnabled
+        && previous.launch_at_login.status == LaunchAtLoginStatus::Failed
+    {
+        fresh.launch_at_login.status = LaunchAtLoginStatus::Failed;
+        fresh.launch_at_login.error.clone_from(&previous.launch_at_login.error);
     }
     fresh
 }
@@ -169,6 +198,7 @@ mod tests {
                 status: ShellStatus::Needed,
                 files: vec!["~/.zshrc".to_owned(), "~/.zprofile".to_owned()],
                 scripts_dir: "~/Library/Application Support/shellcue/shell".to_owned(),
+                bin_dir: "~/.local/bin".to_owned(),
                 error: None,
                 command: "shellcue setup".to_owned(),
             },
@@ -178,6 +208,11 @@ mod tests {
             input_method: InputMethodStep {
                 status: InputMethodStatus::NotEnabled,
                 directory: "~/Library/Input Methods".to_owned(),
+                error: None,
+            },
+            launch_at_login: LaunchAtLoginStep {
+                status: LaunchAtLoginStatus::NotEnabled,
+                file: "~/Library/LaunchAgents/com.bandisch-apps.shellcue.launcher.plist".to_owned(),
                 error: None,
             },
             menu_bar_icon_hidden: false,
@@ -190,10 +225,16 @@ mod tests {
         view.shell.status = ShellStatus::Done;
         view.accessibility.status = AccessibilityStatus::Granted;
         view.input_method.status = InputMethodStatus::Enabled;
+        view.launch_at_login.status = LaunchAtLoginStatus::Enabled;
         view
     }
 
-    const ACTIONS: [SetupAction; 3] = [SetupAction::Shell, SetupAction::Accessibility, SetupAction::InputMethod];
+    const ACTIONS: [SetupAction; 4] = [
+        SetupAction::Shell,
+        SetupAction::Accessibility,
+        SetupAction::InputMethod,
+        SetupAction::LaunchAtLogin,
+    ];
     const ALWAYS: [SetupCommand; 3] = [SetupCommand::Ready, SetupCommand::NotNow, SetupCommand::Close];
 
     #[test]
@@ -203,6 +244,7 @@ mod tests {
                 status: ShellStatus::Failed,
                 files: vec!["~/.zshrc".to_owned()],
                 scripts_dir: "~/Library/Application Support/shellcue/shell".to_owned(),
+                bin_dir: "~/.local/bin".to_owned(),
                 error: Some("Permission denied".to_owned()),
                 command: "/Applications/ShellCue.app/Contents/MacOS/shellcue setup".to_owned(),
             },
@@ -214,6 +256,11 @@ mod tests {
                 directory: "~/Library/Input Methods".to_owned(),
                 error: None,
             },
+            launch_at_login: LaunchAtLoginStep {
+                status: LaunchAtLoginStatus::Failed,
+                file: "~/Library/LaunchAgents/com.bandisch-apps.shellcue.launcher.plist".to_owned(),
+                error: Some("io operation error".to_owned()),
+            },
             menu_bar_icon_hidden: true,
             busy: false,
         };
@@ -222,10 +269,14 @@ mod tests {
             concat!(
                 r#"{"shell":{"status":"failed","files":["~/.zshrc"],"#,
                 r#""scripts_dir":"~/Library/Application Support/shellcue/shell","#,
+                r#""bin_dir":"~/.local/bin","#,
                 r#""error":"Permission denied","#,
                 r#""command":"/Applications/ShellCue.app/Contents/MacOS/shellcue setup"},"#,
                 r#""accessibility":{"status":"timed_out"},"#,
                 r#""input_method":{"status":"not_enabled","directory":"~/Library/Input Methods","error":null},"#,
+                r#""launch_at_login":{"status":"failed","#,
+                r#""file":"~/Library/LaunchAgents/com.bandisch-apps.shellcue.launcher.plist","#,
+                r#""error":"io operation error"},"#,
                 r#""menu_bar_icon_hidden":true,"busy":false}"#,
             )
         );
@@ -242,6 +293,10 @@ mod tests {
         assert_eq!(serde_json::to_string(&InputMethodStatus::Working).unwrap(), r#""working""#);
         assert_eq!(serde_json::to_string(&InputMethodStatus::Enabled).unwrap(), r#""enabled""#);
         assert_eq!(serde_json::to_string(&InputMethodStatus::Failed).unwrap(), r#""failed""#);
+        assert_eq!(serde_json::to_string(&LaunchAtLoginStatus::NotEnabled).unwrap(), r#""not_enabled""#);
+        assert_eq!(serde_json::to_string(&LaunchAtLoginStatus::Working).unwrap(), r#""working""#);
+        assert_eq!(serde_json::to_string(&LaunchAtLoginStatus::Enabled).unwrap(), r#""enabled""#);
+        assert_eq!(serde_json::to_string(&LaunchAtLoginStatus::Failed).unwrap(), r#""failed""#);
     }
 
     #[test]
@@ -293,6 +348,7 @@ mod tests {
         assert!(accepts(SetupCommand::Action(SetupAction::Shell), &view));
         assert!(accepts(SetupCommand::Action(SetupAction::Accessibility), &view));
         assert!(!accepts(SetupCommand::Action(SetupAction::InputMethod), &view));
+        assert!(accepts(SetupCommand::Action(SetupAction::LaunchAtLogin), &view));
     }
 
     #[test]
@@ -313,9 +369,36 @@ mod tests {
         view.shell.status = ShellStatus::Failed;
         view.accessibility.status = AccessibilityStatus::TimedOut;
         view.input_method.status = InputMethodStatus::Failed;
+        view.launch_at_login.status = LaunchAtLoginStatus::Failed;
         for action in ACTIONS {
             assert!(accepts(SetupCommand::Action(action), &view), "{action:?}");
         }
+    }
+
+    #[test]
+    fn launch_at_login_step_follows_its_status() {
+        let action = SetupCommand::Action(SetupAction::LaunchAtLogin);
+        let mut view = needed();
+        assert!(accepts(action, &view));
+
+        view.launch_at_login.status = LaunchAtLoginStatus::Enabled;
+        assert!(!accepts(action, &view));
+        assert!(accepts(SetupCommand::Action(SetupAction::Shell), &view));
+
+        let mut view = needed();
+        view.busy = true;
+        assert!(!accepts(action, &view));
+
+        let mut view = needed();
+        view.launch_at_login.status = LaunchAtLoginStatus::Failed;
+        view.launch_at_login.error = Some("old".to_owned());
+        assert!(accepts(action, &view));
+        begin(&mut view, SetupAction::LaunchAtLogin);
+        assert!(view.busy);
+        assert_eq!(view.launch_at_login.status, LaunchAtLoginStatus::Working);
+        assert_eq!(view.launch_at_login.error, None);
+        assert_eq!(view.input_method.status, InputMethodStatus::NotEnabled);
+        assert!(!accepts(action, &view));
     }
 
     #[test]
@@ -349,6 +432,8 @@ mod tests {
         previous.accessibility.status = AccessibilityStatus::TimedOut;
         previous.input_method.status = InputMethodStatus::Failed;
         previous.input_method.error = Some("OSStatus error code: -50".to_owned());
+        previous.launch_at_login.status = LaunchAtLoginStatus::Failed;
+        previous.launch_at_login.error = Some("io operation error".to_owned());
 
         let kept = keep_outcomes(Some(&previous), needed());
         assert_eq!(kept.shell.status, ShellStatus::Failed);
@@ -356,6 +441,8 @@ mod tests {
         assert_eq!(kept.accessibility.status, AccessibilityStatus::TimedOut);
         assert_eq!(kept.input_method.status, InputMethodStatus::Failed);
         assert_eq!(kept.input_method.error.as_deref(), Some("OSStatus error code: -50"));
+        assert_eq!(kept.launch_at_login.status, LaunchAtLoginStatus::Failed);
+        assert_eq!(kept.launch_at_login.error.as_deref(), Some("io operation error"));
 
         assert_eq!(keep_outcomes(Some(&previous), done()), done());
         assert_eq!(keep_outcomes(None, needed()), needed());

@@ -70,21 +70,24 @@ mod tests {
     use fig_util::consts::{
         CLI_BINARY_NAME,
         PRODUCT_NAME,
+        PTY_BINARY_NAME,
     };
 
     use super::super::bridge::parse_command;
     use super::super::view::{
         AccessibilityStatus,
         InputMethodStatus,
+        LaunchAtLoginStatus,
         ShellStatus,
     };
     use super::*;
 
-    const TOKENS: [&str; 6] = [
+    const TOKENS: [&str; 7] = [
         "ready",
         "set-up-shell",
         "request-accessibility",
         "enable-input-method",
+        "enable-launch-at-login",
         "not-now",
         "close",
     ];
@@ -277,6 +280,12 @@ mod tests {
             InputMethodStatus::Enabled,
             InputMethodStatus::Failed,
         ];
+        let launch_at_login = [
+            LaunchAtLoginStatus::NotEnabled,
+            LaunchAtLoginStatus::Working,
+            LaunchAtLoginStatus::Enabled,
+            LaunchAtLoginStatus::Failed,
+        ];
         let mut names = vec![];
         for status in shell {
             match status {
@@ -302,7 +311,16 @@ mod tests {
             }
             names.push(serde_json::to_string(&status).unwrap());
         }
-        assert_eq!(names.len(), 12);
+        for status in launch_at_login {
+            match status {
+                LaunchAtLoginStatus::NotEnabled
+                | LaunchAtLoginStatus::Working
+                | LaunchAtLoginStatus::Enabled
+                | LaunchAtLoginStatus::Failed => {},
+            }
+            names.push(serde_json::to_string(&status).unwrap());
+        }
+        assert_eq!(names.len(), 16);
         for name in &names {
             assert!(
                 SETUP_JS.contains(name.as_str()) || DEFAULT_BRANCH.contains(&name.as_str()),
@@ -338,12 +356,74 @@ mod tests {
 
         let marker = "<span class=\"path\">";
         let mut commands = 0;
+        let mut names = vec![];
         for (index, _) in INDEX_HTML.match_indices(marker) {
             let rest = &INDEX_HTML[index + marker.len()..];
             let command = &rest[..rest.find("</span>").unwrap()];
+            if command == CLI_BINARY_NAME || command == PTY_BINARY_NAME {
+                names.push(command);
+                continue;
+            }
             assert!(command.starts_with(&format!("{CLI_BINARY_NAME} ")), "{command}");
             commands += 1;
         }
         assert_eq!(commands, 1);
+        assert_eq!(names, [CLI_BINARY_NAME, PTY_BINARY_NAME]);
+    }
+
+    #[test]
+    fn page_tells_what_each_button_writes() {
+        assert!(INDEX_HTML.contains(concat!(
+            "It also writes its helper scripts in <span class=\"path\" id=\"shell-scripts-dir\"></span> ",
+            "and links the <span class=\"path\">shellcue</span> and <span class=\"path\">shellcue-term</span> ",
+            "commands into <span class=\"path\" id=\"shell-bin-dir\"></span>, ",
+            "replacing anything there with those names.</p>",
+        )));
+        assert!(SETUP_JS.contains("setText(\"shell-bin-dir\", shell.bin_dir);"));
+        assert!(INDEX_HTML.contains(concat!(
+            "Starts ShellCue when you log in. The button writes one file, ",
+            "<span class=\"path\" id=\"launch-at-login-file\"></span>, which macOS reads at your next login. ",
+            "macOS may show a notice that ShellCue can run in the background.</p>",
+        )));
+        assert!(SETUP_JS.contains("setText(\"launch-at-login-file\", launchAtLogin.file);"));
+        assert!(INDEX_HTML.contains("Nothing is changed until you press a button."));
+    }
+
+    #[test]
+    fn page_has_the_launch_at_login_step() {
+        for id in [
+            "launch-at-login",
+            "launch-at-login-detail",
+            "launch-at-login-file",
+            "launch-at-login-button",
+            "launch-at-login-status",
+            "launch-at-login-failure",
+            "launch-at-login-error",
+        ] {
+            assert_eq!(INDEX_HTML.matches(&format!("id=\"{id}\"")).count(), 1, "{id}");
+        }
+        assert!(INDEX_HTML.contains("id=\"launch-at-login-button\" disabled>Turn on launch at login</button>"));
+        assert!(INDEX_HTML.contains("<p class=\"detail\">Press the button to try again.</p>"));
+        assert!(!INDEX_HTML.contains("menu bar menu"));
+        assert!(SETUP_JS.contains("send(\"enable-launch-at-login\")"));
+        assert!(SETUP_JS.contains("function renderLaunchAtLogin(launchAtLogin, busy, menuBarIconHidden)"));
+        assert!(SETUP_JS.contains("renderLaunchAtLogin(view.launch_at_login, view.busy, view.menu_bar_icon_hidden);"));
+        for text in [
+            "ShellCue starts when you log in. Turn it off from the ShellCue menu bar menu.",
+            "ShellCue starts when you log in. To turn it off, set app.launchOnStartup to false in the ShellCue settings file.",
+            "Turning on launch at login…",
+            "Launch at login could not be turned on: ",
+        ] {
+            assert!(SETUP_JS.contains(text), "{text}");
+        }
+    }
+
+    #[test]
+    fn page_cues_content_below_the_fold() {
+        assert!(SETUP_JS.contains("classList.toggle(\"more-below\", "));
+        assert!(SETUP_JS.contains("content.addEventListener(\"scroll\", markMoreBelow);"));
+        assert!(SETUP_JS.contains("    markMoreBelow();\n  }\n"));
+        assert!(SETUP_CSS.contains(".more-below .footer::before {"));
+        assert!(SETUP_CSS.contains(".more-below .footer {"));
     }
 }

@@ -41,11 +41,7 @@ then
   if [[ $- == *i* ]]; then
     SHELLCUE_TERM_NAME="$(basename "${SHELLCUE_SHELL}") ({{PTY_BINARY_NAME}})"
     if [[ -z "${SHELLCUE_TERM_PATH:-}" ]]; then
-      if [[ -x "${HOME}/.local/bin/${SHELLCUE_TERM_NAME}" ]]; then
-        SHELLCUE_TERM_PATH="${HOME}/.local/bin/${SHELLCUE_TERM_NAME}"
-      else
-        SHELLCUE_TERM_PATH="$(command -v {{PTY_BINARY_NAME}} || echo "${HOME}/.local/bin/{{PTY_BINARY_NAME}}")"
-      fi
+      SHELLCUE_TERM_PATH="$(command -v {{PTY_BINARY_NAME}} || echo "${HOME}/.local/bin/{{PTY_BINARY_NAME}}")"
     fi
 
     SHELLCUE_EXECUTION_STRING="${ZSH_EXECUTION_STRING}"
