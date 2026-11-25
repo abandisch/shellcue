@@ -2,8 +2,6 @@ mod cli;
 mod event;
 // mod figterm;
 mod file_watcher;
-#[cfg(any(target_os = "macos", test))]
-mod first_launch;
 mod install;
 mod local_ipc;
 pub mod notification_bus;
@@ -11,6 +9,8 @@ mod platform;
 pub mod protocol;
 mod remote_ipc;
 mod request;
+#[cfg(any(target_os = "macos", test))]
+mod setup;
 mod tray;
 mod utils;
 mod webview;
@@ -126,9 +126,6 @@ async fn main() -> ExitCode {
     let ctx = Context::new();
     install::run_install(Arc::clone(&ctx)).await;
 
-    #[cfg(target_os = "macos")]
-    tokio::spawn(first_launch::run(first_launch::Trigger::Launch));
-
     #[cfg(target_os = "linux")]
     {
         match fig_os_shim::Env::new().shellcue_backend().ok().as_deref() {
@@ -147,6 +144,10 @@ async fn main() -> ExitCode {
         !fig_settings::settings::get_bool_or("autocomplete.disable", false) && accessibility_enabled;
 
     let mut webview_manager = WebviewManager::new(ctx);
+    #[cfg(target_os = "macos")]
+    if let Some(proxy) = webview::GLOBAL_PROXY.get() {
+        setup::show(setup::Trigger::Launch, proxy);
+    }
     webview_manager
         .build_webview(
             AUTOCOMPLETE_ID,

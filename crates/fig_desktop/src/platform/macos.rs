@@ -254,14 +254,6 @@ impl PlatformStateImpl {
         Self::override_objc_class_method("WryWebView", sel, func);
     }
 
-    fn override_app_delegate_method<F>(sel: Sel, func: F)
-    where
-        F: MethodImplementation<Callee = Object>,
-    {
-        // https://github.com/tauri-apps/tao/blob/75eb0c1e7e83a766af0e083ce09c761d1974cde4/src/platform_impl/macos/app_delegate.rs#L42
-        Self::override_objc_class_method("TaoAppDelegateParent", sel, func);
-    }
-
     fn override_objc_class_method<F>(class: &str, sel: Sel, func: F)
     where
         F: MethodImplementation<Callee = Object>,
@@ -429,28 +421,6 @@ impl PlatformStateImpl {
                     should_delay_window_ordering as extern "C" fn(&Object, Sel, id) -> BOOL,
                 );
                 Self::override_webview_method(sel!(mouseDown:), mouse_down as extern "C" fn(&Object, Sel, id));
-
-                extern "C" fn application_should_handle_reopen(
-                    _this: &Object,
-                    _cmd: Sel,
-                    _sender: id,
-                    _visible_windows: BOOL,
-                ) -> BOOL {
-                    trace!("application_should_handle_reopen");
-                    // A panic must not unwind across this `extern "C"` boundary.
-                    match tokio::runtime::Handle::try_current() {
-                        Ok(handle) => {
-                            handle.spawn(crate::first_launch::run(crate::first_launch::Trigger::Reopen));
-                        },
-                        Err(err) => trace!(%err, "No runtime to start the setup flow"),
-                    }
-                    YES
-                }
-
-                Self::override_app_delegate_method(
-                    sel!(applicationShouldHandleReopen:hasVisibleWindows:),
-                    application_should_handle_reopen as extern "C" fn(&Object, Sel, id, BOOL) -> BOOL,
-                );
 
                 Ok(())
             },

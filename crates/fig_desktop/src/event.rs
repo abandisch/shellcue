@@ -29,6 +29,9 @@ pub enum Event {
     SetTrayVisible(bool),
 
     ReloadAccessibility,
+
+    #[cfg(target_os = "macos")]
+    Setup(crate::setup::SetupEvent),
 }
 
 impl From<PlatformBoundEvent> for Event {
