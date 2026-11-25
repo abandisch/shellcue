@@ -78,13 +78,13 @@
       setMark("accessibility", "busy");
       setText(
         "accessibility-status",
-        "Waiting for the permission… If System Settings did not open, open it and go to Privacy & Security > Accessibility."
+        "Waiting for the permission… If System Settings did not open, open it and look under Privacy & Security for Accessibility (named Device Control and Data Access on newer macOS)."
       );
     } else if (status === "timed_out") {
       setMark("accessibility", "warn");
       setText(
         "accessibility-status",
-        "Not granted yet. Switch ShellCue on in System Settings > Privacy & Security > Accessibility, then come back to this window."
+        "Not granted yet. Switch ShellCue on under System Settings > Privacy & Security > Accessibility (named Device Control and Data Access on newer macOS), then come back to this window."
       );
     } else {
       setMark("accessibility", "idle");
