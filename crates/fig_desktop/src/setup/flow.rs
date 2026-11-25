@@ -39,6 +39,7 @@ use super::view::{
     ShellStep,
     accepts,
     begin,
+    input_method_status,
     recheck_result,
 };
 use super::{
@@ -326,11 +327,7 @@ async fn current_view() -> SetupView {
         Err(_) => "~/.local/bin".to_owned(),
     };
     let cli_path = get_bundle_path_for_executable(CLI_BINARY_NAME);
-    let input_method_status = if input_method_linked().await {
-        InputMethodStatus::Enabled
-    } else {
-        InputMethodStatus::NotEnabled
-    };
+    let input_method_status = current_input_method_status().await;
     let launch_at_login_status = if launch_at_login_enabled() {
         LaunchAtLoginStatus::Enabled
     } else {
@@ -367,15 +364,12 @@ async fn current_view() -> SetupView {
     }
 }
 
-/// Only reads the link: `is_installed` runs the CLI, which selects the input source and writes state.
-async fn input_method_linked() -> bool {
+/// Only reads: `is_installed` runs the CLI, which selects the input source and writes state.
+async fn current_input_method_status() -> InputMethodStatus {
     let input_method = InputMethod::default();
-    match input_method.target_bundle_path() {
-        Ok(link) => tokio::fs::read_link(link)
-            .await
-            .is_ok_and(|target| target == input_method.bundle_path),
-        Err(_) => false,
-    }
+    let linked = input_method.is_linked().await;
+    let enabled = input_method.is_enabled().unwrap_or(false);
+    input_method_status(linked, enabled)
 }
 
 /// Whether every shell integration is installed, and the files of those that are not.

@@ -121,8 +121,12 @@ unsafe extern "C" {
     pub fn TISRegisterInputSource(location: CFURLRef) -> OSStatus;
 }
 
-/// One-second attempts to finish the installation, so the user has two minutes to click OK.
+/// One-second attempts to finish the installation, so the user has two minutes to click Allow.
 const FINISH_INSTALLATION_ATTEMPTS: u32 = 120;
+
+/// macOS can take a moment to list a source after it is registered.
+const LOOKUP_ATTEMPTS: u32 = 20;
+const LOOKUP_INTERVAL: std::time::Duration = std::time::Duration::from_millis(250);
 
 pub struct InputMethod {
     pub bundle_path: PathBuf,
@@ -154,6 +158,24 @@ pub enum InputMethodError {
     UnknownError,
     #[error("Not installed")]
     NotInstalled,
+}
+
+fn lookup_can_be_retried(error: &InputMethodError) -> bool {
+    matches!(
+        error,
+        InputMethodError::CouldNotListInputSources | InputMethodError::NoInputSourcesForBundleIdentifier { .. }
+    )
+}
+
+fn timeout_message(last: Option<&str>) -> String {
+    match last {
+        Some(last) => format!(
+            "Timed out waiting for the input method to be enabled ({last}). Run `{CLI_BINARY_NAME} integrations install input-method` to try again."
+        ),
+        None => format!(
+            "Timed out waiting for the input method to be enabled. Run `{CLI_BINARY_NAME} integrations install input-method` to try again."
+        ),
+    }
 }
 
 #[macro_export]
@@ -386,6 +408,13 @@ impl InputMethod {
         Ok(InputMethod::input_method_directory().join(input_method_name))
     }
 
+    pub async fn is_linked(&self) -> bool {
+        match self.target_bundle_path() {
+            Ok(link) => fs::read_link(link).await.is_ok_and(|path| path == self.bundle_path),
+            Err(_) => false,
+        }
+    }
+
     pub fn bundle_id(&self) -> Result<String, InputMethodError> {
         let url = match CFURL::from_path(&self.bundle_path, true) {
             Some(url) => url,
@@ -476,12 +505,6 @@ impl Integration for InputMethod {
             Err(err) => return Err(err.into()),
         }
 
-        // check that the input method is running (NSRunning application)
-        let bundle_id = self.bundle_id()?;
-        if applications::running_applications_matching(bundle_id.as_str()).is_empty() {
-            return Err(InputMethodError::NotRunning.into());
-        }
-
         // Can we load input source?
 
         // todo: pull this into a function in fig_directories
@@ -499,6 +522,13 @@ impl Integration for InputMethod {
 
         if out.status.code() == Some(0) {
             self.set_is_enabled(true);
+
+            // check that the input method is running (NSRunning application)
+            let bundle_id = self.bundle_id()?;
+            if applications::running_applications_matching(bundle_id.as_str()).is_empty() {
+                return Err(InputMethodError::NotRunning.into());
+            }
+
             Ok(())
         } else {
             self.set_is_enabled(false);
@@ -530,13 +560,31 @@ impl Integration for InputMethod {
                 .with_context(|_| format!("Could not create symlink {}", destination.display()))?;
 
             // Register input source
-            InputMethod::register(&destination)?;
+            if let Err(err) = InputMethod::register(&destination) {
+                fs::remove_file(&destination).await.ok();
+                return Err(err.into());
+            }
 
-            run_on_main(|| {
-                let source = self.input_source()?;
-                source.enable()?;
-                Ok::<(), InputMethodError>(())
-            })?;
+            let mut lookups = 1;
+            loop {
+                let result = run_on_main(|| {
+                    let source = self.input_source()?;
+                    source.enable()?;
+                    Ok::<(), InputMethodError>(())
+                });
+
+                match result {
+                    Ok(()) => break,
+                    Err(err) if lookup_can_be_retried(&err) && lookups < LOOKUP_ATTEMPTS => {
+                        lookups += 1;
+                        tokio::time::sleep(LOOKUP_INTERVAL).await;
+                    },
+                    Err(err) => {
+                        fs::remove_file(&destination).await.ok();
+                        return Err(err.into());
+                    },
+                }
+            }
 
             // The 'enabled' property of an input source is never updated for the process that
             // invokes `TISEnableInputSource` Unclear why this is, but we handle it by
@@ -550,6 +598,7 @@ impl Integration for InputMethod {
             .join(CLI_BINARY_NAME);
 
         let mut attempts = 0;
+        let mut last_reason: Option<String> = None;
         loop {
             let out = tokio::process::Command::new(&q_cli_path)
                 .args(["_", "attempt-to-finish-input-method-installation"])
@@ -564,19 +613,17 @@ impl Integration for InputMethod {
             } else {
                 let err = String::from_utf8_lossy(&out.stdout);
                 match serde_json::from_str::<InputMethodError>(&err).ok() {
-                    Some(error) => debug!("{error}"),
+                    Some(error) => {
+                        debug!("{error}");
+                        last_reason = Some(error.to_string());
+                    },
                     None => debug!("Could not parse output as known error: {err}"),
                 }
             }
 
             attempts += 1;
             if attempts >= FINISH_INSTALLATION_ATTEMPTS {
-                return Err(crate::Error::Custom(
-                    format!(
-                        "Timed out waiting for the input method to be enabled. Run `{CLI_BINARY_NAME} integrations install input-method` to try again."
-                    )
-                    .into(),
-                ));
+                return Err(crate::Error::Custom(timeout_message(last_reason.as_deref()).into()));
             }
 
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -609,13 +656,25 @@ impl Integration for InputMethod {
 
         let destination = self.target_bundle_path()?;
 
-        let binding = run_on_main(|| {
-            let input_source = self.input_source()?;
+        let binding = run_on_main(|| -> Result<Option<Option<String>>, InputMethodError> {
+            let input_source = match self.input_source() {
+                Ok(input_source) => input_source,
+                Err(err) if lookup_can_be_retried(&err) => return Ok(None),
+                Err(err) => return Err(err),
+            };
             input_source.deselect()?;
             input_source.disable()?;
 
-            Ok::<_, InputMethodError>(input_source.bundle_id())
+            Ok(Some(input_source.bundle_id()))
         })?;
+
+        let Some(binding) = binding else {
+            // macOS no longer lists the source, so there is nothing to disable.
+            return match fs::remove_file(destination).await {
+                Err(err) if err.kind() != ErrorKind::NotFound => Err(err.into()),
+                _ => Ok(()),
+            };
+        };
 
         let binding = binding.ok_or_else(|| InputMethodError::InvalidBundle {
             inner: "Could not get bundle id".into(),
@@ -887,5 +946,29 @@ mod tests {
         println!("unknown_error: {serialized}");
         let deserialized: InputMethodError = serde_json::from_str(&serialized).unwrap();
         assert_eq!(error, deserialized);
+    }
+
+    #[test]
+    fn only_a_missing_source_is_retried() {
+        assert!(lookup_can_be_retried(&InputMethodError::CouldNotListInputSources));
+        assert!(lookup_can_be_retried(&InputMethodError::NoInputSourcesForBundleIdentifier {
+            identifier: TEST_INPUT_METHOD_BUNDLE_ID.into(),
+        }));
+        assert!(!lookup_can_be_retried(&InputMethodError::NotEnabled));
+        assert!(!lookup_can_be_retried(&InputMethodError::NotSelected));
+        assert!(!lookup_can_be_retried(&InputMethodError::OSStatusError(-1)));
+    }
+
+    #[test]
+    fn timeout_message_names_the_last_reason() {
+        assert_eq!(
+            timeout_message(None),
+            format!(
+                "Timed out waiting for the input method to be enabled. Run `{CLI_BINARY_NAME} integrations install input-method` to try again."
+            )
+        );
+        let message = timeout_message(Some("Input source is not enabled"));
+        assert!(message.contains("Input source is not enabled"));
+        assert!(message.contains(&format!("{CLI_BINARY_NAME} integrations install input-method")));
     }
 }

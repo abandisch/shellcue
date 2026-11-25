@@ -163,6 +163,15 @@ pub fn recheck_result(
     Some(keep_outcomes(previous, fresh))
 }
 
+/// A link left behind by a failed install is not enough; the app must also have recorded it enabled.
+pub fn input_method_status(linked: bool, enabled: bool) -> InputMethodStatus {
+    if linked && enabled {
+        InputMethodStatus::Enabled
+    } else {
+        InputMethodStatus::NotEnabled
+    }
+}
+
 /// At most one recheck runs; requests made while it runs collapse into one more.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Recheck {
@@ -466,6 +475,14 @@ mod tests {
             recheck_result(Some(&failed), needed(), 1, 1).map(|view| view.shell.status),
             Some(ShellStatus::Failed)
         );
+    }
+
+    #[test]
+    fn input_method_needs_the_link_and_the_enabled_record() {
+        assert_eq!(input_method_status(true, true), InputMethodStatus::Enabled);
+        assert_eq!(input_method_status(true, false), InputMethodStatus::NotEnabled);
+        assert_eq!(input_method_status(false, true), InputMethodStatus::NotEnabled);
+        assert_eq!(input_method_status(false, false), InputMethodStatus::NotEnabled);
     }
 
     #[test]
