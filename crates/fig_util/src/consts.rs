@@ -34,6 +34,11 @@ pub const DATA_DIR_NAME: &str = "shellcue";
 /// Backup directory name
 pub const BACKUP_DIR_NAME: &str = ".shellcue.dotfiles.bak";
 
+/// The setting that records whether the desktop app starts at login.
+pub const LAUNCH_ON_STARTUP_KEY: &str = "app.launchOnStartup";
+/// Launch at login is opt-in.
+pub const LAUNCH_ON_STARTUP_DEFAULT: bool = false;
+
 /// Build time env vars
 pub mod build {
     /// The target of the current build, e.g. "aarch64-unknown-linux-musl"

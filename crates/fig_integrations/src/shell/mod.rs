@@ -67,6 +67,24 @@ pub trait ShellExt {
     /// Script integrations are installed into the `shell` directory under the data directory
     fn get_script_integrations(&self) -> Result<Vec<ShellScriptShellIntegration>>;
     fn get_fig_integration_source(&self, when: &When) -> String;
+    /// Read-only: whether any dotfile of this shell sources a block, whatever the scripts hold.
+    fn has_dotfile_block(&self, env: &Env) -> Result<bool>;
+}
+
+fn dotfile_integrations(shell: Shell, env: &Env) -> Result<Vec<DotfileShellIntegration>> {
+    let config_dir = shell.get_config_directory(env)?;
+    Ok(match shell {
+        Shell::Zsh => vec![".zshrc", ".zprofile"]
+            .into_iter()
+            .map(|filename| DotfileShellIntegration {
+                pre: true,
+                post: true,
+                shell,
+                dotfile_directory: config_dir.clone(),
+                dotfile_name: filename,
+            })
+            .collect(),
+    })
 }
 
 impl ShellExt for Shell {
@@ -93,24 +111,19 @@ impl ShellExt for Shell {
     }
 
     fn get_shell_integrations(&self, env: &Env) -> Result<Vec<Box<dyn ShellIntegration>>> {
-        let config_dir = self.get_config_directory(env)?;
+        Ok(dotfile_integrations(*self, env)?
+            .into_iter()
+            .map(|integration| Box::new(integration) as Box<dyn ShellIntegration>)
+            .collect())
+    }
 
-        let integrations: Vec<Box<dyn ShellIntegration>> = match self {
-            Shell::Zsh => vec![".zshrc", ".zprofile"]
-                .into_iter()
-                .map(|filename| {
-                    Box::new(DotfileShellIntegration {
-                        pre: true,
-                        post: true,
-                        shell: *self,
-                        dotfile_directory: config_dir.clone(),
-                        dotfile_name: filename,
-                    }) as Box<dyn ShellIntegration>
-                })
-                .collect(),
-        };
-
-        Ok(integrations)
+    fn has_dotfile_block(&self, env: &Env) -> Result<bool> {
+        for integration in dotfile_integrations(*self, env)? {
+            if integration.has_block()? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     fn get_fig_integration_source(&self, when: &When) -> String {
@@ -347,6 +360,36 @@ impl DotfileShellIntegration {
         Ok(())
     }
 
+    fn read_dotfile(&self) -> Result<String> {
+        let dotfile = self.dotfile_path();
+        match std::fs::read_to_string(&dotfile).with_path(&dotfile) {
+            Ok(contents) => Ok(contents),
+            Err(Error::Io(err)) if err.kind() == ErrorKind::NotFound => Err(Error::FileDoesNotExist(dotfile.into())),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// The ignore marker is not a block, so a dotfile carrying only the marker has none.
+    fn has_block(&self) -> Result<bool> {
+        let contents = match self.read_dotfile() {
+            Ok(contents) => contents,
+            Err(Error::FileDoesNotExist(_)) => return Ok(false),
+            Err(err) => return Err(err),
+        };
+        let filtered_contents = strip_comments(&contents);
+        for (wanted, when) in [(self.pre, When::Pre), (self.post, When::Post)] {
+            if !wanted {
+                continue;
+            }
+            match self.matches_text(filtered_contents.trim(), when) {
+                Ok(()) | Err(Error::ImproperInstallation(_)) => return Ok(true),
+                Err(Error::NotInstalled(_)) => {},
+                Err(err) => return Err(err),
+            }
+        }
+        Ok(false)
+    }
+
     async fn install_inner(&self) -> Result<()> {
         let dotfile = self.dotfile_path();
         let mut contents = if dotfile.exists() {
@@ -440,30 +483,15 @@ impl Integration for DotfileShellIntegration {
     }
 
     async fn is_installed(&self) -> Result<()> {
-        let dotfile = self.dotfile_path();
-
-        let filtered_contents: String = match std::fs::read_to_string(&dotfile).with_path(&dotfile) {
-            // Remove comments and empty lines.
-            Ok(contents) => {
-                // Check for existence of ignore flag
-                if Regex::new(r"(?mi)^\s*#\s*shellcue ignore\s?.*$")
-                    .unwrap()
-                    .is_match(&contents)
-                {
-                    return Ok(());
-                }
-
-                Regex::new(r"(?m)^\s*(#.*)?\n")
-                    .unwrap()
-                    .replace_all(&contents, "")
-                    .into()
-            },
-            Err(Error::Io(err)) if err.kind() == ErrorKind::NotFound => {
-                return Err(Error::FileDoesNotExist(dotfile.into()));
-            },
-            Err(err) => return Err(err),
-        };
-
+        let contents = self.read_dotfile()?;
+        // Check for existence of ignore flag
+        if Regex::new(r"(?mi)^\s*#\s*shellcue ignore\s?.*$")
+            .unwrap()
+            .is_match(&contents)
+        {
+            return Ok(());
+        }
+        let filtered_contents = strip_comments(&contents);
         let filtered_contents = filtered_contents.trim();
 
         if self.pre {
@@ -492,6 +520,14 @@ impl ShellIntegration for DotfileShellIntegration {
     fn file_name(&self) -> &str {
         self.dotfile_name
     }
+}
+
+/// Removes comments and empty lines.
+fn strip_comments(contents: &str) -> String {
+    Regex::new(r"(?m)^\s*(#.*)?\n")
+        .unwrap()
+        .replace_all(contents, "")
+        .into()
 }
 
 /// Splits the line containing the shebang (if any) with the rest of the string.
@@ -672,6 +708,32 @@ mod test {
         ] {
             std::fs::write(integration.dotfile_path(), text).unwrap();
             assert_eq!(integration.is_installed().await.is_ok(), ignored, "{text:?}");
+        }
+    }
+
+    // `has_block` never reads the script files, so their content or absence cannot change these.
+    #[test]
+    fn has_block_reads_only_the_dotfile() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let integration = DotfileShellIntegration {
+            dotfile_directory: tempdir.path().to_path_buf(),
+            ..zshrc_integration()
+        };
+        assert!(!integration.has_block().unwrap(), "missing dotfile");
+        let pre = block(&integration, When::Pre);
+        let post = block(&integration, When::Post);
+        for (text, expected) in [
+            (format!("{pre}echo user\n{post}"), true),
+            (format!("{pre}echo user\n"), true),
+            (format!("echo user\n{post}"), true),
+            (format!("echo user\n{pre}"), true),
+            ("echo user\n".to_string(), false),
+            ("# shellcue ignore\n".to_string(), false),
+            ("# shellcue ignore\necho user\n".to_string(), false),
+            (format!("# shellcue ignore\n{pre}echo user\n"), true),
+        ] {
+            std::fs::write(integration.dotfile_path(), &text).unwrap();
+            assert_eq!(integration.has_block().unwrap(), expected, "{text:?}");
         }
     }
 

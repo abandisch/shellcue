@@ -15,6 +15,7 @@ mod common;
 pub use common::{
     InstallComponents,
     install,
+    install_script_integrations,
     uninstall,
 };
 

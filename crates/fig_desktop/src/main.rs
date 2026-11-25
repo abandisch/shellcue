@@ -3,6 +3,7 @@ mod event;
 // mod figterm;
 mod file_watcher;
 mod install;
+mod launch_at_login;
 mod local_ipc;
 pub mod notification_bus;
 mod platform;
@@ -29,7 +30,11 @@ use fig_log::{
     initialize_logging,
 };
 use fig_os_shim::Context;
-use fig_util::consts::PRODUCT_NAME;
+use fig_util::consts::{
+    LAUNCH_ON_STARTUP_DEFAULT,
+    LAUNCH_ON_STARTUP_KEY,
+    PRODUCT_NAME,
+};
 use fig_util::directories;
 use platform::PlatformState;
 use sysinfo::{
@@ -92,7 +97,7 @@ async fn main() -> ExitCode {
         error!(%err, "failed to init global settings");
     }
 
-    if cli.is_startup && !fig_settings::settings::get_bool_or("app.launchOnStartup", true) {
+    if cli.is_startup && !fig_settings::settings::get_bool_or(LAUNCH_ON_STARTUP_KEY, LAUNCH_ON_STARTUP_DEFAULT) {
         return ExitCode::SUCCESS;
     }
 

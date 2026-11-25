@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-#[cfg(target_os = "macos")]
 use fig_integrations::Integration;
 use fig_integrations::shell::ShellExt;
 use fig_os_shim::{
@@ -21,9 +20,9 @@ bitflags::bitflags! {
     /// The different components that can be installed.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct InstallComponents: u64 {
-        /// Removal of the integrations from user's dotfiles
+        /// Dotfile blocks and their scripts, both ways; installing on macOS also links the commands
         const SHELL_INTEGRATIONS    = 0b00000001;
-        /// This handles the removal of the CLI and pty binaries as well as the per-shell pty copies
+        /// Removal of the CLI and pty binaries, or the links to them, from `~/.local/bin`
         const BINARY                = 0b00000010;
         const DESKTOP_APP           = 0b00001000;
         const INPUT_METHOD          = 0b00010000;
@@ -60,11 +59,6 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
             for binary_name in &all_binary_names {
                 let binary_path = folder.join(binary_name);
                 remove_binary(binary_path).await;
-            }
-
-            for shell in Shell::all() {
-                let pty_path = folder.join(format!("{shell} ({PTY_BINARY_NAME})"));
-                remove_binary(pty_path).await;
             }
         }
     }
@@ -112,8 +106,33 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
     daemon_result.and(shell_integration_result)
 }
 
+/// Writes only the script files in the data directory: no links, no dotfile edits.
+pub async fn install_script_integrations() -> Result<(), Error> {
+    let mut errs: Vec<Error> = vec![];
+    for shell in Shell::all() {
+        match shell.get_script_integrations() {
+            Ok(integrations) => {
+                for integration in integrations {
+                    if let Err(e) = integration.install().await {
+                        errs.push(e.into());
+                    }
+                }
+            },
+            Err(e) => errs.push(e.into()),
+        }
+    }
+    match errs.pop() {
+        Some(err) => Err(err),
+        None => Ok(()),
+    }
+}
+
 pub async fn install(components: InstallComponents, env: &Env) -> Result<(), Error> {
     if components.contains(InstallComponents::SHELL_INTEGRATIONS) {
+        // A dotfile block without the links runs nothing.
+        #[cfg(target_os = "macos")]
+        super::os::link_commands().await?;
+
         let mut errs: Vec<Error> = vec![];
         for shell in Shell::all() {
             match shell.get_shell_integrations(env) {

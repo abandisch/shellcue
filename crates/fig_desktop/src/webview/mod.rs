@@ -350,7 +350,7 @@ impl WebviewManager {
         init_webview_notification_listeners(self.event_loop.create_proxy()).await;
 
         let tray_visible = !fig_settings::settings::get_bool_or("app.hideMenubarIcon", false);
-        let tray = build_tray(&self.event_loop, &self.figterm_state).await.unwrap();
+        let (tray, launch_at_login_item) = build_tray(&self.event_loop, &self.figterm_state).await.unwrap();
         if let Err(err) = tray.set_visible(tray_visible) {
             error!(%err, "Failed to set tray visible");
         }
@@ -475,6 +475,11 @@ impl WebviewManager {
                         Event::SetTrayVisible(visible) => {
                             if let Err(err) = tray.set_visible(visible) {
                                 error!(%err, "Failed to set tray visible");
+                            }
+                        },
+                        Event::SetLaunchAtLoginChecked(checked) => {
+                            if let Some(item) = &launch_at_login_item {
+                                item.set_checked(checked);
                             }
                         },
                         Event::PlatformBoundEvent(native_event) => {
@@ -717,6 +722,10 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
             Settings,
             State,
         };
+        use fig_util::consts::{
+            LAUNCH_ON_STARTUP_DEFAULT,
+            LAUNCH_ON_STARTUP_KEY,
+        };
 
         use crate::notification_bus::JsonNotification;
         watcher!(
@@ -735,10 +744,10 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
         );
         watcher!(
             settings,
-            "app.launchOnStartup",
+            LAUNCH_ON_STARTUP_KEY,
             |notification: JsonNotification, _proxy: &EventLoopProxy| {
-                let enabled = !notification.as_bool().unwrap_or(true);
-                debug!(%enabled, "app.launchOnStartup");
+                let enabled = notification.as_bool().unwrap_or(LAUNCH_ON_STARTUP_DEFAULT);
+                debug!(%enabled, "{}", LAUNCH_ON_STARTUP_KEY);
                 tokio::spawn(async move {
                     let ctx = Context::new();
                     let settings = Settings::new();

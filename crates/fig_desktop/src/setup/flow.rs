@@ -31,6 +31,8 @@ use super::view::{
     AccessibilityStep,
     InputMethodStatus,
     InputMethodStep,
+    LaunchAtLoginStatus,
+    LaunchAtLoginStep,
     Recheck,
     SetupView,
     ShellStatus,
@@ -51,6 +53,11 @@ use super::{
 };
 use crate::EventLoopProxy;
 use crate::event::Event;
+use crate::launch_at_login::{
+    agent_path,
+    launch_at_login_enabled,
+    set_launch_at_login,
+};
 
 struct Slot {
     view: Option<SetupView>,
@@ -252,6 +259,27 @@ fn start(action: SetupAction, proxy: &EventLoopProxy) {
                     },
                 });
             },
+            SetupAction::LaunchAtLogin => {
+                let tick_proxy = proxy.clone();
+                let result = match tokio::task::spawn_blocking(move || {
+                    let result = set_launch_at_login(true);
+                    crate::tray::show_launch_at_login(&tick_proxy);
+                    result
+                })
+                .await
+                {
+                    Ok(result) => result,
+                    Err(err) => Err(err.into()),
+                };
+                debug!(ok = result.is_ok(), "Launch at login step finished");
+                finish(&proxy, busy, |view| match result {
+                    Ok(()) => view.launch_at_login.status = LaunchAtLoginStatus::Enabled,
+                    Err(err) => {
+                        view.launch_at_login.status = LaunchAtLoginStatus::Failed;
+                        view.launch_at_login.error = Some(format!("{err:#}"));
+                    },
+                });
+            },
         }
     });
 }
@@ -293,17 +321,31 @@ async fn current_view() -> SetupView {
         Ok(dir) => display_path(&dir.join("shell"), home.as_deref()),
         Err(_) => "its data directory".to_owned(),
     };
+    let bin_dir = match fig_util::directories::home_local_bin() {
+        Ok(dir) => display_path(&dir, home.as_deref()),
+        Err(_) => "~/.local/bin".to_owned(),
+    };
     let cli_path = get_bundle_path_for_executable(CLI_BINARY_NAME);
     let input_method_status = if input_method_linked().await {
         InputMethodStatus::Enabled
     } else {
         InputMethodStatus::NotEnabled
     };
+    let launch_at_login_status = if launch_at_login_enabled() {
+        LaunchAtLoginStatus::Enabled
+    } else {
+        LaunchAtLoginStatus::NotEnabled
+    };
+    let launch_at_login_file = match agent_path() {
+        Ok(path) => display_path(&path, home.as_deref()),
+        Err(_) => "its LaunchAgents file".to_owned(),
+    };
     SetupView {
         shell: ShellStep {
             status: shell_status,
             files,
             scripts_dir,
+            bin_dir,
             error: None,
             command: fallback_command(cli_path.as_deref()),
         },
@@ -313,6 +355,11 @@ async fn current_view() -> SetupView {
         input_method: InputMethodStep {
             status: input_method_status,
             directory: display_path(&InputMethod::input_method_directory(), home.as_deref()),
+            error: None,
+        },
+        launch_at_login: LaunchAtLoginStep {
+            status: launch_at_login_status,
+            file: launch_at_login_file,
             error: None,
         },
         menu_bar_icon_hidden: fig_settings::settings::get_bool_or("app.hideMenubarIcon", false),

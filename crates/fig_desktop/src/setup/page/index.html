@@ -28,7 +28,7 @@
         </div>
         <div class="step-body">
           <h2>Shell integration</h2>
-          <p class="detail" id="shell-detail">Adds a short block at the top and another at the bottom of each file listed here, creating a file if it does not exist. Existing files are backed up first. It also writes its helper scripts in <span class="path" id="shell-scripts-dir"></span>.</p>
+          <p class="detail" id="shell-detail">Adds a short block at the top and another at the bottom of each file listed here, creating a file if it does not exist. Existing files are backed up first. It also writes its helper scripts in <span class="path" id="shell-scripts-dir"></span> and links the <span class="path">shellcue</span> and <span class="path">shellcue-term</span> commands into <span class="path" id="shell-bin-dir"></span>, replacing anything there with those names.</p>
           <ul class="files" id="shell-files" aria-label="Files that will be edited"></ul>
           <p class="detail" id="shell-no-files" hidden>ShellCue could not work out which files.</p>
           <div class="action-row">
@@ -80,6 +80,26 @@
           <div class="failure" id="input-method-failure" hidden>
             <p class="error" id="input-method-error"></p>
             <p class="detail">To try again later, run <span class="path">shellcue integrations install input-method</span>.</p>
+          </div>
+        </div>
+      </div>
+      <div class="step quiet" id="launch-at-login" data-mark="idle">
+        <div class="mark" aria-hidden="true">
+          <span class="mark-number">4</span>
+          <span class="mark-spinner"></span>
+          <svg class="mark-tick" viewBox="0 0 16 16"><path d="M4.5 8.4 6.9 10.8 11.5 5.6"/></svg>
+          <svg class="mark-warn" viewBox="0 0 16 16"><path d="M8 4.6v4.2"/><circle cx="8" cy="11.4" r="0.95"/></svg>
+        </div>
+        <div class="step-body">
+          <h2>Launch at login</h2>
+          <p class="detail" id="launch-at-login-detail">Starts ShellCue when you log in. The button writes one file, <span class="path" id="launch-at-login-file"></span>, which macOS reads at your next login. macOS may show a notice that ShellCue can run in the background.</p>
+          <div class="action-row">
+            <button type="button" class="button" id="launch-at-login-button" disabled>Turn on launch at login</button>
+            <p class="status" id="launch-at-login-status" aria-live="polite"></p>
+          </div>
+          <div class="failure" id="launch-at-login-failure" hidden>
+            <p class="error" id="launch-at-login-error"></p>
+            <p class="detail">Press the button to try again.</p>
           </div>
         </div>
       </div>
