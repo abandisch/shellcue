@@ -1011,13 +1011,6 @@ macro_rules! dev_mode_check {
     };
 }
 
-dev_mode_check!(
-    AutocompleteDevModeCheck,
-    "Autocomplete dev mode",
-    settings,
-    "autocomplete.developerMode"
-);
-
 dev_mode_check!(PluginDevModeCheck, "Plugin dev mode", state, "plugin.developerMode");
 
 struct CliPathCheck;
@@ -1682,7 +1675,6 @@ pub async fn doctor_cli(all: bool, strict: bool) -> Result<ExitCode> {
             vec![
                 #[cfg(unix)]
                 &PtySocketCheck,
-                &AutocompleteDevModeCheck,
                 &PluginDevModeCheck,
             ],
             config,

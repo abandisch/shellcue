@@ -1,11 +1,4 @@
 export enum SETTINGS {
-  // Dev settings.
-  DEV_MODE = "autocomplete.developerMode",
-  DEV_MODE_NPM = "autocomplete.developerModeNPM",
-  DEV_MODE_NPM_INVALIDATE_CACHE = "autocomplete.developerModeNPMInvalidateCache",
-  DEV_COMPLETIONS_FOLDER = "autocomplete.devCompletionsFolder",
-  DEV_COMPLETIONS_SERVER_PORT = "autocomplete.devCompletionsServerPort",
-
   // Style settings
   WIDTH = "autocomplete.width",
   HEIGHT = "autocomplete.height",
@@ -35,8 +28,6 @@ export enum SETTINGS {
 
   FUZZY_SEARCH = "autocomplete.fuzzySearch",
 
-  PERSONAL_SHORTCUTS_TOKEN = "autocomplete.personalShortcutsToken",
-
   DISABLE_HISTORY_LOADING = "autocomplete.history.disableLoading",
   // History settings
   // one of "off", "history_only", "show"
@@ -59,10 +50,3 @@ export const getSetting = <T = unknown>(key: SETTINGS, defaultValue?: any): T =>
   settings[key] ?? defaultValue;
 
 export const getSettings = () => settings;
-
-export function isInDevMode(): boolean {
-  return (
-    Boolean(getSetting(SETTINGS.DEV_MODE)) ||
-    Boolean(getSetting(SETTINGS.DEV_MODE_NPM))
-  );
-}

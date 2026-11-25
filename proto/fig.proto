@@ -9,23 +9,16 @@ message ClientOriginatedMessage {
   oneof submessage {
     PositionWindowRequest position_window_request = 101;
     ReadFileRequest read_file_request = 104;
-    WriteFileRequest write_file_request = 105;
-    ContentsOfDirectoryRequest contents_of_directory_request = 106;
     NotificationRequest notification_request = 107;
     GetSettingsPropertyRequest get_settings_property_request = 108;
-    UpdateSettingsPropertyRequest update_settings_property_request = 109;
     InsertTextRequest insert_text_request = 110;
     UpdateApplicationPropertiesRequest update_application_properties_request = 111;
-    DestinationOfSymbolicLinkRequest destination_of_symbolic_link_request = 112;
-    AppendToFileRequest append_to_file_request = 127;
     GetLocalStateRequest get_local_state_request = 128;
-    UpdateLocalStateRequest update_local_state_request = 129;
     RunProcessRequest run_process_request = 130;
-    CreateDirectoryRequest create_directory_request = 132;
     HistoryQueryRequest history_query_request = 140;
   }
 
-  reserved 115, 117, 118, 119, 120, 133, 134, 135, 136, 137, 138, 139, 141, 142, 143, 144, 145, 146, 149, 150, 151, 152, 155, 156;
+  reserved 105, 106, 109, 112, 115, 117, 118, 119, 120, 127, 129, 132, 133, 134, 135, 136, 137, 138, 139, 141, 142, 143, 144, 145, 146, 149, 150, 151, 152, 155, 156;
 }
 
 message ServerOriginatedMessage {
@@ -37,9 +30,7 @@ message ServerOriginatedMessage {
     bool success = 3;
     PositionWindowResponse position_window_response = 100;
     ReadFileResponse read_file_response = 102;
-    ContentsOfDirectoryResponse contents_of_directory_response = 103;
     GetSettingsPropertyResponse get_settings_property_response = 104;
-    DestinationOfSymbolicLinkResponse destination_of_symbolic_link_response = 105;
     GetLocalStateResponse get_local_state_response = 110;
     RunProcessResponse run_process_response = 111;
     HistoryQueryResponse history_query_response = 115;
@@ -47,7 +38,7 @@ message ServerOriginatedMessage {
     Notification notification = 1000;
   }
 
-  reserved 113, 114, 116, 117, 118, 119, 120, 122, 123, 124, 125, 155;
+  reserved 103, 105, 113, 114, 116, 117, 118, 119, 120, 122, 123, 124, 125, 155;
 }
 
 // Basic types
@@ -173,45 +164,6 @@ message ReadFileResponse {
   }
 }
 
-message WriteFileRequest {
-  optional FilePath path = 1;
-
-  oneof data {
-    string text = 2;
-    bytes binary = 3;
-  }
-}
-
-message AppendToFileRequest {
-  optional FilePath path = 1;
-
-  oneof data {
-    string text = 2;
-    bytes binary = 3;
-  }
-}
-
-message ContentsOfDirectoryRequest {
-  optional FilePath directory = 1;
-}
-
-message ContentsOfDirectoryResponse {
-  repeated string file_names = 1;
-}
-
-message DestinationOfSymbolicLinkRequest {
-  optional FilePath path = 1;
-}
-
-message DestinationOfSymbolicLinkResponse {
-  optional FilePath destination = 1;
-}
-
-message CreateDirectoryRequest {
-  FilePath path = 1;
-  optional bool recursive = 2;
-}
-
 /// Settings
 
 message GetSettingsPropertyRequest {
@@ -221,11 +173,6 @@ message GetSettingsPropertyRequest {
 message GetSettingsPropertyResponse {
   optional string json_blob = 1;
   optional bool is_default = 2;
-}
-
-message UpdateSettingsPropertyRequest {
-  optional string key = 1;
-  optional string value = 2;
 }
 
 /// Actions
@@ -278,11 +225,6 @@ message GetLocalStateResponse {
   optional string json_blob = 1;
 }
 
-message UpdateLocalStateRequest {
-  optional string key = 1;
-  optional string value = 2;
-}
-
 /// Run Process
 
 message RunProcessRequest {
@@ -321,18 +263,7 @@ enum InputMethodState {
 /// History
 
 message HistoryQueryRequest {
-  message Param {
-    oneof type {
-      fig_common.Empty null = 1;
-      int64 integer = 2;
-      double float = 3;
-      string string = 4;
-      bytes blob = 5;
-    }
-  }
-
-  string query = 1;
-  repeated Param params = 2;
+  reserved 1, 2;
 }
 
 message HistoryQueryResponse {

@@ -4,10 +4,7 @@ import {
 } from "@shellcue/proto/fig";
 import { _subscribe, NotificationResponse } from "./notifications.js";
 
-import {
-  sendGetSettingsPropertyRequest,
-  sendUpdateSettingsPropertyRequest,
-} from "./requests.js";
+import { sendGetSettingsPropertyRequest } from "./requests.js";
 
 export const didChange = {
   subscribe(
@@ -33,19 +30,6 @@ export const didChange = {
 
 export async function get(key: string) {
   return sendGetSettingsPropertyRequest({
-    key,
-  });
-}
-
-export async function set(key: string, value: unknown): Promise<void> {
-  return sendUpdateSettingsPropertyRequest({
-    key,
-    value: JSON.stringify(value),
-  });
-}
-
-export async function remove(key: string): Promise<void> {
-  return sendUpdateSettingsPropertyRequest({
     key,
   });
 }

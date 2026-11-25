@@ -3,7 +3,6 @@ import { StoreApi } from "zustand";
 import { sleep } from "@shellcue/shared/utils";
 import { ArgumentParserResult } from "@shellcue/autocomplete-parser";
 import { SETTINGS, getSetting } from "@shellcue/api-bindings-wrappers";
-import { runPipingConsoleMethods } from "../utils";
 import { getTemplateSuggestions } from "../generators/templateSuggestionsGenerator";
 import { getScriptSuggestions } from "../generators/scriptSuggestionsGenerator";
 import { getCustomSuggestions } from "../generators/customSuggestionsGenerator";
@@ -166,9 +165,7 @@ export const createGeneratorState = (
           }
         }
         try {
-          runPipingConsoleMethods(() => {
-            shouldTrigger = triggerFn(searchTerm, previousSearchTerm);
-          });
+          shouldTrigger = triggerFn(searchTerm, previousSearchTerm);
         } catch (_err) {
           shouldTrigger = true;
         }

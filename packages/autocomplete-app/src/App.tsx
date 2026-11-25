@@ -93,7 +93,6 @@ function App() {
     [SETTINGS.WIDTH]: settingsWidth,
     [SETTINGS.HEIGHT]: settingsHeight,
     [SETTINGS.ALWAYS_SHOW_DESCRIPTION]: alwaysShowDescription,
-    [SETTINGS.DEV_MODE_NPM]: devMode,
   } = settings;
 
   const [size, setSize] = useState({
@@ -329,7 +328,6 @@ function App() {
           .then(({ isClipped, isAbove }) => {
             setWindowState((state) =>
               state.isDescriptionSeparate ||
-              devMode ||
               Boolean(suggestions[selectedIndex]?.previewComponent)
                 ? {
                     ...state,
@@ -390,105 +388,66 @@ function App() {
     hasBottomDescription && "rounded-b-none",
   ];
 
-  const devModeWarning: React.ReactNode = devMode ? (
-    <div
-      style={{
-        width: size.suggestionWidth - 20,
-      }}
-      className="m-1 space-y-1.5 rounded bg-amber-500 px-2.5 py-2 text-black"
-    >
-      <div className="text-base font-bold">Developer mode enabled!</div>
-      <div className="text-sm">
-        Loading specs from disk. Disable with either
-      </div>
-      <div className="ml-2 flex flex-col gap-1 text-xs">
-        <div>
-          •{" "}
-          <code className="rounded-sm bg-zinc-700 p-0.5 text-zinc-200">
-            Ctrl + C
-          </code>{" "}
-          in the dev mode process
-        </div>
-        <div>
-          {"• "}
-          <button
-            type="button"
-            className="text-xs underline"
-            onClick={() => {
-              Settings.set("autocomplete.developerModeNPM", false);
-            }}
-          >
-            Click to disable
-          </button>
-        </div>
-      </div>
-    </div>
-  ) : null;
-
   let contents: React.ReactNode;
 
   if (isLoading) {
     contents = <LoadingIcon />;
   } else {
     contents = (
-      <>
-        {windowState.isAboveCursor && devModeWarning}
-        <div className="flex flex-row gap-1.5 p-1">
-          {descriptionPosition === "left" && description}
-          <div
-            className="bg-main-bg relative flex flex-none flex-col items-stretch overflow-hidden rounded shadow-[0px_0px_3px_0px_rgb(85,_85,_85)]"
-            style={
-              hasSuggestions
-                ? {
-                    width: size.suggestionWidth,
-                    height: "100%",
-                    alignSelf: windowState.isAboveCursor
-                      ? "flex-end"
-                      : "flex-start",
-                    maxHeight: size.maxHeight,
-                  }
-                : {}
-            }
+      <div className="flex flex-row gap-1.5 p-1">
+        {descriptionPosition === "left" && description}
+        <div
+          className="bg-main-bg relative flex flex-none flex-col items-stretch overflow-hidden rounded shadow-[0px_0px_3px_0px_rgb(85,_85,_85)]"
+          style={
+            hasSuggestions
+              ? {
+                  width: size.suggestionWidth,
+                  height: "100%",
+                  alignSelf: windowState.isAboveCursor
+                    ? "flex-end"
+                    : "flex-start",
+                  maxHeight: size.maxHeight,
+                }
+              : {}
+          }
+        >
+          <AutoSizedList
+            className={listClasses.filter((x) => !!x).join(" ")}
+            onResize={scrollToItemCallback}
+            ref={listRef}
+            itemSize={size.itemSize}
+            width="100%"
+            itemCount={Math.round(suggestions.length)}
           >
-            <AutoSizedList
-              className={listClasses.filter((x) => !!x).join(" ")}
-              onResize={scrollToItemCallback}
-              ref={listRef}
-              itemSize={size.itemSize}
-              width="100%"
-              itemCount={Math.round(suggestions.length)}
-            >
-              {({ index, style }) => (
-                <Suggestion
-                  style={style}
-                  suggestion={suggestions[index]}
-                  commonPrefix={commonPrefix || ""}
-                  onClick={insertTextForItem}
-                  isActive={selectedIndex === index}
-                  searchTerm={searchTerm}
-                  fuzzySearchEnabled={fuzzySearchEnabled}
-                  iconPath={iconPath}
-                  iconSize={size.itemSize * 0.75}
-                />
-              )}
-            </AutoSizedList>
-            <div className="scrollbar-none flex flex-shrink-0 flex-row">
-              {descriptionPosition === "unknown" && description}
-              {isLoading && (
-                <LoadingIcon
-                  className={
-                    hasSuggestions
-                      ? "left-[2px] [&>*]:top-[calc(50%-5px)]"
-                      : "left-[2px] [&>*]:top-[calc(50%-3px)]"
-                  }
-                />
-              )}
-            </div>
+            {({ index, style }) => (
+              <Suggestion
+                style={style}
+                suggestion={suggestions[index]}
+                commonPrefix={commonPrefix || ""}
+                onClick={insertTextForItem}
+                isActive={selectedIndex === index}
+                searchTerm={searchTerm}
+                fuzzySearchEnabled={fuzzySearchEnabled}
+                iconPath={iconPath}
+                iconSize={size.itemSize * 0.75}
+              />
+            )}
+          </AutoSizedList>
+          <div className="scrollbar-none flex flex-shrink-0 flex-row">
+            {descriptionPosition === "unknown" && description}
+            {isLoading && (
+              <LoadingIcon
+                className={
+                  hasSuggestions
+                    ? "left-[2px] [&>*]:top-[calc(50%-5px)]"
+                    : "left-[2px] [&>*]:top-[calc(50%-3px)]"
+                }
+              />
+            )}
           </div>
-          {descriptionPosition === "right" && description}
         </div>
-        {!windowState.isAboveCursor && devModeWarning}
-      </>
+        {descriptionPosition === "right" && description}
+      </div>
     );
   }
 

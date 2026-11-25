@@ -227,10 +227,7 @@ export const loadHistorySource = async (
 };
 
 const loadFigHistory = async (): Promise<HistoryEntry[]> =>
-  History.query(
-    "SELECT command, shell, session_id, cwd, start_time, exit_code FROM history",
-    [],
-  ).then((history) =>
+  History.query().then((history) =>
     history.map(
       (entry) =>
         ({
