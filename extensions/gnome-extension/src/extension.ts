@@ -33,7 +33,7 @@ const RESOURCES_PREFIX =
   "resource:///org/gnome/shell/extensions/shellcue-gnome-integration";
 
 const INITIAL_BACKOFF_MS = 1000;
-const MAX_BACKOFF_MS = 5000;
+const MAX_BACKOFF_MS = 20_000;
 const STABLE_CONNECTION_MS = 5000;
 
 /**
@@ -172,23 +172,6 @@ export default class QCliExtension extends Extension {
   #connected_since = 0;
 
   /**
-   * How many connections in a row were lost before lasting
-   * `STABLE_CONNECTION_MS`; reset by a stable loss and by `enable()`. While it
-   * is non-zero, "Connected" and repeated "Lost" lines go to `debug` only.
-   *
-   * @private @property @type {number}
-   */
-  #unstable_losses = 0;
-
-  /**
-   * The cancellable of the pending read that watches for the app closing the
-   * connection, else null.
-   *
-   * @private @property @type {import("../types/.gio").Cancellable|null}
-   */
-  #read_cancellable = null;
-
-  /**
    * The desktop socket.
    *
    * @private @property @type {import("../types/.gio").Socket|null}
@@ -299,9 +282,8 @@ export default class QCliExtension extends Extension {
 
   /**
    * Disables the extension. Once this returns, no GLib source, signal
-   * connection or held socket of this extension remains. A connect or a
-   * close-watching read still pending can no longer act; a connect closes
-   * anything it is handed.
+   * connection or held socket of this extension remains; a connect still
+   * pending can no longer act, and closes anything it is handed.
    *
    * @public @method @returns {void}
    */
@@ -353,7 +335,6 @@ export default class QCliExtension extends Extension {
 
     this.#attempts = 0;
     this.#backoff_ms = INITIAL_BACKOFF_MS;
-    this.#unstable_losses = 0;
     this.#attempt();
   }
 
@@ -410,16 +391,8 @@ export default class QCliExtension extends Extension {
         this.#socket = connection.get_socket();
         // Blocking sends would stall the compositor on a peer that never reads.
         this.#socket.set_blocking(false);
-        try {
-          this.#watch_for_close(connection);
-        } catch (error) {
-          this.#connection_lost(error);
-          return;
-        }
         this.#connected = true;
-        if (this.#unstable_losses === 0)
-          log_msg("Connected to the ShellCue app.");
-        else debug("Connected to the ShellCue app.");
+        log_msg("Connected to the ShellCue app.");
 
         this.#connect_to_mutter();
         this.#send_window_data(null);
@@ -473,20 +446,12 @@ export default class QCliExtension extends Extension {
   }
 
   /**
-   * Cancels the close-watching read, removes every signal connection and
-   * closes the connection to the desktop socket. Safe to call when nothing is
-   * connected.
+   * Removes every signal connection and closes the connection to the desktop
+   * socket. Safe to call when nothing is connected.
    *
    * @returns {void}
    */
   #drop_connection() {
-    if (this.#read_cancellable !== null) {
-      const cancellable = this.#read_cancellable;
-      // Cleared first: the callback must see itself as superseded.
-      this.#read_cancellable = null;
-      cancellable.cancel();
-    }
-
     for (const [object, connections] of this.#connections) {
       for (const connection of connections) object.disconnect(connection);
       connections.clear();
@@ -504,45 +469,6 @@ export default class QCliExtension extends Extension {
     this.#connection = null;
     this.#socket = null;
     this.#connected = false;
-  }
-
-  /**
-   * Starts one read on the connection that reports the app closing it. The
-   * app never sends anything, so data also counts as a failed connection, and
-   * the read is not started again.
-   *
-   * @param {import("../types/.gio").SocketConnection} connection
-   * @returns {void}
-   */
-  #watch_for_close(connection) {
-    const stream = connection.get_input_stream();
-    const cancellable = Gio.Cancellable.new();
-    this.#read_cancellable = cancellable;
-
-    stream.read_bytes_async(
-      64,
-      GLib.PRIORITY_LOW,
-      cancellable,
-      (_source, result) => {
-        const current = this.#read_cancellable === cancellable;
-
-        let reason;
-        try {
-          const bytes = stream.read_bytes_finish(result);
-          reason =
-            bytes.get_size() === 0
-              ? "closed by the app"
-              : "unexpected data from the app";
-        } catch (error) {
-          reason = error;
-        }
-
-        if (!current) return;
-
-        this.#read_cancellable = null;
-        this.#connection_lost(reason);
-      },
-    );
   }
 
   /**
@@ -753,31 +679,22 @@ export default class QCliExtension extends Extension {
 
   /**
    * Drops a connection that failed and schedules a retry; the backoff is
-   * reset only if the connection lasted at least `STABLE_CONNECTION_MS`. The
-   * "Lost" line is logged for a stable loss and for the first unstable loss
-   * in a row, and goes to `debug` otherwise.
+   * reset only if the connection lasted at least `STABLE_CONNECTION_MS`.
    *
    * @param {any} reason
    * @returns {void}
    */
   #connection_lost(reason) {
-    if (this.#connection === null) return;
+    log_msg("Lost the connection to the ShellCue app.");
+    debug(`Send failed: ${reason}`);
 
     const stable =
       GLib.get_monotonic_time() - this.#connected_since >=
       STABLE_CONNECTION_MS * 1000;
-    if (stable || this.#unstable_losses === 0)
-      log_msg("Lost the connection to the ShellCue app.");
-    else debug("Lost the connection to the ShellCue app.");
-    debug(`Connection lost: ${reason}`);
-
     this.#drop_connection();
     if (stable) {
       this.#attempts = 0;
       this.#backoff_ms = INITIAL_BACKOFF_MS;
-      this.#unstable_losses = 0;
-    } else {
-      this.#unstable_losses++;
     }
     this.#schedule_retry();
   }
