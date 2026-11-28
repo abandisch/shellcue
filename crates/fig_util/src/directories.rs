@@ -20,7 +20,6 @@ use crate::linux::PACKAGE_NAME;
 use crate::{
     BACKUP_DIR_NAME,
     DATA_DIR_NAME,
-    TAURI_PRODUCT_NAME,
 };
 
 macro_rules! utf8_dir {
@@ -58,8 +57,6 @@ pub enum DirectoryError {
     FromVecWithNul(#[from] std::ffi::FromVecWithNulError),
     #[error(transparent)]
     IntoString(#[from] std::ffi::IntoStringError),
-    #[error("must be ran from an appimage executable")]
-    NotAppImage,
 }
 
 type Result<T, E = DirectoryError> = std::result::Result<T, E>;
@@ -285,16 +282,7 @@ pub fn resources_path_ctx<Ctx: EnvProvider + PlatformProvider>(ctx: &Ctx) -> Res
     let os = ctx.platform().os();
     match os {
         fig_os_shim::Os::Mac => Ok(crate::app_bundle_path().join(crate::macos::BUNDLE_CONTENTS_RESOURCE_PATH)),
-        fig_os_shim::Os::Linux => {
-            if ctx.env().in_appimage() {
-                Ok(ctx
-                    .env()
-                    .current_dir()?
-                    .join(format!("lib/{}", TAURI_PRODUCT_NAME.replace("_", "-"))))
-            } else {
-                Ok(format!("/usr/share/{}", PACKAGE_NAME).into())
-            }
-        },
+        fig_os_shim::Os::Linux => Ok(format!("/usr/share/{}", PACKAGE_NAME).into()),
         _ => Err(DirectoryError::UnsupportedOs(os)),
     }
 }
@@ -319,29 +307,6 @@ pub fn settings_dir() -> Result<PathBuf> {
 /// - Linux/MacOS: `$HOME/.config/{data_dir}/settings.json` (`XDG_CONFIG_HOME` is not consulted)
 pub fn settings_path() -> Result<PathBuf> {
     Ok(settings_dir()?.join("settings.json"))
-}
-
-/// The path to the desktop entry bundled with the AppImage.
-///
-/// Only applicable to the desktop app binary when ran as an AppImage.
-pub fn appimage_desktop_entry_path<Ctx: EnvProvider>(ctx: &Ctx) -> Result<PathBuf> {
-    if !ctx.env().in_appimage() {
-        return Err(DirectoryError::NotAppImage);
-    }
-    Ok(ctx.env().current_dir()?.join("share/applications/shellcue-desktop.desktop"))
-}
-
-/// The path to the icon bundled with the AppImage to be used for the desktop entry file.
-///
-/// Only applicable to the desktop app binary when ran as an AppImage.
-pub fn appimage_desktop_entry_icon_path<Ctx: EnvProvider>(ctx: &Ctx) -> Result<PathBuf> {
-    if !ctx.env().in_appimage() {
-        return Err(DirectoryError::NotAppImage);
-    }
-    Ok(ctx
-        .env()
-        .current_dir()?
-        .join("share/icons/hicolor/128x128/apps/shellcue-desktop.png"))
 }
 
 /// The path to the data directory auto-created by the Linux windowing application.

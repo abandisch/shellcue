@@ -12,10 +12,7 @@ use fig_os_shim::{
     Fs,
     FsProvider,
 };
-use fig_settings::{
-    Settings,
-    State,
-};
+use fig_settings::Settings;
 use fig_util::PRODUCT_NAME;
 use fig_util::consts::linux::DESKTOP_ENTRY_NAME;
 use fig_util::consts::{
@@ -294,14 +291,9 @@ impl<'a, Ctx> AutostartIntegration<'a, Ctx>
 where
     Ctx: FsProvider + EnvProvider + Sync,
 {
-    /// Creates a new [AutostartIntegration] that links to a local desktop entry if in an AppImage,
-    /// and a global desktop entry otherwise.
+    /// Creates a new [AutostartIntegration] that links to the global desktop entry.
     pub fn new(ctx: &'a Ctx) -> Result<Self> {
-        if ctx.env().in_appimage() {
-            Self::to_local(ctx)
-        } else {
-            Ok(Self::to_global(ctx))
-        }
+        Ok(Self::to_global(ctx))
     }
 
     /// Creates a new [AutostartIntegration] that symlinks to a desktop entry installed locally
@@ -377,11 +369,8 @@ where
 }
 
 /// Whether or not the [`AutostartIntegration`] should be installed according to the user's
-/// environment and settings.
-pub fn should_install_autostart_entry<Ctx: EnvProvider>(env: &Ctx, settings: &Settings, state: &State) -> bool {
-    if env.env().in_appimage() && !state.get_bool_or("appimage.manageDesktopEntry", false) {
-        return false;
-    }
+/// settings.
+pub fn should_install_autostart_entry(settings: &Settings) -> bool {
     settings.get_bool_or(LAUNCH_ON_STARTUP_KEY, LAUNCH_ON_STARTUP_DEFAULT)
 }
 
@@ -390,7 +379,6 @@ mod tests {
     use fig_os_shim::{
         Context,
         ContextBuilder,
-        Env,
     };
 
     use super::*;
@@ -477,15 +465,6 @@ Type=Application"#;
 
     #[tokio::test]
     async fn test_new_autostart_integration() {
-        let ctx = Context::builder()
-            .with_test_home()
-            .await
-            .unwrap()
-            .with_env_var("APPIMAGE", "/app.appimage")
-            .build_fake();
-        let integration = AutostartIntegration::new(&ctx).unwrap();
-        assert_eq!(integration.target, local_entry_path(&ctx).unwrap());
-
         let ctx = Context::builder().with_test_home().await.unwrap().build_fake();
         let integration = AutostartIntegration::new(&ctx).unwrap();
         assert_eq!(integration.target, global_entry_path(&ctx));
@@ -544,63 +523,24 @@ Type=Application"#;
 
     #[test]
     fn test_should_install_autostart_entry() {
-        // Test structure: (env, settings, state, expected_result, test_name)
+        // Test structure: (settings, expected_result, test_name)
         let testcases = &[
-            (vec![], vec![], vec![], false, "Default should not install"),
+            (vec![], false, "Default should not install"),
             (
-                vec![],
                 vec![("app.launchOnStartup", true.into())],
-                vec![],
                 true,
                 "Install if launchOnStartup is true",
             ),
             (
-                vec![],
                 vec![("app.launchOnStartup", false.into())],
-                vec![],
                 false,
                 "Don't install if launchOnStartup is false",
             ),
-            (
-                vec![("APPIMAGE", "/app.appimage")],
-                vec![],
-                vec![],
-                false,
-                "AppImage should not install without user permission",
-            ),
-            (
-                vec![("APPIMAGE", "/app.appimage")],
-                vec![],
-                vec![("appimage.manageDesktopEntry", true.into())],
-                false,
-                "AppImage should not install by default even if user has granted permission",
-            ),
-            (
-                vec![("APPIMAGE", "/app.appimage")],
-                vec![("app.launchOnStartup", true.into())],
-                vec![("appimage.manageDesktopEntry", true.into())],
-                true,
-                "AppImage should install if launchOnStartup is true and user has granted permission",
-            ),
-            (
-                vec![("APPIMAGE", "/app.appimage")],
-                vec![("app.launchOnStartup", true.into())],
-                vec![("appimage.manageDesktopEntry", false.into())],
-                false,
-                "AppImage should not install if user has removed permission",
-            ),
         ];
         for test in testcases {
-            let (env, settings, state, expected, message) = test;
-            let env = Env::from_slice(env);
+            let (settings, expected, message) = test;
             let settings = Settings::from_slice(settings);
-            let state = State::from_slice(state);
-            assert_eq!(
-                should_install_autostart_entry(&env, &settings, &state),
-                *expected,
-                "{}",
-                message
-            );
+            assert_eq!(should_install_autostart_entry(&settings), *expected, "{}", message);
         }
     }
 
@@ -608,10 +548,6 @@ Type=Application"#;
     fn autostart_is_off_without_the_setting() {
         assert_eq!(LAUNCH_ON_STARTUP_KEY, "app.launchOnStartup");
         assert!(!LAUNCH_ON_STARTUP_DEFAULT);
-        assert!(!should_install_autostart_entry(
-            &Env::from_slice(&[]),
-            &Settings::new_fake(),
-            &State::new_fake()
-        ));
+        assert!(!should_install_autostart_entry(&Settings::new_fake()));
     }
 }

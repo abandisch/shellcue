@@ -1,7 +1,6 @@
 pub mod ibus;
 pub mod icons;
 pub mod integrations;
-mod sway;
 mod x11;
 
 use std::sync::Arc;
@@ -22,7 +21,6 @@ use fig_util::system_info::linux::{
 use parking_lot::Mutex;
 use serde::Serialize;
 use tao::dpi::{
-    LogicalPosition,
     PhysicalPosition,
     PhysicalSize,
     Position,
@@ -36,7 +34,6 @@ use tracing::{
 
 use self::x11::X11State;
 use super::PlatformBoundEvent;
-use crate::platform::linux::sway::SwayState;
 use crate::protocol::icons::{
     AssetSpecifier,
     ProcessedAsset,
@@ -91,8 +88,6 @@ pub(super) enum DisplayServerState {
     X11(Arc<x11::X11State>),
     /// Used in GNOME.
     Mutter,
-    /// Not supported
-    Sway(Arc<sway::SwayState>),
 }
 
 #[derive(Debug)]
@@ -161,22 +156,6 @@ impl PlatformStateImpl {
                                 Ok(env @ DesktopEnvironment::Plasma) => {
                                     info!("Detected {env:?}");
                                 },
-                                Ok(DesktopEnvironment::Sway) => {
-                                    if let Ok(sway_socket) = std::env::var("SWAYSOCK") {
-                                        info!(%sway_socket, "Detected sway");
-                                        let (sway_tx, sway_rx) = flume::unbounded();
-                                        let sway_state = Arc::new(SwayState {
-                                            active_window_rect: Mutex::new(None),
-                                            active_terminal: Mutex::new(None),
-                                            sway_tx,
-                                        });
-                                        *platform_state.display_server_state.lock() =
-                                            Some(DisplayServerState::Sway(sway_state.clone()));
-                                        tokio::spawn(async {
-                                            sway::handle_sway(proxy_, sway_state, sway_socket, sway_rx).await;
-                                        });
-                                    }
-                                },
                                 Ok(env) => warn!("Detected non wayland compositor {env:?}"),
                                 Err(err) => error!(%err, "Unknown wayland compositor"),
                             }
@@ -220,31 +199,14 @@ impl PlatformStateImpl {
         Ok(())
     }
 
+    #[allow(clippy::unused_self)]
     pub(super) fn position_window(
         &self,
         webview_window: &tao::window::Window,
         _window_id: &WindowId,
         position: Position,
     ) -> wry::Result<()> {
-        match &*self.display_server_state.lock() {
-            Some(DisplayServerState::Sway(sway)) => {
-                let (x, y) = match position {
-                    Position::Physical(PhysicalPosition { x, y }) => (x, y),
-                    // TODO(grant): prob do something with logical position here
-                    Position::Logical(LogicalPosition { x, y }) => (x as i32, y as i32),
-                };
-
-                if let Err(err) = sway.sway_tx.send(sway::SwayCommand::PositionWindow {
-                    x: x as i64,
-                    y: y as i64,
-                }) {
-                    tracing::warn!(%err, "Failed to send sway command");
-                }
-            },
-            _ => {
-                webview_window.set_outer_position(position);
-            },
-        };
+        webview_window.set_outer_position(position);
         Ok(())
     }
 
