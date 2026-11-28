@@ -19,11 +19,7 @@ pub(crate) async fn uninstall_gnome_extension(
     ctx: &Context,
     shell_extensions: &ShellExtensions<Context>,
 ) -> Result<(), Error> {
-    Ok(
-        GnomeExtensionIntegration::new(ctx, shell_extensions, None::<&str>, None)
-            .uninstall()
-            .await?,
-    )
+    Ok(GnomeExtensionIntegration::new(ctx, shell_extensions).uninstall().await?)
 }
 
 pub(crate) async fn uninstall_desktop_entries(ctx: &Context) -> Result<(), Error> {

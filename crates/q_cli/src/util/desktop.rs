@@ -165,6 +165,27 @@ fn launch_linux_desktop(ctx: std::sync::Arc<fig_os_shim::Context>, state: &fig_s
     Ok(())
 }
 
+/// Sets `app.launchOnStartup` and adds or removes the autostart link to match; the app puts the
+/// link back at launch while the setting is on.
+#[cfg(target_os = "linux")]
+pub async fn set_launch_at_login(
+    ctx: &fig_os_shim::Context,
+    settings: &fig_settings::Settings,
+    on: bool,
+) -> Result<()> {
+    use fig_integrations::Integration as _;
+    use fig_integrations::desktop_entry::AutostartIntegration;
+    use fig_util::consts::LAUNCH_ON_STARTUP_KEY;
+
+    settings.set_value(LAUNCH_ON_STARTUP_KEY, on)?;
+    if on {
+        AutostartIntegration::new(ctx)?.install().await?;
+    } else {
+        AutostartIntegration::uninstall(ctx).await?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,5 +214,53 @@ mod tests {
         use fig_settings::State;
 
         launch_linux_desktop(Context::new(), &State::new()).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    mod launch_at_login {
+        use std::sync::Arc;
+
+        use fig_integrations::Integration as _;
+        use fig_integrations::desktop_entry::{
+            AutostartIntegration,
+            global_entry_path,
+        };
+        use fig_os_shim::Context;
+        use fig_settings::Settings;
+        use fig_util::consts::LAUNCH_ON_STARTUP_KEY;
+
+        use super::*;
+
+        async fn make_ctx() -> Arc<Context> {
+            let ctx = Context::builder().with_test_home().await.unwrap().build_fake();
+            let global = global_entry_path(&*ctx);
+            ctx.fs().create_dir_all(global.parent().unwrap()).await.unwrap();
+            ctx.fs().write(global, "[Desktop Entry]").await.unwrap();
+            ctx
+        }
+
+        #[tokio::test]
+        async fn test_set_launch_at_login_on_then_off() {
+            let ctx = make_ctx().await;
+            let settings = Settings::new_fake();
+
+            set_launch_at_login(&ctx, &settings, true).await.unwrap();
+            assert_eq!(settings.get_bool(LAUNCH_ON_STARTUP_KEY).unwrap(), Some(true));
+            assert!(AutostartIntegration::new(&*ctx).unwrap().is_installed().await.is_ok());
+
+            set_launch_at_login(&ctx, &settings, false).await.unwrap();
+            assert_eq!(settings.get_bool(LAUNCH_ON_STARTUP_KEY).unwrap(), Some(false));
+            assert!(AutostartIntegration::new(&*ctx).unwrap().is_installed().await.is_err());
+        }
+
+        #[tokio::test]
+        async fn test_set_launch_at_login_off_when_never_on() {
+            let ctx = make_ctx().await;
+            let settings = Settings::new_fake();
+
+            set_launch_at_login(&ctx, &settings, false).await.unwrap();
+            assert_eq!(settings.get_bool(LAUNCH_ON_STARTUP_KEY).unwrap(), Some(false));
+            assert!(AutostartIntegration::new(&*ctx).unwrap().is_installed().await.is_err());
+        }
     }
 }

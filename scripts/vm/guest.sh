@@ -21,6 +21,9 @@ OUT="$SRC/build/linux"
 # Written by tools when sudo needs a password; the owner runs it in the VM's own Terminal.
 APT_SCRIPT="$HOME/shellcue-apt.sh"
 PROGRAMS="fig_desktop:shellcue-desktop q_cli:shellcue figterm:shellcue-term"
+GNOME_EXT_DIR="extensions/gnome-extension"
+# Must equal the uuid in $GNOME_EXT_DIR/src/metadata.json and EXTENSION_UUID in crates/dbus/src/dbus/gnome_shell.rs.
+GNOME_EXT_UUID="shellcue-gnome-integration@bandisch-apps.com"
 
 # Change together with scripts/vm/mac-guest.sh, .mise.toml (node, pnpm, protoc), package.json (packageManager) and rust-toolchain.toml (Rust); enter_src enforces it.
 NODE_VERSION="26.13.0"
@@ -53,7 +56,7 @@ Runs inside the ShellCue build VM. Steps:
   clone <branch> <sha>     clone/fetch the public repo into ~/shellcue and check out <sha> detached
   lock                     refresh Cargo.lock (cargo update --workspace) and pnpm-lock.yaml (lockfile-only); print what changed
   fetch                    cargo fetch --locked and pnpm install --frozen-lockfile --ignore-scripts
-  web                      pnpm run build, then pnpm run test:ci
+  web                      pnpm run build, then a release build of the GNOME Shell extension, then pnpm run test:ci
   specs                    fetch the specs repo at the commit in packages/spec-compiler/SPECS_COMMIT and compile it
                            into ~/shellcue/build/specs; needs 'fetch' first (nothing from the specs repo is installed or run)
   icons [check]            generate the PNG and ICNS icons from artwork/*.svg into ~/shellcue-icons (outside the checkout)
@@ -62,7 +65,8 @@ Runs inside the ShellCue build VM. Steps:
   rust-test                cargo test --locked --no-fail-fast --workspace --lib --bins --test '*' --exclude fig_desktop-fuzz,
                            with SSH_CLIENT, SSH_CONNECTION and SSH_TTY unset
   build                    cargo build --locked --release of the three programs (desktop app, CLI, terminal wrapper)
-  bundle                   stage them with the popup page and the specs and make the Debian package with dpkg-deb, in
+  bundle                   stage them with the popup page, the specs and the GNOME Shell extension and make the Debian
+                           package with dpkg-deb, in
                            ~/shellcue/build/linux; web, specs and build must have succeeded at the checked-out commit
   info                     OS, arch, tool versions, disk free, checked-out commit, git status
 
@@ -695,12 +699,21 @@ step_fetch() {
     end_parts
 }
 
+# turbo restores only dist on a cache hit and passes no RELEASE, so the copy that is packaged is always built here.
+build_extension() {
+    local zip="$GNOME_EXT_DIR/$GNOME_EXT_UUID.zip"
+    rm -f -- "$zip"
+    ( cd "$GNOME_EXT_DIR" && RELEASE=1 pnpm run build )
+    [[ -f "$zip" && ! -L "$zip" ]] || die "$zip was not produced"
+}
+
 step_web() {
     require_no_args "$@"
     load_env
     enter_src
     rm -f -- "$STAMPS/web"
     run_part build pnpm run build
+    run_part extension build_extension
     run_part test:ci pnpm run test:ci
     end_parts
     write_stamp web
@@ -879,6 +892,24 @@ copy_plain_file() {
     install -D -m "$mode" -- "$src" "$dest"
 }
 
+stage_extension() {
+    local dest="$1" zip="$GNOME_EXT_DIR/$GNOME_EXT_UUID.zip" odd need uuid
+    grep -qF "\"$GNOME_EXT_UUID\"" crates/dbus/src/dbus/gnome_shell.rs || die "crates/dbus/src/dbus/gnome_shell.rs does not name the uuid $GNOME_EXT_UUID"
+    [[ -f "$zip" && ! -L "$zip" ]] || die "$zip is missing; run the 'web' step"
+    [[ ! -e "$dest" ]] || die "$dest already exists"
+    mkdir -p -- "$dest"
+    unzip -q "$zip" -d "$dest"
+    odd="$(find "$dest" ! -type f ! -type d -print | sed -n 1,5p)"
+    [[ -z "$odd" ]] || die "$zip holds something that is neither a plain file nor a folder: $odd"
+    for need in metadata.json extension.js schemas/gschemas.compiled; do
+        [[ -f "$dest/$need" ]] || die "$zip has no $need"
+    done
+    uuid="$(jq -r .uuid "$dest/metadata.json")"
+    [[ "$uuid" == "$GNOME_EXT_UUID" ]] || die "$zip is for uuid '$uuid', expected '$GNOME_EXT_UUID'"
+    # The first line is what $GNOME_EXT_DIR/build-scripts/extension.js prepends to a release build.
+    [[ "$(head -n 1 "$dest/extension.js")" == "const DEBUG=false;" ]] || die "$zip is a debug build; run the 'web' step"
+}
+
 stage_deb() {
     local stage="$1" version="$2" arch="$3" pair pkg name share="$1/usr/share" control="$1/DEBIAN/control" kb
     for pair in $PROGRAMS; do
@@ -894,6 +925,7 @@ stage_deb() {
     copy_plain_tree packages/autocomplete-app/dist "$share/shellcue/autocomplete"
     [[ -f build/specs/index.json ]] || die "build/specs/index.json is missing; run the 'specs' step"
     copy_plain_tree build/specs "$share/shellcue/specs"
+    stage_extension "$share/gnome-shell/extensions/$GNOME_EXT_UUID"
     chmod -R u=rwX,go=rX -- "$stage"
 
     copy_plain_file bundle/deb/prerm "$stage/DEBIAN/prerm" 0755
@@ -938,6 +970,7 @@ step_bundle() {
     for name in shellcue-desktop shellcue shellcue-term; do
         printf '      %s  usr/bin/%s\n' "$(sha256_of "$stage/usr/bin/$name")" "$name"
     done
+    printf '    extension: %s for GNOME Shell %s\n' "$GNOME_EXT_UUID" "$(jq -c '."shell-version"' "$stage/usr/share/gnome-shell/extensions/$GNOME_EXT_UUID/metadata.json")"
     printf '    files: %s, size: %s\n' "$(find "$stage" -type f | wc -l)" "$(du -sh -- "$stage" | cut -f1)"
 
     printf -- '--> making the package (a minute or two)\n'

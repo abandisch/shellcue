@@ -66,7 +66,9 @@ pub async fn uninstall(components: InstallComponents, ctx: Arc<Context>) -> Resu
     #[cfg(target_os = "linux")]
     if components.contains(InstallComponents::GNOME_SHELL_EXTENSION) {
         let shell_extensions = dbus::gnome_shell::ShellExtensions::new(Arc::downgrade(&ctx));
-        super::os::uninstall_gnome_extension(&ctx, &shell_extensions).await?;
+        if let Err(err) = super::os::uninstall_gnome_extension(&ctx, &shell_extensions).await {
+            tracing::warn!(%err, "Failed to switch off the GNOME Shell extension");
+        }
     }
 
     #[cfg(target_os = "linux")]
