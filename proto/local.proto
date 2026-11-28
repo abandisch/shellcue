@@ -32,11 +32,10 @@ message Command {
     // A request to set the desktops's log level
     LogLevelCommand log_level = 118;
     DumpStateCommand dump_state = 119;
-    DevtoolsCommand devtools = 120;
     ConnectToIBusCommand connect_to_ibus = 122;
   }
 
-  reserved 116, 117, 121, 123;
+  reserved 116, 117, 120, 121, 123;
 }
 
 message Hook {
@@ -131,16 +130,6 @@ message DumpStateCommand {
   }
 
   Type type = 1;
-}
-
-message DevtoolsCommand {
-  enum Window {
-    WINDOW_DEVTOOLS_AUTOCOMPLETE = 0;
-
-    reserved 1;
-  }
-
-  Window window = 1;
 }
 
 message ConnectToIBusCommand {}

@@ -16,7 +16,12 @@ pub async fn handle_request(
     message_id: i64,
     state: &WebviewNotificationsState,
 ) -> RequestResult {
-    let notification_type = NotificationType::try_from(request.r#type.unwrap()).unwrap();
+    let Some(notification_type) = request.r#type else {
+        return RequestResult::error("Notification type is missing");
+    };
+    let Ok(notification_type) = NotificationType::try_from(notification_type) else {
+        return RequestResult::error(format!("Unknown notification type {notification_type}"));
+    };
 
     if request.subscribe.unwrap_or(true) {
         subscribe(window_id, message_id, notification_type, state)
@@ -75,4 +80,43 @@ fn unsubscribe_all(window_id: &WindowId, state: &WebviewNotificationsState) -> R
     }
 
     RequestResult::success()
+}
+
+#[cfg(test)]
+mod tests {
+    use fig_proto::fig::server_originated_message::Submessage as ServerOriginatedSubMessage;
+
+    use super::*;
+    use crate::AUTOCOMPLETE_ID;
+
+    async fn error_message(r#type: Option<i32>) -> Option<String> {
+        let request = NotificationRequest {
+            subscribe: Some(true),
+            r#type,
+        };
+        let state = WebviewNotificationsState::default();
+        match *handle_request(request, AUTOCOMPLETE_ID, 0, &state).await.ok()? {
+            ServerOriginatedSubMessage::Error(message) => Some(message),
+            _ => None,
+        }
+    }
+
+    #[tokio::test]
+    async fn missing_type_is_an_error() {
+        assert_eq!(
+            error_message(None).await.as_deref(),
+            Some("Notification type is missing")
+        );
+    }
+
+    #[tokio::test]
+    async fn unknown_type_is_an_error() {
+        for value in [-1, 9, 12, i32::MAX] {
+            assert_eq!(
+                error_message(Some(value)).await,
+                Some(format!("Unknown notification type {value}")),
+                "{value}"
+            );
+        }
+    }
 }

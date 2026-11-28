@@ -29,7 +29,6 @@ use eyre::{
     bail,
 };
 use fig_ipc::local::{
-    devtools_command,
     prompt_accessibility_command,
     set_debug_mode,
     toggle_debug_mode,
@@ -195,10 +194,6 @@ pub enum DebugSubcommand {
         watch: bool,
         #[arg(long, requires("watch"), default_value_t = 0.25)]
         rate: f64,
-    },
-    /// Open up the devtools of a specific webview
-    Devtools {
-        app: App,
     },
     /// Disables sourcing of user shell config and instead uses a minimal shell config
     Shell,
@@ -693,18 +688,6 @@ impl DebugSubcommand {
                     }
                     tokio::time::sleep(std::time::Duration::from_secs_f64(*rate)).await;
                 }
-            },
-            Self::Devtools { app } => {
-                launch_fig_desktop(LaunchArgs {
-                    wait_for_socket: true,
-                    verbose: true,
-                })?;
-
-                devtools_command(match app {
-                    App::Autocomplete => fig_proto::local::devtools_command::Window::DevtoolsAutocomplete,
-                })
-                .await
-                .context("Could not open devtools window")?;
             },
             DebugSubcommand::Shell => {
                 let tmp_dir = TempDir::new()?;

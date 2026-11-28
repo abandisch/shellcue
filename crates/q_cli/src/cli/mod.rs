@@ -404,10 +404,10 @@ mod test {
     }
 
     #[test]
-    fn removed_dashboard_commands_are_rejected() {
+    fn removed_dashboard_and_devtools_commands_are_rejected() {
         assert!(Cli::try_parse_from([CLI_BINARY_NAME, "dashboard"]).is_err());
         assert!(Cli::try_parse_from([CLI_BINARY_NAME, "debug", "devtools", "dashboard"]).is_err());
-        assert!(Cli::try_parse_from([CLI_BINARY_NAME, "debug", "devtools", "autocomplete"]).is_ok());
+        assert!(Cli::try_parse_from([CLI_BINARY_NAME, "debug", "devtools", "autocomplete"]).is_err());
     }
 
     #[test]

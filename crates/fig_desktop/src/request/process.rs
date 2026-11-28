@@ -2,34 +2,34 @@ use std::time::Duration;
 
 use fig_proto::fig::server_originated_message::Submessage as ServerOriginatedSubMessage;
 use fig_proto::fig::{
+    Duration as ProtoDuration,
     RunProcessRequest,
     RunProcessResponse,
+};
+use fig_proto::fig_common::{
+    RUN_PROCESS_TIMEOUT_LIMIT,
+    capped_duration,
 };
 use fig_proto::remote::hostbound;
 use fig_remote_ipc::figterm::{
     FigtermCommand,
     FigtermState,
 };
-use fig_util::env_var::{
-    PROCESS_LAUNCHED_BY_SHELLCUE,
-    SHELLCUE_TERM,
-};
-use tokio::process::Command;
 use tokio::time::timeout;
 use tracing::debug;
 use uuid::Uuid;
 
 use super::RequestResult;
 
-fn set_fig_vars(cmd: &mut Command) {
-    cmd.env(SHELLCUE_TERM, env!("CARGO_PKG_VERSION"));
-    cmd.env(PROCESS_LAUNCHED_BY_SHELLCUE, "1");
+const MIN_RESPONSE_WAIT: Duration = Duration::from_secs(10);
 
-    cmd.env("HISTFILE", "");
-    cmd.env("HISTCONTROL", "ignoreboth");
-    cmd.env("TERM", "xterm-256color");
+/// The timeout shellcue-term is given and how long to wait for its answer; both capped.
+fn timeouts(requested: Option<&ProtoDuration>) -> (Option<Duration>, Duration) {
+    let timeout = requested.map(|t| capped_duration(t, RUN_PROCESS_TIMEOUT_LIMIT));
+    (timeout, timeout.unwrap_or_default().max(MIN_RESPONSE_WAIT))
 }
 
+/// Programs only ever run inside the named, linked terminal session, never in this process.
 pub async fn run(request: RunProcessRequest, state: &FigtermState) -> RequestResult {
     debug!({
         term_session =? request.terminal_session_id,
@@ -40,81 +40,96 @@ pub async fn run(request: RunProcessRequest, state: &FigtermState) -> RequestRes
         timeout =? request.timeout,
     }, "Running command");
 
-    let uuid = request
+    let session_id = request
         .terminal_session_id
         .as_deref()
-        .map(Uuid::parse_str)
-        .transpose()
+        .ok_or("terminal_session_id is required")?;
+    let uuid = Uuid::parse_str(session_id)
         .map_err(|err| format!("terminal_session_id is not a valid UUID: {err}"))?;
+    let session_sender = state
+        .with(&uuid, |session| session.sender.clone())
+        .ok_or("terminal session is not linked")?;
 
-    let session_sender = state.with_maybe_id(&uuid, |session| session.sender.clone());
+    let (requested_timeout, timeout_duration) = timeouts(request.timeout.as_ref());
 
-    if let Some(session_sender) = session_sender {
-        let (message, rx) = FigtermCommand::run_process(
-            request.executable,
-            request.arguments,
-            request.working_directory,
-            request.env,
-            request.timeout.map(Into::into),
-        );
-        session_sender
-            .send(message)
-            .map_err(|err| format!("failed sending command to shellcue-term: {err}"))?;
-        drop(session_sender);
+    let (message, rx) = FigtermCommand::run_process(
+        request.executable,
+        request.arguments,
+        request.working_directory,
+        request.env,
+        requested_timeout,
+    );
+    session_sender
+        .send(message)
+        .map_err(|err| format!("failed sending command to shellcue-term: {err}"))?;
+    drop(session_sender);
 
-        let timeout_duration = request
-            .timeout
-            .map(Duration::from)
-            .unwrap_or_default()
-            .max(Duration::from_secs(10));
+    let response = timeout(timeout_duration, rx)
+        .await
+        .map_err(|_err| "Timed out waiting for shellcue-term response")?
+        .map_err(|err| format!("Failed to receive shellcue-term response: {err}"))?;
 
-        let response = timeout(timeout_duration, rx)
-            .await
-            .map_err(|_err| "Timed out waiting for shellcue-term response")?
-            .map_err(|err| format!("Failed to receive shellcue-term response: {err}"))?;
-
-        if let hostbound::response::Response::RunProcess(response) = response {
-            RequestResult::Ok(Box::new(ServerOriginatedSubMessage::RunProcessResponse(
-                RunProcessResponse { ..response },
-            )))
-        } else {
-            Err("invalid response type".into())
-        }
-    } else {
-        debug!("running locally");
-
-        // TODO: we can infer shell as above for execute if no executable is provided.
-        let mut cmd = Command::new(&request.executable);
-
-        if let Some(working_directory) = request.working_directory {
-            cmd.current_dir(working_directory);
-        } else if let Ok(working_directory) = std::env::current_dir() {
-            cmd.current_dir(working_directory);
-        }
-        for arg in request.arguments {
-            cmd.arg(arg);
-        }
-
-        set_fig_vars(&mut cmd);
-
-        for var in request.env {
-            match var.value {
-                Some(val) => cmd.env(var.key, val),
-                None => cmd.env_remove(var.key),
-            };
-        }
-
-        let output = cmd
-            .output()
-            .await
-            .map_err(|err| format!("Failed running command {:?}: {err}", request.executable))?;
-
+    if let hostbound::response::Response::RunProcess(response) = response {
         RequestResult::Ok(Box::new(ServerOriginatedSubMessage::RunProcessResponse(
-            RunProcessResponse {
-                stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-                exit_code: output.status.code().unwrap_or(0),
-            },
+            RunProcessResponse { ..response },
         )))
+    } else {
+        Err("invalid response type".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn refusal(terminal_session_id: Option<&str>) -> String {
+        let request = RunProcessRequest {
+            executable: "/usr/bin/true".into(),
+            terminal_session_id: terminal_session_id.map(Into::into),
+            ..Default::default()
+        };
+        run(request, &FigtermState::new()).await.unwrap_err().to_string()
+    }
+
+    fn secs(secs: u64) -> Duration {
+        Duration::from_secs(secs)
+    }
+
+    fn timeouts_for(secs: u64, nanos: u32) -> (Option<Duration>, Duration) {
+        timeouts(Some(&ProtoDuration { secs, nanos }))
+    }
+
+    #[test]
+    fn response_wait_has_a_floor() {
+        assert_eq!(timeouts(None), (None, secs(10)));
+        assert_eq!(timeouts_for(5, 0), (Some(secs(5)), secs(10)));
+        assert_eq!(timeouts_for(30, 0), (Some(secs(30)), secs(30)));
+    }
+
+    #[test]
+    fn timeouts_are_capped_without_panicking() {
+        assert_eq!(timeouts_for(u64::MAX, u32::MAX), (Some(secs(60)), secs(60)));
+    }
+
+    #[tokio::test]
+    async fn missing_session_id_is_refused() {
+        assert_eq!(refusal(None).await, "terminal_session_id is required");
+    }
+
+    #[tokio::test]
+    async fn invalid_session_id_is_refused() {
+        for id in ["", "not-a-uuid", "../../etc"] {
+            let message = refusal(Some(id)).await;
+            assert!(
+                message.starts_with("terminal_session_id is not a valid UUID"),
+                "{id:?}: {message}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn unlinked_session_is_refused() {
+        let id = Uuid::new_v4().to_string();
+        assert_eq!(refusal(Some(&id)).await, "terminal session is not linked");
     }
 }

@@ -399,13 +399,6 @@ impl WindowState {
             WindowEvent::Api { payload } => {
                 api_tx.send((self.window_id.clone(), payload)).unwrap();
             },
-            WindowEvent::Devtools => {
-                if self.webview.is_devtools_open() {
-                    self.webview.close_devtools();
-                } else {
-                    self.webview.open_devtools();
-                }
-            },
             WindowEvent::DebugMode(debug_mode) => {
                 // Macos does not support setting the webview background color so we have
                 // to set the css background root color to see the window

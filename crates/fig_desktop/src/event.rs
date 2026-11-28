@@ -109,7 +109,6 @@ pub enum WindowEvent {
         /// A base64 encoded protobuf
         payload: String,
     },
-    Devtools,
     DebugMode(bool),
 
     Batch(Vec<WindowEvent>),

@@ -146,7 +146,10 @@ where
                 // figterm
                 InsertTextRequest(request) => event_handler.insert_text(request!(request)).await,
                 // fs
-                ReadFileRequest(request) => fs::read_file(request, ctx.env(), ctx.fs()).await,
+                ReadFileRequest(request) => {
+                    let themes_dir = fig_util::directories::themes_dir(ctx.context()).ok();
+                    fs::read_file(request, ctx.env(), ctx.fs(), themes_dir.as_deref()).await
+                },
                 // notifications
                 NotificationRequest(request) => event_handler.notification(request!(request)).await,
                 // process

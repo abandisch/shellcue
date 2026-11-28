@@ -31,7 +31,7 @@ export async function run({
     terminalSessionId,
     timeout: timeout
       ? create(DurationSchema, {
-          nanos: Math.floor((timeout % 1000) * 1_000_000_000),
+          nanos: Math.floor((timeout % 1000) * 1_000_000),
           secs: BigInt(Math.floor(timeout / 1000)),
         })
       : undefined,
