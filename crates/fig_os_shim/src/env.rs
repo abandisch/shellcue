@@ -150,13 +150,6 @@ impl Env {
         self.get_os("CI").is_some() || self.get_os("SHELLCUE_CI").is_some()
     }
 
-    /// Whether or not the current executable is run from an AppImage.
-    ///
-    /// See: https://docs.appimage.org/packaging-guide/environment-variables.html
-    pub fn in_appimage(&self) -> bool {
-        self.get_os("APPIMAGE").is_some()
-    }
-
     // ShellCue-specific environment variable methods
     pub fn shellcue_log_level(&self) -> Result<String, VarError> {
         self.get("SHELLCUE_LOG_LEVEL")
@@ -230,9 +223,6 @@ mod tests {
 
         let env = Env::from_slice(&[("SSH_CLIENT", "1")]);
         assert!(env.in_ssh());
-
-        let env = Env::from_slice(&[("APPIMAGE", "/tmp/.mount-asdf/usr")]);
-        assert!(env.in_appimage());
     }
 
     #[test]

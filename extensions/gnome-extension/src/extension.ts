@@ -1,11 +1,8 @@
-import Clutter from "gi://Clutter";
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import Meta from "gi://Meta";
-import St from "gi://St";
 
 import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
-import * as PanelMenu from "resource:///org/gnome/shell/ui/panelMenu.js";
 
 declare let DEBUG: boolean;
 
@@ -29,25 +26,9 @@ function debug(...messages) {
   }
 }
 
-const RESOURCES_PREFIX =
-  "resource:///org/gnome/shell/extensions/shellcue-gnome-integration";
-
 const INITIAL_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 20_000;
 const STABLE_CONNECTION_MS = 5000;
-
-/**
- * @template {string[]} T
- * @param  {T} resources
- * @returns {T extends [string, string, ...string[]] ? string[] : string}
- */
-function resource(...resources) {
-  if (resources.length >= 2) return resources.map((path) => resource(path));
-  else if (resources.length === 1) return `${RESOURCES_PREFIX}/${resources[0]}`;
-  else if (DEBUG)
-    throw new RangeError("Expected one or more resources, got zero");
-  else return null;
-}
 
 /**
  * Returns the path to the desktop socket.
@@ -112,16 +93,6 @@ export default class QCliExtension extends Extension {
   #connected = false;
 
   /**
-   * The binding object between the extension's `connected` property and the
-   * panel icon's `connected` property. This enables automatically updating
-   * the panel icon's connected state whenever the extension's connected
-   * property changes.
-   *
-   * @private @property @type {import("../types/.gobject").Binding|null}
-   */
-  #connected_binding = null;
-
-  /**
    * A map of GObject to connection id's. This is used by the extension to keep track
    * of which relevant objects (global display, windows, the cursor tracker) we connect to,
    * and disconnect when the connection to the desktop socket is dropped.
@@ -137,13 +108,6 @@ export default class QCliExtension extends Extension {
    * @private @property @type {boolean}
    */
   #enabled = false;
-
-  /**
-   * The widget representing the ShellCue icon in the panel.
-   *
-   * @private @property @type {PanelIcon|null}
-   */
-  #panel_icon = null;
 
   /** @private @property @type {import("../types/.gio").Resource|null} */
   #resources = null;
@@ -232,50 +196,6 @@ export default class QCliExtension extends Extension {
     // Get the settings object.
     this.#settings = this.getSettings();
 
-    // Watch for the user changing the "show-panel-icon" preference.
-    // this.#connect_to_object(this.#settings, "changed::show-panel-icon", () => {
-    //   if (this.#settings.get_boolean("show-panel-icon")) {
-    //     // If the panel icon doesn't exist, create it and bind the connected
-    //     // property, then add it to the panel.
-    //     if (this.#panel_icon === null) {
-    //       this.#panel_icon = new PanelIcon({
-    //         connected: this.#connected,
-    //       });
-    //       this.#connected_binding = this.bind_property(
-    //         "connected",
-    //         this.#panel_icon,
-    //         "connected",
-    //         GObject.BindingFlags.DEFAULT,
-    //       );
-    //     }
-    //     Main.panel.addToStatusArea(
-    //       "ShellCue",
-    //       this.#panel_icon,
-    //       0,
-    //       "right",
-    //     );
-    //     // If the panel icon exists, destroy it.
-    //   } else if (this.#panel_icon !== null) {
-    //     this.#connected_binding.unbind();
-    //     this.#connected_binding = null;
-    //     this.#panel_icon.destroy();
-    //     this.#panel_icon = null;
-    //   }
-    // });
-
-    // if (this.#settings.get_boolean("show-panel-icon")) {
-    //   this.#panel_icon = new PanelIcon({
-    //     connected: this.#connected,
-    //   });
-    //   this.#connected_binding = this.bind_property(
-    //     "connected",
-    //     this.#panel_icon,
-    //     "connected",
-    //     GObject.BindingFlags.DEFAULT,
-    //   );
-    //   Main.panel.addToStatusArea("ShellCue", this.#panel_icon, 0, "right");
-    // }
-
     this.#enabled = true;
     this.#start_connecting();
   }
@@ -301,14 +221,6 @@ export default class QCliExtension extends Extension {
     // Disconnect from and delete the settings object.
     this.#disconnect_from_object(this.#settings, null);
     this.#settings = null;
-
-    // If the panel icon exists, destroy it.
-    if (this.#panel_icon !== null) {
-      this.#connected_binding.unbind();
-      this.#connected_binding = null;
-      this.#panel_icon.destroy();
-      this.#panel_icon = null;
-    }
   }
 
   /**
@@ -699,127 +611,3 @@ export default class QCliExtension extends Extension {
     this.#schedule_retry();
   }
 }
-
-/** @public @class PanelIcon */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-class PanelIcon extends PanelMenu.Button {
-  /** @public @property @type {boolean} */
-  get connected() {
-    return this.#connected;
-  }
-
-  /** @public @property @type {boolean} */
-  set connected(value) {
-    this.#connected = value;
-    this.notify("connected");
-  }
-
-  /** @private @property @type {boolean} */
-  #connected;
-  /** @private @property @type {number} */
-  #connection;
-  /** @private @property @type {import("../types/.st").Icon} */
-  #icon;
-  /** @private @property @type {import("../types/.gio").Icon} */
-  #icon_connected;
-  /** @private @property @type {import("../types/.gio").Icon} */
-  #icon_disconnected;
-
-  /** @override @method @returns {void} */
-  constructor({ connected }) {
-    super(0.0, null, true);
-
-    this.#connected = connected;
-
-    const [icon_connected, icon_disconnected] = resource(
-      "icons/scalable/actions/shellcue-connected.svg",
-      "icons/scalable/actions/shellcue-disconnected.svg",
-    );
-
-    this.#icon_connected = Gio.Icon.new_for_string(icon_connected);
-    this.#icon_disconnected = Gio.Icon.new_for_string(icon_disconnected);
-
-    this.#icon = new St.Icon({
-      gicon: this.#connected ? this.#icon_connected : this.#icon_disconnected,
-      style_class: "system-status-icon",
-      reactive: true,
-      track_hover: true,
-      visible: !connected,
-    });
-
-    this.add_child(this.#icon);
-
-    this.#connection = this.connect("notify::connected", () => {
-      if (this.#connected) {
-        this.#icon.gicon = this.#icon_connected;
-        this.#icon.visible = false;
-      } else {
-        this.#icon.gicon = this.#icon_disconnected;
-        this.#icon.visible = true;
-      }
-    });
-  }
-
-  /** @override @method @returns {void} */
-  vfunc_finalize() {
-    this.disconnect(this.#connection);
-
-    this.#connected = null;
-    this.#icon = null;
-    this.#icon_connected = null;
-    this.#icon_disconnected = null;
-
-    super.vfunc_finalize();
-  }
-
-  /** @override @method @param {import("../types/.clutter").Event} event @returns {boolean} */
-  vfunc_event(event) {
-    if (this.menu && event.type() === Clutter.EventType.BUTTON_PRESS)
-      Gio.Subprocess.new(["shellcue"], Gio.SubprocessFlags.NONE);
-
-    return Clutter.EVENT_PROPAGATE;
-  }
-}
-
-/**
- * Initializes the extension, without enabling it, and returns it. This function
- * is expected to be in the toplevel of every extension.
- *
- * @returns {Extension}
- */
-// function init() {
-//   debug("Initializing ShellCue Extension");
-//   var ExtensionClass = GObject.registerClass(
-//     {
-//       GTypeName: "ShellCueExtension",
-//       Properties: {
-//         connected: GObject.ParamSpec.boolean(
-//           "connected",
-//           "connected",
-//           "connected",
-//           GObject.ParamFlags.READWRITE,
-//           false,
-//         ),
-//       },
-//     },
-//     QCliExtension,
-//   );//
-
-//   GObject.registerClass(
-//     {
-//       GTypeName: "ShellCuePanelIcon",
-//       Properties: {
-//         connected: GObject.ParamSpec.boolean(
-//           "connected",
-//           "connected",
-//           "connected",
-//           GObject.ParamFlags.READWRITE,
-//           false,
-//         ),
-//       },
-//     },
-//     PanelIcon,
-//   );//
-
-//   return new ExtensionClass();
-// }

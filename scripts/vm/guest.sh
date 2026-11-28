@@ -39,7 +39,7 @@ APT_PACKAGES=(
     build-essential pkg-config jq curl wget zstd cmake clang libssl-dev libgtk-3-dev
     libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev libwebkit2gtk-4.1-dev
     libjavascriptcoregtk-4.1-dev valac libibus-1.0-dev libglib2.0-dev sqlite3 libxdo-dev
-    libfuse2t64 git ca-certificates xz-utils zip unzip gpgv zsh fish shellcheck
+    git ca-certificates xz-utils zip unzip gpgv zsh fish shellcheck
     librsvg2-bin icnsutils
 )
 

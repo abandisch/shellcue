@@ -1,7 +1,6 @@
 packages:
   - proto
   - packages/*
-  - extensions/gnome-legacy-extension
   - extensions/gnome-extension
 
 # Refuse any package version published less than 14 days ago (value is in minutes).

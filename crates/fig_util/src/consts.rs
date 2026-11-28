@@ -15,9 +15,6 @@ pub fn app_process_listing_name() -> &'static str {
     }
 }
 
-/// The name configured under `"package.productName"` in the tauri.conf.json file.
-pub const TAURI_PRODUCT_NAME: &str = "shellcue-desktop";
-
 pub const CLI_BINARY_NAME: &str = "shellcue";
 pub const PTY_BINARY_NAME: &str = "shellcue-term";
 
@@ -149,7 +146,6 @@ mod tests {
     #[test]
     fn identity_constants() {
         assert_eq!(APP_PROCESS_NAME, "shellcue-desktop");
-        assert_eq!(TAURI_PRODUCT_NAME, "shellcue-desktop");
         assert_eq!(APP_BUNDLE_ID, "com.bandisch-apps.shellcue");
         assert_eq!(APP_BUNDLE_NAME, "ShellCue.app");
         assert_eq!(linux::PACKAGE_NAME, "shellcue");

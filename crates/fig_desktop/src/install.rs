@@ -55,12 +55,8 @@ pub async fn run_install(ctx: Arc<Context>) {
     }
 
     #[cfg(target_os = "linux")]
-    run_linux_install(
-        Arc::clone(&ctx),
-        Arc::new(fig_settings::Settings::new()),
-        Arc::new(fig_settings::State::new()),
-    )
-    .await;
+    run_linux_install(Arc::clone(&ctx), Arc::new(fig_settings::Settings::new()))
+        .await;
 
     if let Err(err) = set_previous_version(current_version()) {
         error!(%err, "Failed to set previous version");
@@ -95,19 +91,8 @@ async fn refresh_shell_integration() {
 }
 
 #[cfg(target_os = "linux")]
-async fn run_linux_install(ctx: Arc<Context>, settings: Arc<fig_settings::Settings>, state: Arc<fig_settings::State>) {
+async fn run_linux_install(ctx: Arc<Context>, settings: Arc<fig_settings::Settings>) {
     use fig_util::system_info::linux::get_display_server;
-
-    // install binaries under home local bin
-    if ctx.env().in_appimage() {
-        let ctx_clone = Arc::clone(&ctx);
-        tokio::spawn(async move {
-            install_appimage_binaries(&ctx_clone)
-                .await
-                .map_err(|err| error!(?err, "Unable to install binaries under the local bin directory"))
-                .ok();
-        });
-    }
 
     // Important we log an error if we cannot detect the display server in use.
     // If this isn't wayland or x11, the user will probably just see a blank screen.
@@ -127,17 +112,12 @@ async fn run_linux_install(ctx: Arc<Context>, settings: Arc<fig_settings::Settin
         },
     }
 
-    // Desktop entry
+    // Autostart entry
     {
         let ctx_clone = Arc::clone(&ctx);
         let settings_clone = Arc::clone(&settings);
-        let state_clone = Arc::clone(&state);
         tokio::spawn(async move {
-            install_desktop_entry(&ctx_clone, &state_clone)
-                .await
-                .map_err(|err| error!(?err, "Unable to install desktop entry"))
-                .ok();
-            install_autostart_entry(&ctx_clone, &settings_clone, &state_clone)
+            install_autostart_entry(&ctx_clone, &settings_clone)
                 .await
                 .map_err(|err| error!(?err, "Unable to install autostart entry"))
                 .ok();
@@ -148,140 +128,21 @@ async fn run_linux_install(ctx: Arc<Context>, settings: Arc<fig_settings::Settin
     // launch_ibus().await;
 }
 
-/// Installs the desktop entry if required.
-#[cfg(target_os = "linux")]
-async fn install_desktop_entry(ctx: &Context, state: &fig_settings::State) -> anyhow::Result<()> {
-    use fig_integrations::desktop_entry::DesktopEntryIntegration;
-    use fig_util::directories::{
-        appimage_desktop_entry_icon_path,
-        appimage_desktop_entry_path,
-    };
-
-    if !state.get_bool_or("appimage.manageDesktopEntry", false) {
-        return Ok(());
-    }
-
-    let exec_path = ctx.env().get("APPIMAGE")?;
-    let entry_path = appimage_desktop_entry_path(ctx)?;
-    let icon_path = appimage_desktop_entry_icon_path(ctx)?;
-    DesktopEntryIntegration::new(ctx, Some(entry_path), Some(icon_path), Some(exec_path.into()))
-        .install()
-        .await?;
-    Ok(())
-}
-
 /// Installs the autostart entry if required.
 #[cfg(target_os = "linux")]
-async fn install_autostart_entry(
-    ctx: &Context,
-    settings: &fig_settings::Settings,
-    state: &fig_settings::State,
-) -> anyhow::Result<()> {
+async fn install_autostart_entry(ctx: &Context, settings: &fig_settings::Settings) -> anyhow::Result<()> {
     use fig_integrations::desktop_entry::{
         AutostartIntegration,
         should_install_autostart_entry,
     };
 
-    if !should_install_autostart_entry(ctx, settings, state) {
+    if !should_install_autostart_entry(settings) {
         return Ok(());
     }
 
     AutostartIntegration::new(ctx)?.install().await?;
 
     Ok(())
-}
-
-/// Installs the CLI and PTY under the user's local bin directory from the AppImage, if required.
-#[cfg(target_os = "linux")]
-async fn install_appimage_binaries(ctx: &Context) -> anyhow::Result<()> {
-    use fig_util::consts::{
-        CLI_BINARY_NAME,
-        PTY_BINARY_NAME,
-    };
-    use fig_util::directories::home_local_bin_ctx;
-    use tokio::process::Command;
-
-    if !home_local_bin_ctx(ctx)?.exists() {
-        ctx.fs().create_dir_all(home_local_bin_ctx(ctx)?).await?;
-    }
-
-    // Extract and install the CLI + PTY under home local bin, if required.
-    for binary_name in &[CLI_BINARY_NAME, PTY_BINARY_NAME] {
-        let local_binary_path = home_local_bin_ctx(ctx)?.join(binary_name);
-        if local_binary_path.exists() {
-            let output = Command::new(&local_binary_path).arg("--version").output().await.ok();
-
-            let installed_version = output
-                .as_ref()
-                .and_then(|output| std::str::from_utf8(&output.stdout).ok())
-                .map(parse_version);
-
-            match installed_version {
-                Some(installed_version) => {
-                    let app_version = env!("CARGO_PKG_VERSION");
-                    if installed_version != app_version {
-                        info!(
-                            "Installed version {} for binary {} is different than application version {}",
-                            installed_version,
-                            local_binary_path.to_string_lossy(),
-                            app_version
-                        );
-                        copy_binary_from_appimage_mount(ctx, binary_name, local_binary_path).await?;
-                    }
-                },
-                None => error!(
-                    "Unable to parse the version of the binary at: {}",
-                    local_binary_path.to_string_lossy()
-                ),
-            }
-        } else {
-            copy_binary_from_appimage_mount(ctx, binary_name, local_binary_path).await?;
-        }
-    }
-
-    Ok(())
-}
-
-/// The AppImage is executed by mounting to a temporary directory and running the desktop binary.
-/// The current working directory of the desktop app essentially looks like this:
-/// - <tempdir>/bin/shellcue
-/// - <tempdir>/bin/shellcue-term
-///
-/// Thus, we can access and copy the bundled binaries from the AppImage to the provided
-/// `destination`.
-#[cfg(target_os = "linux")]
-async fn copy_binary_from_appimage_mount(
-    ctx: &Context,
-    binary_name: &str,
-    destination: impl AsRef<std::path::Path>,
-) -> anyhow::Result<()> {
-    use anyhow::Context;
-    use tracing::debug;
-
-    let cwd = ctx.env().current_dir()?;
-    let binary_path = cwd.join(format!("bin/{binary_name}"));
-    debug!(
-        "Copying {} to {}",
-        binary_path.to_string_lossy(),
-        destination.as_ref().to_string_lossy()
-    );
-    ctx.fs()
-        .copy(&binary_path, destination)
-        .await
-        .context(format!("Unable to copy {binary_name}"))?;
-
-    Ok(())
-}
-
-/// Parses the semver portion of a string of the form: `"<binary-name> <semver>"`.
-#[cfg(target_os = "linux")]
-fn parse_version(output: &str) -> String {
-    output
-        .chars()
-        .skip_while(|c| !c.is_ascii_digit())
-        .collect::<String>()
-        .trim()
-        .to_string()
 }
 
 #[cfg(target_os = "linux")]
@@ -411,206 +272,46 @@ mod test {
     fn test_current_version() {
         current_version();
     }
+}
 
-    #[cfg(target_os = "linux")]
-    mod linux_appimage_tests {
-        use std::fs::Permissions;
-        use std::os::unix::fs::PermissionsExt;
-        use std::path::Path;
+#[cfg(all(test, target_os = "linux"))]
+mod linux_autostart_tests {
+    use fig_integrations::desktop_entry::{
+        AutostartIntegration,
+        global_entry_path,
+        local_autostart_path,
+    };
+    use fig_settings::Settings;
+    use fig_util::consts::LAUNCH_ON_STARTUP_KEY;
 
-        use fig_util::directories::home_local_bin_ctx;
-        use fig_util::{
-            CLI_BINARY_NAME,
-            PTY_BINARY_NAME,
-        };
-        use tokio::process::Command;
+    use super::*;
 
-        use super::*;
-
-        /// Writes a test script for the CLI/PTY binaries to `directory` that prints
-        /// `"<binaryname> version"`.
-        async fn write_test_binaries(ctx: &Context, version: &str, destination: impl AsRef<Path>) {
-            let fs = ctx.fs();
-            if !fs.exists(&destination) {
-                fs.create_dir_all(&destination).await.unwrap();
-            }
-            for binary_name in &[CLI_BINARY_NAME, PTY_BINARY_NAME] {
-                let path = destination.as_ref().join(binary_name);
-                fs.write(
-                    &path,
-                    format!(
-                        r#"#!/usr/bin/env sh
-echo "{binary_name} {version}"
-            "#
-                    ),
-                )
-                .await
-                .unwrap();
-                fs.set_permissions(&path, Permissions::from_mode(0o700)).await.unwrap();
-            }
-        }
-
-        async fn assert_binaries_installed(ctx: &Context, expected_version: &str) {
-            for binary_name in &[CLI_BINARY_NAME, PTY_BINARY_NAME] {
-                let binary_path = home_local_bin_ctx(ctx).unwrap().join(binary_name);
-                let stdout = Command::new(ctx.fs().chroot_path(binary_path))
-                    .output()
-                    .await
-                    .unwrap()
-                    .stdout;
-                let stdout = std::str::from_utf8(&stdout).unwrap();
-                assert!(ctx.fs().exists(home_local_bin_ctx(ctx).unwrap().join(binary_name)));
-                assert_eq!(parse_version(stdout), expected_version);
-            }
-        }
-
-        #[test]
-        fn test_linux_parse_version() {
-            assert_eq!(parse_version("cli 1.2.3"), "1.2.3");
-        }
-
-        static INSTALL_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
-        #[tokio::test]
-        async fn test_linux_appimage_install_on_fresh_system() {
-            let _lock = INSTALL_TEST_LOCK.lock().await;
-
-            tracing_subscriber::fmt::try_init().ok();
-
-            // Given
-            let ctx = Context::builder().with_test_home().await.unwrap().build();
-            let current_version = current_version().to_string();
-            write_test_binaries(&ctx, &current_version, "/bin").await;
-
-            // When
-            install_appimage_binaries(&ctx).await.unwrap();
-
-            // Then
-            assert_binaries_installed(&ctx, &current_version).await;
-        }
-
-        #[tokio::test]
-        async fn test_linux_appimage_install_when_installed_binaries_have_old_version() {
-            let _lock = INSTALL_TEST_LOCK.lock().await;
-
-            tracing_subscriber::fmt::try_init().ok();
-
-            // Given
-            let ctx = Context::builder().with_test_home().await.unwrap().build();
-            let current_version = current_version().to_string();
-            let old_version = "0.0.1";
-            write_test_binaries(&ctx, &current_version, "/bin").await;
-            write_test_binaries(&ctx, old_version, home_local_bin_ctx(&ctx).unwrap()).await;
-
-            // When
-            install_appimage_binaries(&ctx).await.unwrap();
-
-            // Then
-            assert_binaries_installed(&ctx, &current_version).await;
-        }
+    async fn test_context_with_global_entry() -> Arc<Context> {
+        let ctx = Context::builder().with_test_home().await.unwrap().build_fake();
+        let global_path = global_entry_path(&ctx);
+        ctx.fs().create_dir_all(global_path.parent().unwrap()).await.unwrap();
+        ctx.fs().write(global_path, "[Desktop Entry]").await.unwrap();
+        ctx
     }
 
-    #[cfg(target_os = "linux")]
-    mod linux_desktop_entry_tests {
-        use fig_integrations::desktop_entry::{
-            AutostartIntegration,
-            local_entry_path,
-            local_icon_path,
-        };
-        use fig_settings::{
-            Settings,
-            State,
-        };
-        use fig_util::directories::{
-            appimage_desktop_entry_icon_path,
-            appimage_desktop_entry_path,
-        };
+    #[tokio::test]
+    async fn autostart_entry_is_installed_when_the_setting_is_on() {
+        let ctx = test_context_with_global_entry().await;
+        let settings = Settings::from_slice(&[(LAUNCH_ON_STARTUP_KEY, true.into())]);
 
-        use super::*;
+        install_autostart_entry(&ctx, &settings).await.unwrap();
 
-        #[tokio::test]
-        async fn test_desktop_entry_is_installed() {
-            let ctx = Context::builder()
-                .with_test_home()
-                .await
-                .unwrap()
-                .with_env_var("APPIMAGE", "/test.appimage")
-                .build_fake();
-            let fs = ctx.fs();
-            let entry_path = appimage_desktop_entry_path(&ctx).unwrap();
-            let icon_path = appimage_desktop_entry_icon_path(&ctx).unwrap();
-            fs.create_dir_all(&entry_path.parent().unwrap()).await.unwrap();
-            fs.write(&entry_path, "[Desktop Entry]\nExec=shellcue-desktop").await.unwrap();
-            fs.create_dir_all(icon_path.parent().unwrap()).await.unwrap();
-            fs.write(&icon_path, "image").await.unwrap();
-            let state = State::from_slice(&[("appimage.manageDesktopEntry", true.into())]);
+        assert!(AutostartIntegration::new(&ctx).unwrap().is_installed().await.is_ok());
+        assert!(ctx.fs().exists(local_autostart_path(&ctx).unwrap()));
+    }
 
-            // When
-            install_desktop_entry(&ctx, &state).await.unwrap();
+    #[tokio::test]
+    async fn autostart_entry_is_not_installed_when_the_setting_is_off() {
+        let ctx = test_context_with_global_entry().await;
 
-            // Then
-            assert!(fs.exists(local_entry_path(&ctx).unwrap()));
-            assert!(fs.exists(local_icon_path(&ctx).unwrap()));
-        }
+        install_autostart_entry(&ctx, &Settings::new_fake()).await.unwrap();
 
-        #[tokio::test]
-        async fn test_desktop_entry_not_installed_if_not_managed() {
-            let ctx = Context::builder()
-                .with_test_home()
-                .await
-                .unwrap()
-                .with_env_var("APPIMAGE", "/test.appimage")
-                .build_fake();
-            let fs = ctx.fs();
-            let entry_path = appimage_desktop_entry_path(&ctx).unwrap();
-            let icon_path = appimage_desktop_entry_icon_path(&ctx).unwrap();
-            fs.create_dir_all(&entry_path.parent().unwrap()).await.unwrap();
-            fs.write(&entry_path, "[Desktop Entry]\nExec=shellcue-desktop").await.unwrap();
-            fs.create_dir_all(icon_path.parent().unwrap()).await.unwrap();
-            fs.write(&icon_path, "image").await.unwrap();
-            let state = State::new_fake();
-
-            // When
-            install_desktop_entry(&ctx, &state).await.unwrap();
-
-            // Then
-            assert!(!fs.exists(local_entry_path(&ctx).unwrap()));
-            assert!(!fs.exists(local_icon_path(&ctx).unwrap()));
-        }
-
-        #[tokio::test]
-        async fn test_autostart_entry_installed_locally_for_appimage() {
-            let ctx = Context::builder()
-                .with_test_home()
-                .await
-                .unwrap()
-                .with_env_var("APPIMAGE", "/test.appimage")
-                .build_fake();
-            let fs = ctx.fs();
-            fs.create_dir_all(local_entry_path(&ctx).unwrap().parent().unwrap())
-                .await
-                .unwrap();
-            fs.write(local_entry_path(&ctx).unwrap(), "[Desktop Entry]")
-                .await
-                .unwrap();
-
-            // When
-            install_autostart_entry(
-                &ctx,
-                &Settings::from_slice(&[(fig_util::consts::LAUNCH_ON_STARTUP_KEY, true.into())]),
-                &State::from_slice(&[("appimage.manageDesktopEntry", true.into())]),
-            )
-            .await
-            .unwrap();
-
-            // Then
-            assert!(
-                AutostartIntegration::to_local(&ctx)
-                    .unwrap()
-                    .is_installed()
-                    .await
-                    .is_ok()
-            );
-        }
+        assert!(AutostartIntegration::new(&ctx).unwrap().is_installed().await.is_err());
+        assert!(!ctx.fs().exists(local_autostart_path(&ctx).unwrap()));
     }
 }

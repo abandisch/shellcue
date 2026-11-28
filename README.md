@@ -15,7 +15,7 @@ ShellCue is built from source; build instructions will follow.
 Linux support is experimental. It has been tried only on Ubuntu 24.04 (GNOME 46) on arm64, and only inside a virtual machine, never on a physical computer.
 
 - **Xorg sessions** do not need the GNOME Shell extension described next.
-- **Wayland sessions** have been tried only under GNOME. There ShellCue learns where the terminal window is from its own GNOME Shell extension, which declares GNOME 45 to 47; only 46 has been tried. The extension comes with the package and stays switched off until you say yes in `shellcue setup` or run `shellcue integrations install gnome-shell-extension`. After the package is installed, one log-out and log-in is needed before the extension can load. The code also carries an inherited path for Sway that has never been tried; no other Wayland desktop is handled.
+- **Wayland sessions** have been tried only under GNOME. There ShellCue learns where the terminal window is from its own GNOME Shell extension, which declares GNOME 45 to 47; only 46 has been tried. The extension comes with the package and stays switched off until you say yes in `shellcue setup` or run `shellcue integrations install gnome-shell-extension`. After the package is installed, one log-out and log-in is needed before the extension can load. No other Wayland desktop is handled.
 - **GNOME 48 and later are not supported yet.** That includes Ubuntu 26.04, which has no Xorg session to fall back on.
 
 Known problems on Wayland:
@@ -98,7 +98,7 @@ echo 'mise activate fish | source' >> ~/.config/fish/config.fish
 
 Do not install pnpm separately: the repo refuses to run with any pnpm version other than the one pinned in `package.json`.
 
-Install the pinned Node, pnpm, protoc and Python versions (Rust is pinned by `rust-toolchain.toml` and installed by rustup) using:
+Install the pinned Node, pnpm and protoc versions (Rust is pinned by `rust-toolchain.toml` and installed by rustup) using:
 
 ```shell
 mise trust
@@ -158,10 +158,10 @@ Several projects live here:
 
 Other folder to be aware of
 
-- [`build-scripts/`](build-scripts/) - Inherited python build scripts, not used
-  by the VM build steps; the macOS app bundle is assembled in the macOS build
-  VM, driven by `scripts/vm/mac-host.sh`, and the Linux package in the Ubuntu
-  desktop VM, driven by `scripts/vm/linux-host.sh`
+- [`scripts/vm/`](scripts/vm/) - Build steps that run inside virtual machines: the
+  macOS app bundle is assembled in the macOS build VM, driven by
+  `scripts/vm/mac-host.sh`, and the Linux package in the Ubuntu desktop VM,
+  driven by `scripts/vm/linux-host.sh`
 - [`crates/`](crates/) - Contains all internal rust crates
 - [`packages/`](packages/) - Contains all internal npm packages
 - [`proto/`](proto/) -

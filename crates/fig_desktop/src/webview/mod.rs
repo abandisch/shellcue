@@ -701,10 +701,7 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
             AutostartIntegration,
             should_install_autostart_entry,
         };
-        use fig_settings::{
-            Settings,
-            State,
-        };
+        use fig_settings::Settings;
         use fig_util::consts::{
             LAUNCH_ON_STARTUP_DEFAULT,
             LAUNCH_ON_STARTUP_KEY,
@@ -734,7 +731,6 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
                 tokio::spawn(async move {
                     let ctx = Context::new();
                     let settings = Settings::new();
-                    let state = State::new();
                     let autostart = match AutostartIntegration::new(&ctx) {
                         Ok(autostart) => autostart,
                         Err(err) => {
@@ -745,7 +741,7 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
                             return;
                         },
                     };
-                    if should_install_autostart_entry(&ctx, &settings, &state) {
+                    if should_install_autostart_entry(&settings) {
                         autostart
                             .install()
                             .await
