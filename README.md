@@ -4,12 +4,24 @@ Terminal autocomplete: a sprig cut free.
 
 ShellCue adds IDE-style completions to your terminal for hundreds of command-line tools such as `git`, `npm` and `docker`. It runs locally: no account, no telemetry, no AI.
 
-It supports zsh on macOS and Linux.
+It supports zsh on macOS. Linux support is experimental: see "Linux status" below.
 
 ## ⚡️ Installation
 
 ShellCue is built from source; build instructions will follow.
 
+## 🐧 Linux status
+
+Linux support is experimental. It has been tried only on Ubuntu 24.04 (GNOME 46) on arm64, and only inside a virtual machine, never on a physical computer.
+
+- **Xorg sessions** do not need the GNOME Shell extension described next.
+- **Wayland sessions** have been tried only under GNOME. There ShellCue learns where the terminal window is from its own GNOME Shell extension, which declares GNOME 45 to 47; only 46 has been tried. The extension comes with the package and stays switched off until you say yes in `shellcue setup` or run `shellcue integrations install gnome-shell-extension`. After the package is installed, one log-out and log-in is needed before the extension can load. The code also carries an inherited path for Sway that has never been tried; no other Wayland desktop is handled.
+- **GNOME 48 and later are not supported yet.** That includes Ubuntu 26.04, which has no Xorg session to fall back on.
+
+Known problems on Wayland:
+
+- In the test virtual machine the screen sometimes went black, or froze on an old picture, at log-out or log-in while the app was running and the extension was switched on. The session itself kept running, and resizing the virtual machine's window brought the picture back. The cause has not been found, and it is not known whether this happens on a physical computer. To switch the extension off again, run `shellcue integrations uninstall gnome-shell-extension`.
+- After the ShellCue app is restarted, completions come back only once you switch to another window and back.
 
 ## 🚀 Start Contributing
 

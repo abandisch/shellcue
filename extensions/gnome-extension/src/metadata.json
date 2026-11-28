@@ -3,7 +3,7 @@
   "name": "ShellCue GNOME Integration",
   "url": "https://github.com/abandisch/shellcue",
   "version": 1,
-  "description": "Integrates ShellCue with GNOME Shell for versions 45+",
+  "description": "Integrates ShellCue with GNOME Shell 45 to 47",
   "gettext-domain": "shellcue-gnome-integration",
   "settings-schema": "org.gnome.shell.extensions.shellcue-gnome-integration",
   "shell-version": ["45", "46", "47"]

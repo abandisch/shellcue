@@ -4,7 +4,7 @@ use anstream::println;
 use clap::Subcommand;
 use crossterm::style::Stylize;
 use eyre::Result;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use fig_integrations::Integration as _;
 use fig_integrations::shell::ShellExt;
 use fig_os_shim::Env;
@@ -85,7 +85,14 @@ impl IntegrationsSubcommands {
                     #[cfg(target_os = "linux")]
                     uninstall(Integration::AutostartEntry, silent).await?;
                     #[cfg(target_os = "linux")]
-                    uninstall(Integration::GnomeShellExtension, silent).await?;
+                    if let Err(err) = uninstall(Integration::GnomeShellExtension, silent).await {
+                        if !silent {
+                            println!(
+                                "Could not switch off the {} GNOME Shell extension: {err}",
+                                fig_util::PRODUCT_NAME
+                            );
+                        }
+                    }
                 } else {
                     uninstall(integration, silent).await?;
                 }
@@ -115,6 +122,7 @@ async fn install(integration: Integration, silent: bool) -> Result<()> {
     let mut installed = false;
     let mut errored = false;
     let mut status: Option<&str> = None;
+    let mut report: Option<String> = None;
 
     let result = match integration {
         Integration::All => Ok(()),
@@ -173,18 +181,48 @@ async fn install(integration: Integration, silent: bool) -> Result<()> {
             }
         },
         Integration::AutostartEntry => {
-            errored = true;
-            Err(eyre::eyre!(
-                "Installing the autostart entry from the CLI is not supported"
-            ))
+            cfg_if::cfg_if! {
+                if #[cfg(target_os = "linux")] {
+                    use fig_os_shim::Context;
+                    use fig_settings::Settings;
+                    crate::util::desktop::set_launch_at_login(&Context::new(), &Settings::new(), true).await?;
+                    installed = true;
+                    Ok(())
+                } else {
+                    errored = true;
+                    Err(eyre::eyre!("The autostart integration is only supported on Linux"))
+                }
+            }
         },
         Integration::GnomeShellExtension => {
-            errored = true;
-            Err(eyre::eyre!(
-                "Installing the GNOME Shell extension from the CLI is not supported"
-            ))
+            cfg_if::cfg_if! {
+                if #[cfg(target_os = "linux")] {
+                    use std::sync::Arc;
+                    use dbus::gnome_shell::ShellExtensions;
+                    use fig_integrations::gnome_extension::{
+                        GnomeExtensionIntegration,
+                        switch_on_text,
+                    };
+                    use fig_os_shim::Context;
+                    let ctx = Context::new();
+                    let shell_extensions = ShellExtensions::new(Arc::downgrade(&ctx));
+                    let outcome = GnomeExtensionIntegration::new(&ctx, &shell_extensions).switch_on().await?;
+                    report = Some(switch_on_text(outcome));
+                    Ok(())
+                } else {
+                    errored = true;
+                    Err(eyre::eyre!("The GNOME Shell extension is only supported on Linux"))
+                }
+            }
         },
     };
+
+    if let Some(report) = report {
+        if !silent {
+            println!("{report}");
+        }
+        return result;
+    }
 
     if installed && result.is_ok() && !silent {
         println!("Installed!");
@@ -201,8 +239,10 @@ async fn install(integration: Integration, silent: bool) -> Result<()> {
     result
 }
 
+#[allow(unused_mut)]
 async fn uninstall(integration: Integration, silent: bool) -> Result<()> {
     let mut uninstalled = false;
+    let mut report: Option<String> = None;
 
     let result = match integration {
         Integration::All => Ok(()),
@@ -260,9 +300,9 @@ async fn uninstall(integration: Integration, silent: bool) -> Result<()> {
         Integration::AutostartEntry => {
             cfg_if::cfg_if! {
                 if #[cfg(target_os = "linux")] {
-                    use fig_integrations::desktop_entry::AutostartIntegration;
                     use fig_os_shim::Context;
-                    AutostartIntegration::uninstall(&Context::new()).await?;
+                    use fig_settings::Settings;
+                    crate::util::desktop::set_launch_at_login(&Context::new(), &Settings::new(), false).await?;
                     uninstalled = true;
                     Ok(())
                 } else {
@@ -275,11 +315,15 @@ async fn uninstall(integration: Integration, silent: bool) -> Result<()> {
                 if #[cfg(target_os = "linux")] {
                     use std::sync::Arc;
                     use dbus::gnome_shell::ShellExtensions;
-                    use fig_integrations::gnome_extension::GnomeExtensionIntegration;
+                    use fig_integrations::gnome_extension::{
+                        GnomeExtensionIntegration,
+                        switch_off_text,
+                    };
                     use fig_os_shim::Context;
                     let ctx = Context::new();
                     let shell_extensions = ShellExtensions::new(Arc::downgrade(&ctx));
-                    uninstalled = GnomeExtensionIntegration::new(&ctx, &shell_extensions, None::<&str>, None).uninstall_manually().await?;
+                    let changed = GnomeExtensionIntegration::new(&ctx, &shell_extensions).switch_off().await?;
+                    report = Some(switch_off_text(changed));
                     Ok(())
                 } else {
                     Err(eyre::eyre!("The GNOME Shell extension is only supported on Linux"))
@@ -287,6 +331,13 @@ async fn uninstall(integration: Integration, silent: bool) -> Result<()> {
             }
         },
     };
+
+    if let Some(report) = report {
+        if !silent {
+            println!("{report}");
+        }
+        return result;
+    }
 
     if uninstalled && result.is_ok() && !silent {
         println!("Uninstalled!");
@@ -394,11 +445,63 @@ async fn status(integration: Integration, format: OutputFormat) -> Result<ExitCo
                 }
             }
         },
-        Integration::AutostartEntry => Err(eyre::eyre!(
-            "Checking the status of the autostart entry from the CLI is not supported"
-        )),
-        Integration::GnomeShellExtension => Err(eyre::eyre!(
-            "Checking the status of the GNOME Shell extension from the CLI is not supported"
-        )),
+        Integration::AutostartEntry => {
+            cfg_if::cfg_if! {
+                if #[cfg(target_os = "linux")] {
+                    use fig_integrations::desktop_entry::AutostartIntegration;
+                    use fig_os_shim::Context;
+                    let ctx = Context::new();
+                    let installed = AutostartIntegration::new(&ctx)?.is_installed().await.is_ok();
+                    format.print(
+                        || if installed { "Installed" } else { "Not installed" },
+                        || json!({
+                            "installed": installed,
+                        })
+                    );
+                    Ok(ExitCode::SUCCESS)
+                } else {
+                    Err(eyre::eyre!("The autostart integration is only supported on Linux"))
+                }
+            }
+        },
+        Integration::GnomeShellExtension => {
+            cfg_if::cfg_if! {
+                if #[cfg(target_os = "linux")] {
+                    use std::sync::Arc;
+                    use dbus::gnome_shell::{
+                        ExtensionInstallationStatus,
+                        ShellExtensions,
+                        get_extension_status,
+                    };
+                    use fig_integrations::gnome_extension::{
+                        GnomeExtensionIntegration,
+                        status_text,
+                    };
+                    use fig_os_shim::Context;
+                    let ctx = Context::new();
+                    let shell_extensions = ShellExtensions::new(Arc::downgrade(&ctx));
+                    let installed = GnomeExtensionIntegration::new(&ctx, &shell_extensions)
+                        .is_installed()
+                        .await
+                        .is_ok();
+                    let status = get_extension_status(&ctx, &shell_extensions).await?;
+                    let listed = shell_extensions.is_listed_enabled().await.unwrap_or(false);
+                    let version = match status {
+                        ExtensionInstallationStatus::OutOfDate => shell_extensions.gnome_shell_version().await.ok(),
+                        _ => None,
+                    };
+                    let text = status_text(status, listed, version.as_ref());
+                    format.print(
+                        || text,
+                        || json!({
+                            "installed": installed,
+                        })
+                    );
+                    Ok(ExitCode::SUCCESS)
+                } else {
+                    Err(eyre::eyre!("The GNOME Shell extension is only supported on Linux"))
+                }
+            }
+        },
     }
 }

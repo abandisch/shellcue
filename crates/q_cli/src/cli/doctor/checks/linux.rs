@@ -6,7 +6,15 @@ use async_trait::async_trait;
 use dbus::gnome_shell::{
     ExtensionInstallationStatus,
     ShellExtensions,
+    foreign_extension_copy,
     get_extension_status,
+};
+use fig_integrations::gnome_extension::{
+    SWITCH_ON_COMMAND,
+    errored_message,
+    foreign_copy_message,
+    not_found_message,
+    out_of_date_message,
 };
 use fig_ipc::local::send_recv_command_to_socket;
 use fig_os_shim::Context;
@@ -17,14 +25,16 @@ use fig_proto::local::{
     ConnectToIBusCommand,
 };
 use fig_util::Terminal;
-use fig_util::consts::PRODUCT_NAME;
+use fig_util::consts::{
+    CLI_BINARY_NAME,
+    PRODUCT_NAME,
+};
 use fig_util::system_info::linux::{
     DesktopEnvironment,
     DisplayServer,
     get_desktop_environment,
     get_display_server,
 };
-use futures::FutureExt;
 
 use crate::cli::doctor::{
     DoctorCheck,
@@ -113,12 +123,10 @@ impl DoctorCheck<LinuxContext> for IBusEnvCheck {
 
         let env = ctx.env();
         let mut checks = vec![("QT_IM_MODULE", "ibus"), ("XMODIFIERS", "@im=ibus")];
-        let mut warnings: Vec<String> = vec![];
         let mut errors: Vec<EnvErr> = vec![];
 
-        // GNOME's default input method is ibus, so GTK_IM_MODULE is not required (and
-        // may not set by default on Ubuntu).
-        // Only error if it's set to something other than ibus, otherwise warn.
+        // GNOME uses IBus natively, so GTK_IM_MODULE may be unset (as on stock Ubuntu).
+        // Only error if it's set to something other than ibus.
         match get_desktop_environment(ctx)? {
             DesktopEnvironment::Gnome => match env.get("GTK_IM_MODULE") {
                 Ok(actual) if actual != "ibus" => errors.push(EnvErr {
@@ -126,11 +134,7 @@ impl DoctorCheck<LinuxContext> for IBusEnvCheck {
                     actual: actual.into(),
                     expected: "ibus".into(),
                 }),
-                Ok(_) => (),
-                Err(_) => warnings.push(
-                    "GTK_IM_MODULE is not set to `ibus`. This may cause autocomplete to break in some terminals."
-                        .to_string(),
-                ),
+                _ => (),
             },
             _ => checks.push(("GTK_IM_MODULE", "ibus")),
         };
@@ -195,8 +199,6 @@ impl DoctorCheck<LinuxContext> for IBusEnvCheck {
                 fix: None,
                 error: None,
             })
-        } else if !warnings.is_empty() {
-            Err(DoctorError::Warning(warnings.join(", ").into()))
         } else {
             Ok(())
         }
@@ -216,65 +218,49 @@ impl DoctorCheck<LinuxContext> for GnomeExtensionCheck {
     }
 
     async fn check(&self, ctx: &LinuxContext) -> Result<(), DoctorError> {
-        let (ctx, shell_extensions) = (Arc::clone(&ctx.ctx), Arc::clone(&ctx.shell_extensions));
+        let (ctx, shell_extensions) = (&ctx.ctx, ctx.shell_extensions.as_ref());
 
-        if get_desktop_environment(&ctx)? != DesktopEnvironment::Gnome {
+        if get_desktop_environment(ctx)? != DesktopEnvironment::Gnome {
             return Ok(());
         }
 
-        match get_display_server(&ctx).unwrap() {
-            DisplayServer::X11 => Ok(()),
-            DisplayServer::Wayland => match get_extension_status(&ctx, &shell_extensions, None).await.map_err(eyre::Report::from)? {
-                ExtensionInstallationStatus::GnomeShellNotRunning => Err(DoctorError::Error {
-                    reason: "The gnome-shell process doesn't appear to be running.".into(),
-                    info: vec![],
-                    fix: None,
-                    error: None,
-                }),
-                ExtensionInstallationStatus::NotInstalled => Err(DoctorError::Error {
-                    reason: format!(
-                        "The {PRODUCT_NAME} GNOME extension is not installed. Installing it is not available in this build yet."
-                    ).into(),
-                    info: vec![],
-                    fix: None,
-                    error: None,
-                }),
-                ExtensionInstallationStatus::Errored => Err(DoctorError::Error {
-                    reason: format!(
-                        "The {PRODUCT_NAME} GNOME extension is in an errored state. Please uninstall it and restart your current session."
-                    ).into(),
-                    info: vec![],
-                    fix: None,
-                    error: None,
-                }),
-                ExtensionInstallationStatus::RequiresReboot => Err(DoctorError::Error {
-                    reason: format!(
-                        "The {PRODUCT_NAME} GNOME extension is installed but not loaded. Please restart your login session and try again."
-                    ).into(),
-                    info: vec![],
-                    fix: None,
-                    error: None,
-                }),
-                // Should not match since we're currently not checking against the version here.
-                ExtensionInstallationStatus::UnexpectedVersion { .. } => Err(DoctorError::Error {
-                    reason: format!(
-                        "The {PRODUCT_NAME} GNOME extension is currently outdated. Updating it is not available in this build yet."
-                    ).into(),
-                    info: vec![],
-                    fix: None,
-                    error: None,
-                }),
-                ExtensionInstallationStatus::NotEnabled => Err(DoctorError::Error {
-                    reason: format!("The {PRODUCT_NAME} GNOME extension is not enabled.").into(),
-                    info: vec![],
-                    fix: Some(DoctorFix::Async(async move {
-                        shell_extensions.enable_extension().await?;
-                        Ok(())
-                    }.boxed())),
-                    error: None,
-                }),
-                ExtensionInstallationStatus::Enabled => Ok(()),
+        if get_display_server(ctx)? == DisplayServer::X11 {
+            return Ok(());
+        }
+
+        let status = get_extension_status(ctx, shell_extensions)
+            .await
+            .map_err(eyre::Report::from)?;
+        if status != ExtensionInstallationStatus::GnomeShellNotRunning {
+            if let Ok(Some(copy)) = foreign_extension_copy(ctx, shell_extensions).await {
+                return Err(DoctorError::error(foreign_copy_message(&copy)));
+            }
+        }
+        match status {
+            ExtensionInstallationStatus::GnomeShellNotRunning => Err(DoctorError::Error {
+                reason: "The gnome-shell process doesn't appear to be running.".into(),
+                info: vec![],
+                fix: None,
+                error: None,
+            }),
+            ExtensionInstallationStatus::NotInstalled => Err(DoctorError::error(not_found_message())),
+            ExtensionInstallationStatus::RequiresRelogin => match shell_extensions.is_listed_enabled().await {
+                Ok(true) => Err(doctor_error!(
+                    "The {PRODUCT_NAME} GNOME Shell extension is switched on but GNOME Shell has not loaded it yet. Log out and log in again."
+                )),
+                _ => Err(doctor_error!(
+                    "The {PRODUCT_NAME} GNOME Shell extension is installed but GNOME Shell has not loaded it. Run `{CLI_BINARY_NAME} {SWITCH_ON_COMMAND}`, then log out and log in again."
+                )),
             },
+            ExtensionInstallationStatus::OutOfDate => {
+                let version = shell_extensions.gnome_shell_version().await.ok();
+                Err(DoctorError::error(out_of_date_message(version.as_ref())))
+            },
+            ExtensionInstallationStatus::Errored => Err(DoctorError::error(errored_message())),
+            ExtensionInstallationStatus::NotEnabled => Err(doctor_error!(
+                "The {PRODUCT_NAME} GNOME Shell extension is switched off. To switch it on, run `{CLI_BINARY_NAME} {SWITCH_ON_COMMAND}`."
+            )),
+            ExtensionInstallationStatus::Enabled => Ok(()),
         }
     }
 }
@@ -399,6 +385,7 @@ mod tests {
     use dbus::gnome_shell::{
         ExtensionState,
         GNOME_SHELL_PROCESS_NAME,
+        user_extension_directory,
     };
     use fig_os_shim::{
         Env,
@@ -430,8 +417,8 @@ mod tests {
             ]))
             .build_fake();
         assert!(
-            matches!(IBusEnvCheck.check(&ctx.into()).await, Err(DoctorError::Warning(_))),
-            "warn when GTK_IM_MODULE is unset on GNOME"
+            IBusEnvCheck.check(&ctx.into()).await.is_ok(),
+            "GTK_IM_MODULE may be unset on GNOME"
         );
 
         let ctx = Context::builder()
@@ -508,30 +495,25 @@ mod tests {
             check
         );
 
-        let ctx = Context::builder()
-            .with_env(Env::from_slice(&[
-                ("XDG_SESSION_TYPE", "wayland"),
-                ("XDG_CURRENT_DESKTOP", "ubuntu:GNOME"),
-            ]))
-            .with_running_processes(&[GNOME_SHELL_PROCESS_NAME])
-            .build_fake();
+        let ctx = gnome_wayland_ctx().await;
         let shell_extensions = ShellExtensions::new_fake(Arc::downgrade(&ctx));
         let check = GnomeExtensionCheck
             .check(&LinuxContext::new(ctx, shell_extensions.into()))
             .await;
-        assert!(check.is_err(), "extension not installed should error");
+        assert!(
+            matches!(
+                &check,
+                Err(DoctorError::Error { reason, fix: None, .. })
+                    if reason.contains("was not found at /usr/share/gnome-shell/extensions/")
+            ),
+            "extension not installed should error. Got: {:?}",
+            check
+        );
 
-        let ctx = Context::builder()
-            .with_test_home()
-            .await
-            .unwrap()
-            .with_env_var("XDG_SESSION_TYPE", "wayland")
-            .with_env_var("XDG_CURRENT_DESKTOP", "ubuntu:GNOME")
-            .with_running_processes(&[GNOME_SHELL_PROCESS_NAME])
-            .build_fake();
+        let ctx = gnome_wayland_ctx().await;
         let shell_extensions = ShellExtensions::new_fake(Arc::downgrade(&ctx));
         shell_extensions
-            .install_for_fake(false, 1, Some(ExtensionState::Disabled))
+            .install_for_fake(Some(ExtensionState::Disabled))
             .await
             .unwrap();
         shell_extensions.enable_extension().await.unwrap();
@@ -543,6 +525,202 @@ mod tests {
             "extension installed, loaded, and enabled should not error. Error: {:?}",
             check
         );
+
+        let ctx = Context::builder()
+            .with_test_home()
+            .await
+            .unwrap()
+            .with_env_var("XDG_SESSION_TYPE", "wayland")
+            .with_env_var("XDG_CURRENT_DESKTOP", "ubuntu:GNOME")
+            .build_fake();
+        let shell_extensions = ShellExtensions::new_fake(Arc::downgrade(&ctx));
+        let check = GnomeExtensionCheck
+            .check(&LinuxContext::new(ctx, shell_extensions.into()))
+            .await;
+        assert!(
+            matches!(
+                &check,
+                Err(DoctorError::Error { reason, .. }) if reason.contains("gnome-shell process")
+            ),
+            "GNOME Shell not running should error. Got: {:?}",
+            check
+        );
+    }
+
+    async fn gnome_wayland_ctx() -> Arc<Context> {
+        Context::builder()
+            .with_test_home()
+            .await
+            .unwrap()
+            .with_env_var("XDG_SESSION_TYPE", "wayland")
+            .with_env_var("XDG_CURRENT_DESKTOP", "ubuntu:GNOME")
+            .with_running_processes(&[GNOME_SHELL_PROCESS_NAME])
+            .build_fake()
+    }
+
+    #[tokio::test]
+    async fn test_gnome_extension_check_statuses() {
+        let cases: [(Option<ExtensionState>, &str); 5] = [
+            (None, "GNOME Shell has not loaded it. Run `shellcue integrations install gnome-shell-extension`"),
+            (Some(ExtensionState::OutOfDate), "does not support this version of GNOME Shell (45.0)."),
+            (Some(ExtensionState::Errored), "journalctl -b /usr/bin/gnome-shell"),
+            (Some(ExtensionState::Disabled), "is switched off. To switch it on, run"),
+            (Some(ExtensionState::Initialized), "is switched off. To switch it on, run"),
+        ];
+        for (state, expected) in cases {
+            let ctx = gnome_wayland_ctx().await;
+            let shell_extensions = ShellExtensions::new_fake(Arc::downgrade(&ctx));
+            shell_extensions.install_for_fake(state).await.unwrap();
+            let check = GnomeExtensionCheck
+                .check(&LinuxContext::new(ctx, shell_extensions.into()))
+                .await;
+            assert!(
+                matches!(
+                    &check,
+                    Err(DoctorError::Error { reason, fix: None, .. }) if reason.contains(expected)
+                ),
+                "state {:?} should error with {:?} and no fix. Got: {:?}",
+                state,
+                expected,
+                check
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_gnome_extension_check_loaded_from_elsewhere() {
+        let elsewhere = std::path::Path::new(
+            "/home/testuser/.local/share/gnome-shell/extensions/shellcue-gnome-integration@bandisch-apps.com",
+        );
+        for state in [
+            ExtensionState::Enabled,
+            ExtensionState::Disabled,
+            ExtensionState::Errored,
+            ExtensionState::OutOfDate,
+        ] {
+            let ctx = gnome_wayland_ctx().await;
+            let shell_extensions = ShellExtensions::new_fake(Arc::downgrade(&ctx));
+            shell_extensions.install_for_fake(None).await.unwrap();
+            shell_extensions.load_for_fake(state, elsewhere).await;
+            let check = GnomeExtensionCheck
+                .check(&LinuxContext::new(ctx, shell_extensions.into()))
+                .await;
+            assert!(
+                matches!(
+                    &check,
+                    Err(DoctorError::Error { reason, .. })
+                        if reason.contains(&*elsewhere.to_string_lossy()) && reason.contains("does not put it there")
+                ),
+                "state {:?} loaded from outside the package should error. Got: {:?}",
+                state,
+                check
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_gnome_extension_check_user_folder_while_not_loaded() {
+        let ctx = gnome_wayland_ctx().await;
+        let shell_extensions = ShellExtensions::new_fake(Arc::downgrade(&ctx));
+        shell_extensions.install_for_fake(None).await.unwrap();
+        let user_dir = user_extension_directory(&ctx).unwrap();
+        ctx.fs().create_dir_all(&user_dir).await.unwrap();
+        let check = GnomeExtensionCheck
+            .check(&LinuxContext::new(ctx, shell_extensions.into()))
+            .await;
+        assert!(
+            matches!(
+                &check,
+                Err(DoctorError::Error { reason, .. })
+                    if reason.contains(&*user_dir.to_string_lossy()) && reason.contains("Remove that folder")
+            ),
+            "a user copy of the extension should error. Got: {:?}",
+            check
+        );
+    }
+
+    #[tokio::test]
+    async fn test_gnome_extension_check_not_loaded_wording() {
+        for listed in [false, true] {
+            let ctx = gnome_wayland_ctx().await;
+            let shell_extensions = ShellExtensions::new_fake(Arc::downgrade(&ctx));
+            shell_extensions.install_for_fake(None).await.unwrap();
+            if listed {
+                shell_extensions.set_listed_enabled(true).await.unwrap();
+            }
+            let check = GnomeExtensionCheck
+                .check(&LinuxContext::new(ctx, shell_extensions.into()))
+                .await;
+            let expected = if listed {
+                "The ShellCue GNOME Shell extension is switched on but GNOME Shell has not loaded it yet. \
+                 Log out and log in again."
+            } else {
+                "The ShellCue GNOME Shell extension is installed but GNOME Shell has not loaded it. \
+                 Run `shellcue integrations install gnome-shell-extension`, then log out and log in again."
+            };
+            assert!(
+                matches!(&check, Err(DoctorError::Error { reason, .. }) if reason == expected),
+                "listed {listed}: expected {expected:?}. Got: {check:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_gnome_extension_check_switches_nothing_on() {
+        let ctx = gnome_wayland_ctx().await;
+        let shell_extensions = Arc::new(ShellExtensions::new_fake(Arc::downgrade(&ctx)));
+        shell_extensions
+            .install_for_fake(Some(ExtensionState::Disabled))
+            .await
+            .unwrap();
+        let check = GnomeExtensionCheck
+            .check(&LinuxContext::new(Arc::clone(&ctx), Arc::clone(&shell_extensions)))
+            .await;
+        assert!(check.is_err(), "switched off should error. Got: {check:?}");
+        assert_eq!(
+            get_extension_status(&ctx, shell_extensions.as_ref()).await.unwrap(),
+            ExtensionInstallationStatus::NotEnabled
+        );
+        assert!(!shell_extensions.is_listed_enabled().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_gnome_extension_check_unknown_session_type() {
+        let ctx = Context::builder()
+            .with_test_home()
+            .await
+            .unwrap()
+            .with_env_var("XDG_SESSION_TYPE", "mir")
+            .with_env_var("XDG_CURRENT_DESKTOP", "ubuntu:GNOME")
+            .with_running_processes(&[GNOME_SHELL_PROCESS_NAME])
+            .build_fake();
+        let shell_extensions = ShellExtensions::new_fake(Arc::downgrade(&ctx));
+        let check = GnomeExtensionCheck
+            .check(&LinuxContext::new(ctx, shell_extensions.into()))
+            .await;
+        assert!(check.is_err(), "an unknown session type should error. Got: {check:?}");
+    }
+
+    #[tokio::test]
+    async fn test_ibus_env_check_gtk_im_module_wrong_on_gnome() {
+        let ctx = Context::builder()
+            .with_env(Env::from_slice(&[
+                ("XDG_CURRENT_DESKTOP", "ubuntu:GNOME"),
+                ("GTK_IM_MODULE", "xim"),
+                ("QT_IM_MODULE", "ibus"),
+                ("XMODIFIERS", "@im=ibus"),
+            ]))
+            .build_fake();
+        let err = IBusEnvCheck.check(&ctx.into()).await.unwrap_err();
+        #[allow(clippy::match_wildcard_for_single_variants)]
+        match err {
+            DoctorError::Error { info, .. } => {
+                let info = info.join("\n");
+                assert!(info.contains("GTK_IM_MODULE"), "{info}");
+                assert!(!info.contains("QT_IM_MODULE") && !info.contains("XMODIFIERS"), "{info}");
+            },
+            _ => panic!("GTK_IM_MODULE=xim on GNOME should error"),
+        }
     }
 
     mod e2e {

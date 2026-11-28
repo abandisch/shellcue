@@ -32,6 +32,10 @@ function debug(...messages) {
 const RESOURCES_PREFIX =
   "resource:///org/gnome/shell/extensions/shellcue-gnome-integration";
 
+const INITIAL_BACKOFF_MS = 1000;
+const MAX_BACKOFF_MS = 20_000;
+const STABLE_CONNECTION_MS = 5000;
+
 /**
  * @template {string[]} T
  * @param  {T} resources
@@ -50,10 +54,13 @@ function resource(...resources) {
  *
  * @private
  * @function
- * @returns {string} The path to the desktop socket.
+ * @returns {string|null} The path to the desktop socket, or null when
+ * `XDG_RUNTIME_DIR` is unset or empty.
  */
 function socket_address() {
-  return `${GLib.getenv("XDG_RUNTIME_DIR")}/shellcue/desktop.sock`;
+  const runtime_dir = GLib.getenv("XDG_RUNTIME_DIR");
+  if (!runtime_dir) return null;
+  return `${runtime_dir}/shellcue/desktop.sock`;
 }
 
 /**
@@ -69,104 +76,23 @@ function socket_encode(hook, payload) {
   const header = "\x1b@fig-json\x00\x00\x00\x00\x00\x00\x00\x00";
   const body = JSON.stringify({ hook: { [hook]: payload } });
 
-  const message = new TextEncoder().encode(header + body);
+  const encoder = new TextEncoder();
+  const header_bytes = encoder.encode(header);
+  const body_bytes = encoder.encode(body);
 
   // I'd use a Uint32Array pointing to the same buffer to do this, but the
   // length part of the header is misaligned by two bytes...
-  let length = body.length << 0;
+  let length = body_bytes.length << 0;
   for (let i = 0; i < 4; i++) {
     const byte = length & 0xff;
-    message[header.length - i - 1] = byte;
+    header_bytes[header_bytes.length - i - 1] = byte;
     length = (length - byte) / 256;
   }
 
+  const message = new Uint8Array(header_bytes.length + body_bytes.length);
+  message.set(header_bytes);
+  message.set(body_bytes, header_bytes.length);
   return message;
-}
-
-/**
- * Creates a `PromiseLike<T>` that can be cancelled by calling its `cancel`
- * method.
- *
- * ### Example
- *
- * ```js
- * const my_non_cancellable_promise = sleep(5000).then(() => 123);
- *
- * const my_cancellable_promise = (() => {
- *   let cancelled = false;
- *   return cancellable(
- *     new Promise((resolve) => sleep(3000).then(() => !cancelled && resolve(456))),
- *     () => cancelled = true,
- *   );
- * })();
- *
- * my_cancellable_promise.cancel();
- *
- * Promise.race([ my_non_cancellable_promise, my_cancellable_promise ]).then((result) => {
- *   // will always log 123, despite my_non_cancellable_promise sleeping for
- *   // longer, because my_cancellable_promise will never resolve since it was
- *   // cancelled.
- *   console.log(result);
- * });
- * ```
- *
- * @private
- * @function
- * @template T
- * @param {PromiseLike<T>} promise A promise that is guaranteed by the caller to
- * stop execution when `cancel` is called.
- * @param {() => void} cancel A function that will be called when the returned
- * objects `cancel` method is called.
- * @returns {PromiseLike<T> & { promise: PromiseLike<T>, cancel: () => void }}
- * A `PromiseLike<T>` that can be cancelled.
- */
-function cancellable(promise, cancel) {
-  return Object.freeze(
-    Object.assign(Object.create(null), {
-      promise,
-      cancel,
-
-      then(onresolve, onreject) {
-        return cancellable(promise.then(onresolve, onreject), cancel);
-      },
-
-      catch(onreject) {
-        return cancellable(promise.catch(onreject), cancel);
-      },
-    }),
-  );
-}
-
-/**
- * Returns one or more numbers as strings, with their ordinal suffixes.
- *
- * ### Example
- *
- * ```js
- * console.log(ordinal(1, 2, 3, 4, 5)); // logs "[ '1st', '2nd', '3rd', '4th', '5th' ]"
- * ```
- *
- * @private
- * @function
- * @template {number|number[]} N
- * @param {N} numbers The number(s) to format.
- * @returns {N extends [number, number, ...number[]] ? string[] : string} The formatted number(s).
- */
-function ordinal(...numbers) {
-  if (numbers.length === 1) {
-    const number = numbers[0];
-
-    const suffixes = {
-      1: "st",
-      2: "nd", // spellchecker:disable-line
-      3: "rd",
-    };
-
-    if (number % 100 < 20) return `${number}${suffixes[number % 100] ?? "th"}`;
-    else return `${number}${suffixes[number % 10] ?? "th"}`;
-  } else {
-    return numbers.map(ordinal);
-  }
 }
 
 /**
@@ -196,29 +122,21 @@ export default class QCliExtension extends Extension {
   #connected_binding = null;
 
   /**
-   * Whether or not the extension is currently connecting to the desktop
-   * socket and to mutter.
-   *
-   * @private @property @type {boolean}
-   */
-  #connecting = false;
-
-  /**
    * A map of GObject to connection id's. This is used by the extension to keep track
-   * of which relevant objects (global display, extension settings, etc.) we connect to,
-   * and disconnect when disconnecting from the desktop socket and mutter.
+   * of which relevant objects (global display, windows, the cursor tracker) we connect to,
+   * and disconnect when the connection to the desktop socket is dropped.
    *
    * @private @property @type {Map<import("../types/.gobject").Object, Set<number>>}
    */
   #connections = new Map();
 
   /**
-   * Whether or not the extension is currently disconnecting from the desktop socket
-   * and mutter.
+   * True between `enable()` and `disable()`; nothing may start, and no late
+   * callback may act, once it is false.
    *
    * @private @property @type {boolean}
    */
-  #disconnecting = false;
+  #enabled = false;
 
   /**
    * The widget representing the ShellCue icon in the panel.
@@ -239,14 +157,26 @@ export default class QCliExtension extends Extension {
   #settings = null;
 
   /**
+   * The connection to the desktop socket; held for as long as `#socket` is
+   * used, since a GIOStream closes itself when it is finalised.
+   *
+   * @private @property @type {import("../types/.gio").SocketConnection|null}
+   */
+  #connection = null;
+
+  /**
+   * Monotonic time, in microseconds, at which the current connection was made.
+   *
+   * @private @property @type {number}
+   */
+  #connected_since = 0;
+
+  /**
    * The desktop socket.
    *
    * @private @property @type {import("../types/.gio").Socket|null}
    */
   #socket = null;
-
-  /** @private @property @type {Queue} */
-  #queue = new Queue();
 
   /**
    * The window currently in focus.
@@ -255,26 +185,38 @@ export default class QCliExtension extends Extension {
   #window = null;
 
   /**
-   * The GLib Source containing a callback that resolves a promise. Used
-   * to implement sleeping for some set time.
+   * The cancellable of the connection attempt in flight, else null.
    *
-   * TODO: Why is this used instead of setTimeout/clearTimeout, which
-   * are supported since v41: https://gjs.guide/guides/gjs/intro.html#web-apis
-   *
-   * @private @property @type {import("../types/.glib").Source|null} */
-  #sleep_source = null;
+   * @private @property @type {import("../types/.gio").Cancellable|null}
+   */
+  #connect_cancellable = null;
 
   /**
-   * The GLib Source containing a callback that attempts to connect to the
-   * desktop socket. Tracking this ensures we can destroy it when the
-   * extension is disabled.
+   * The GLib source id of the scheduled retry, 0 when none.
    *
-   * @private @property @type {import("../types/.glib").Source|null} */
-  #retry_source = null;
+   * @private @property @type {number}
+   */
+  #retry_source_id = 0;
 
   /**
-   * Enables the extension, starting to connect to the Desktop socket and mutter
-   * quietly in the background.
+   * The delay of the last scheduled retry, in milliseconds; reset to
+   * `INITIAL_BACKOFF_MS`, which is multiplied before it is first used.
+   *
+   * @private @property @type {number}
+   */
+  #backoff_ms = INITIAL_BACKOFF_MS;
+
+  /**
+   * The number of connection attempts in the current connecting run.
+   *
+   * @private @property @type {number}
+   */
+  #attempts = 0;
+
+  /**
+   * Enables the extension, starting to connect to the desktop socket quietly
+   * in the background. The mutter signals are connected once the connection
+   * is made.
    *
    * @public @method @returns {void}
    */
@@ -334,19 +276,23 @@ export default class QCliExtension extends Extension {
     //   Main.panel.addToStatusArea("ShellCue", this.#panel_icon, 0, "right");
     // }
 
-    this.#connect();
+    this.#enabled = true;
+    this.#start_connecting();
   }
 
   /**
-   * Disables the extension. Note that this waits for the extension to finish
-   * becoming enabled if it is in the process of doing so. This prevents the
-   * extension from crashing if the user spams the extension enable/disable
-   * switch.
+   * Disables the extension. Once this returns, no GLib source, signal
+   * connection or held socket of this extension remains; a connect still
+   * pending can no longer act, and closes anything it is handed.
    *
    * @public @method @returns {void}
    */
   disable() {
     debug("Disabling the extension");
+
+    this.#enabled = false;
+    this.#stop_connecting();
+    this.#drop_connection();
 
     // Unregister the resource files.
     Gio.resources_unregister(this.#resources);
@@ -363,65 +309,166 @@ export default class QCliExtension extends Extension {
       this.#panel_icon.destroy();
       this.#panel_icon = null;
     }
+  }
 
-    this.#disconnect();
+  /**
+   * Starts a connecting run from `enable()`, unless the extension is
+   * disabled, connected, already attempting to connect or waiting to retry.
+   *
+   * @returns {void}
+   */
+  #start_connecting() {
+    if (
+      !this.#enabled ||
+      this.#socket !== null ||
+      this.#connect_cancellable !== null ||
+      this.#retry_source_id !== 0
+    )
+      return;
 
-    if (this.#sleep_source !== null && !this.#sleep_source.is_destroyed()) {
-      this.#sleep_source.destroy();
-      this.#sleep_source = null;
+    if (socket_address() === null) {
+      log_msg(
+        "The runtime folder (XDG_RUNTIME_DIR) is unknown; not connecting to the ShellCue app.",
+      );
+      return;
     }
-    if (this.#retry_source !== null && !this.#retry_source.is_destroyed()) {
-      this.#retry_source.destroy();
-      this.#retry_source = null;
+
+    this.#attempts = 0;
+    this.#backoff_ms = INITIAL_BACKOFF_MS;
+    this.#attempt();
+  }
+
+  /**
+   * Makes one connection attempt to the desktop socket. A callback that
+   * arrives after the attempt was cancelled or superseded, or after the
+   * extension was disabled, does nothing but close what it was handed.
+   *
+   * @returns {void}
+   */
+  #attempt() {
+    const socket_path = socket_address();
+    const client = Gio.SocketClient.new();
+    const cancellable = Gio.Cancellable.new();
+    this.#attempts++;
+
+    debug(`Connecting to "${socket_path}" (attempt ${this.#attempts})`);
+
+    try {
+      const address = Gio.UnixSocketAddress.new(socket_path);
+      this.#connect_cancellable = cancellable;
+      client.connect_async(address, cancellable, (_source, result) => {
+        const current =
+          this.#connect_cancellable === cancellable && this.#enabled;
+
+        let connection;
+        try {
+          connection = client.connect_finish(result);
+        } catch (error) {
+          if (!current) return;
+
+          this.#connect_cancellable = null;
+          if (this.#attempts === 1)
+            log_msg(
+              `Could not reach the ShellCue app; will keep trying quietly. (${error})`,
+            );
+          else debug(`Attempt ${this.#attempts} failed: ${error}`);
+          this.#schedule_retry();
+          return;
+        }
+
+        if (!current) {
+          try {
+            connection.close(null);
+          } catch (error) {
+            debug(`Closing a stale connection failed: ${error}`);
+          }
+          return;
+        }
+
+        this.#connect_cancellable = null;
+        this.#connection = connection;
+        this.#connected_since = GLib.get_monotonic_time();
+        this.#socket = connection.get_socket();
+        // Blocking sends would stall the compositor on a peer that never reads.
+        this.#socket.set_blocking(false);
+        this.#connected = true;
+        log_msg("Connected to the ShellCue app.");
+
+        this.#connect_to_mutter();
+        this.#send_window_data(null);
+      });
+    } catch (error) {
+      // Not retried: the same call would throw again.
+      this.#connect_cancellable = null;
+      log_msg(`Could not start connecting to the ShellCue app: ${error}`);
     }
   }
 
   /**
-   * Returns a promise that will resolve after roughly the specified amount of
-   * milliseconds.
+   * Schedules the next connection attempt, backing off by 10% each time up
+   * to `MAX_BACKOFF_MS`; the first retry after a reset waits 1.1 times
+   * `INITIAL_BACKOFF_MS`.
    *
-   * @private
-   * @function
-   * @param {number} millis
-   * @returns {PromiseLike<void>}
+   * @returns {void}
    */
-  #sleep(millis) {
-    let cancelled = false;
-    return cancellable(
-      new Promise<void>((resolve) => {
-        const source = GLib.timeout_source_new(millis);
-        source.set_callback(() => {
-          if (!cancelled) resolve();
-          return false;
-        });
-        source.attach(null);
-        this.#sleep_source = source;
-      }),
+  #schedule_retry() {
+    if (!this.#enabled || this.#retry_source_id !== 0) return;
+
+    this.#backoff_ms = Math.min(this.#backoff_ms * 1.1, MAX_BACKOFF_MS);
+    this.#retry_source_id = GLib.timeout_add(
+      GLib.PRIORITY_LOW,
+      Math.round(this.#backoff_ms),
       () => {
-        cancelled = true;
+        this.#retry_source_id = 0;
+        if (this.#enabled) this.#attempt();
+        return GLib.SOURCE_REMOVE;
       },
     );
   }
 
-  #connect() {
-    if (this.#connecting) {
-      debug("#connect: Ignoring connect call since already connecting.");
-      return;
+  /**
+   * Cancels the connection attempt in flight and the scheduled retry, if any.
+   *
+   * @returns {void}
+   */
+  #stop_connecting() {
+    if (this.#connect_cancellable !== null) {
+      const cancellable = this.#connect_cancellable;
+      // Cleared first: the callback must see itself as superseded.
+      this.#connect_cancellable = null;
+      cancellable.cancel();
     }
 
-    this.#connecting = true;
-    this.#disconnecting = false;
+    if (this.#retry_source_id !== 0) {
+      GLib.Source.remove(this.#retry_source_id);
+      this.#retry_source_id = 0;
+    }
+  }
 
-    this.#queue.push(
-      new Queue.Item(() =>
-        this.#sleep(100)
-          .then(() => this.#connect_to_socket())
-          .then(() => this.#connect_to_mutter())
-          .finally(() => {
-            this.#connecting = false;
-          }),
-      ),
-    );
+  /**
+   * Removes every signal connection and closes the connection to the desktop
+   * socket. Safe to call when nothing is connected.
+   *
+   * @returns {void}
+   */
+  #drop_connection() {
+    for (const [object, connections] of this.#connections) {
+      for (const connection of connections) object.disconnect(connection);
+      connections.clear();
+    }
+    this.#connections.clear();
+    this.#window = null;
+
+    if (this.#connection !== null) {
+      try {
+        this.#connection.close(null);
+      } catch (error) {
+        debug(`Closing the connection failed: ${error}`);
+      }
+    }
+    this.#connection = null;
+    this.#socket = null;
+    this.#connected = false;
   }
 
   /**
@@ -433,7 +480,7 @@ export default class QCliExtension extends Extension {
    * @returns {void}
    */
   #connect_to_mutter() {
-    log_msg("Connecting to mutter...");
+    debug("Connecting to mutter");
 
     this.#window = global.display.focus_window;
 
@@ -446,7 +493,7 @@ export default class QCliExtension extends Extension {
     // property changes.
     this.#connect_to_object(global.display, "notify::focus-window", () => {
       debug(
-        `mutter: notify::focus-window on ${global.display.focus_window.get_wm_class()}`,
+        `mutter: notify::focus-window on ${global.display.focus_window?.get_wm_class() ?? "nothing"}`,
       );
       if (this.#window !== global.display.focus_window) {
         this.#disconnect_from_object(this.#window, null);
@@ -492,6 +539,8 @@ export default class QCliExtension extends Extension {
           }
 
           this.#send_window_data(null);
+          // A failed send drops every connection; adding more would leak them.
+          if (this.#socket === null) return;
 
           const cursor = Meta.CursorTracker.get_for_display(global.display);
           const cursor_connection = this.#connect_to_object(
@@ -511,10 +560,6 @@ export default class QCliExtension extends Extension {
         }
       },
     );
-
-    log_msg("Connected to mutter!");
-
-    return Promise.resolve();
   }
 
   /**
@@ -533,101 +578,6 @@ export default class QCliExtension extends Extension {
     connections.add(connection);
     this.#connections.set(object, connections);
     return connection;
-  }
-
-  /**
-   * Repeatedly tries to connect to the Desktop socket, ignoring errors, until it
-   * either successfully connects or is cancelled.
-   *
-   * @returns {Promise<void> & { cancel: () => void, promise: Promise<void> }}
-   */
-  #connect_to_socket() {
-    const client = Gio.SocketClient.new();
-    const socket_path = socket_address();
-    const address = Gio.UnixSocketAddress.new(socket_path);
-    const cancel = Gio.Cancellable.new();
-
-    let backoff_ms = 1000;
-    let attempts = 0;
-    let finished = false;
-
-    return cancellable(
-      // TODO: this shouldn't take any
-      new Promise<void>((resolve) => {
-        const attempt = () => {
-          if (finished) return;
-
-          attempts++;
-
-          debug(
-            `Connecting to socket at: "${socket_path}" (${ordinal(attempts)} try)...`,
-          );
-
-          client.connect_async(address, cancel, (socket_client, result) => {
-            if (finished) return;
-
-            try {
-              this.#socket = socket_client.connect_finish(result).get_socket();
-
-              this.#connected = true;
-              // this.notify("connected");
-
-              resolve();
-
-              log_msg("Connected to socket!");
-            } catch (error) {
-              // 32 times until it maxes out at 20 seconds.
-              backoff_ms = Math.min(backoff_ms * 1.1, 20_000);
-
-              log_msg(
-                `Encountered an error while connecting to socket at "${socket_path}" (${ordinal(attempts)} try).` +
-                  `Retrying after ${Math.round(backoff_ms / 1000)} seconds. Reason: ${error}`,
-              );
-
-              const source = GLib.timeout_source_new(backoff_ms);
-              source.set_priority(GLib.PRIORITY_LOW);
-              source.set_callback(() => {
-                attempt();
-                return false;
-              });
-              source.attach(GLib.MainContext.default());
-              this.#retry_source = source;
-            }
-          });
-        };
-
-        attempt();
-      }),
-      () => {
-        if (finished) return;
-        log_msg("Cancelling connection to socket...");
-        finished = true;
-        cancel.cancel();
-      },
-    );
-  }
-
-  #disconnect() {
-    if (this.#disconnecting) {
-      debug(
-        "#disconnect: Ignoring disconnect call since already disconnecting",
-      );
-      return;
-    }
-
-    this.#disconnecting = true;
-    this.#connecting = false;
-
-    this.#queue.push(
-      new Queue.Item(() =>
-        this.#sleep(100)
-          .then(() => this.#disconnect_from_objects())
-          .then(() => this.#disconnect_from_socket())
-          .finally(() => {
-            this.#disconnecting = false;
-          }),
-      ),
-    );
   }
 
   /**
@@ -657,91 +607,96 @@ export default class QCliExtension extends Extension {
     }
   }
 
-  #disconnect_from_objects() {
-    try {
-      log_msg("Disconnecting from objects...");
-
-      this.#window = null;
-
-      for (const [object, connections] of this.#connections) {
-        for (const connection of connections) object.disconnect(connection);
-        connections.clear();
-      }
-      this.#connections.clear();
-
-      log_msg("Disconnected from objects.");
-
-      return Promise.resolve();
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-
-  #disconnect_from_socket() {
-    try {
-      if (this.#socket === null) return Promise.resolve();
-
-      log_msg("Disconnecting from socket...");
-
-      this.#socket.close();
-      this.#socket = null;
-
-      this.#connected = false;
-      // this.notify("connected");
-
-      log_msg("Disconnected from socket.");
-
-      return Promise.resolve();
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-
   /**
+   * Sends the focused window's data to the desktop socket, or asks the app to
+   * hide the popup when no window is focused. A send error or a partial
+   * write is handled by `#connection_lost`.
+   *
    * @param {boolean} overlay_pressed
    */
   #send_window_data(overlay_pressed) {
-    // Mutter populates wm class/instance with the app_id on Wayland.
-    const wm_class = this.#window.get_wm_class();
-    // https://mutter.gnome.org/meta/method.Window.get_frame_rect.html
-    const inner_rect = this.#window.get_frame_rect();
-    // https://mutter.gnome.org/meta/method.Window.get_buffer_rect.html
-    const outer_rect = this.#window.get_buffer_rect();
-    const scale = global.display.get_monitor_scale(this.#window.get_monitor());
+    if (this.#socket === null) return;
 
-    debug(
-      `Sending data for rect inner ${inner_rect.x},${inner_rect.y},${inner_rect.width},${inner_rect.height}` +
-        ` outer ${outer_rect.x},${outer_rect.y},${outer_rect.width},${outer_rect.height} with scale ${scale}`,
-    );
-
-    try {
-      this.#socket.send(
-        socket_encode("focusedWindowData", {
-          source: "gse",
-          id: wm_class,
-          inner: {
-            x: inner_rect.x,
-            y: inner_rect.y,
-            width: inner_rect.width,
-            height: inner_rect.height,
-          },
-          outer: {
-            x: outer_rect.x,
-            y: outer_rect.y,
-            width: outer_rect.width,
-            height: outer_rect.height,
-          },
-          hide: overlay_pressed,
-          scale,
-        }),
-        null,
+    let payload;
+    if (this.#window === null) {
+      const zeros = { x: 0, y: 0, width: 0, height: 0 };
+      payload = {
+        source: "gse",
+        id: "",
+        inner: zeros,
+        outer: zeros,
+        hide: true,
+        scale: 1,
+      };
+    } else {
+      // Mutter populates wm class/instance with the app_id on Wayland.
+      const wm_class = this.#window.get_wm_class();
+      // https://mutter.gnome.org/meta/method.Window.get_frame_rect.html
+      const inner_rect = this.#window.get_frame_rect();
+      // https://mutter.gnome.org/meta/method.Window.get_buffer_rect.html
+      const outer_rect = this.#window.get_buffer_rect();
+      const scale = global.display.get_monitor_scale(
+        this.#window.get_monitor(),
       );
-    } catch {
-      log_msg("Failed to send a message to the socket, disconnecting.");
 
-      this.#disconnect();
-      this.#connect();
+      debug(
+        `Sending data for rect inner ${inner_rect.x},${inner_rect.y},${inner_rect.width},${inner_rect.height}` +
+          ` outer ${outer_rect.x},${outer_rect.y},${outer_rect.width},${outer_rect.height} with scale ${scale}`,
+      );
+
+      payload = {
+        source: "gse",
+        id: wm_class,
+        inner: {
+          x: inner_rect.x,
+          y: inner_rect.y,
+          width: inner_rect.width,
+          height: inner_rect.height,
+        },
+        outer: {
+          x: outer_rect.x,
+          y: outer_rect.y,
+          width: outer_rect.width,
+          height: outer_rect.height,
+        },
+        hide: overlay_pressed,
+        scale,
+      };
     }
+
+    const message = socket_encode("focusedWindowData", payload);
+    let sent;
+    try {
+      sent = this.#socket.send(message, null);
+    } catch (error) {
+      this.#connection_lost(error);
+      return;
+    }
+    // A partial write would break the framing of every later message.
+    if (sent !== message.length)
+      this.#connection_lost(`wrote ${sent} of ${message.length} bytes`);
+  }
+
+  /**
+   * Drops a connection that failed and schedules a retry; the backoff is
+   * reset only if the connection lasted at least `STABLE_CONNECTION_MS`.
+   *
+   * @param {any} reason
+   * @returns {void}
+   */
+  #connection_lost(reason) {
+    log_msg("Lost the connection to the ShellCue app.");
+    debug(`Send failed: ${reason}`);
+
+    const stable =
+      GLib.get_monotonic_time() - this.#connected_since >=
+      STABLE_CONNECTION_MS * 1000;
+    this.#drop_connection();
+    if (stable) {
+      this.#attempts = 0;
+      this.#backoff_ms = INITIAL_BACKOFF_MS;
+    }
+    this.#schedule_retry();
   }
 }
 
@@ -823,126 +778,6 @@ class PanelIcon extends PanelMenu.Button {
       Gio.Subprocess.new(["shellcue"], Gio.SubprocessFlags.NONE);
 
     return Clutter.EVENT_PROPAGATE;
-  }
-}
-
-/**
- * A utility class used to manage the execution of promises.
- *
- * In the context of this extension, it is used to ensure that the extension
- * never enters an invalid state by only allowing execution of one promise at
- * a time, but skipping cancellable promises if there are more promises that
- * need to be started.
- *
- * All of these promises are wrapped using the `Queue.Item` class.
- *
- * @private
- * @class
- */
-class Queue {
-  /**
-   * A unit of work that can be started by a `Queue`.
-   *
-   * @public
-   * @static
-   * @property
-   */
-  static Item = class Item {
-    _: unknown;
-
-    /**
-     * Creates a new `Queue.Item`.
-     *
-     * If `entry` returns a cancellable promise-like object, then the queue will
-     * cancel this item if there are other items waiting to be started.
-     *
-     * @public
-     * @constructor
-     * @template {any[]} A
-     * @param {(...A) => PromiseLike<any>} entry A function to be called when
-     * the item is started.
-     * @param  {...A} args One or more values to be passed to `entry` when the
-     * item is started.
-     */
-    constructor(entry, ...args) {
-      this._ = () => entry(...args);
-    }
-  };
-
-  /** @private @property @type {Queue.Item[]} */
-  #items;
-  /** @private @property @type {() => void} */
-  #on_item_push;
-  /** @private @property @type {boolean} */
-  #running;
-
-  /**
-   * Creates a new empty queue without starting it.
-   *
-   * @public
-   * @constructor
-   */
-  constructor() {
-    this.#items = [];
-    this.#on_item_push = () => {};
-    this.#running = false;
-  }
-
-  /**
-   * Pushes an `item` to the queue.
-   *
-   * If the queue **is not already running**, it will quietly start the queue
-   * in the background and begin running its items.
-   *
-   * @public
-   * @method
-   * @param {Queue.Item} new_item The item to push to the queue.
-   * @returns {this} for daisy chaining.
-   * @throws {TypeError} if `item` is not not an instance of `Queue.Item`.
-   */
-  push(new_item) {
-    if (!(new_item instanceof Queue.Item))
-      throw TypeError("Expected a Queue.Item");
-
-    this.#items.push(new_item);
-
-    if (this.#running) {
-      this.#on_item_push();
-      return this;
-    }
-
-    (async () => {
-      this.#running = true;
-
-      let item = this.#items.shift();
-      while (item) {
-        try {
-          const value = item._();
-
-          if ("cancel" in value && "promise" in value) {
-            const { promise, cancel } = value;
-
-            if (this.#items.length === 0) {
-              await promise;
-
-              this.#on_item_push = () => {};
-            } else {
-              await cancel();
-            }
-          } else if (value instanceof Promise) {
-            await value;
-          }
-        } catch (error) {
-          log_msg(`Uncaught error in Queue: ${error}`);
-        }
-
-        item = this.#items.shift();
-      }
-
-      this.#running = false;
-    })();
-
-    return this;
   }
 }
 
