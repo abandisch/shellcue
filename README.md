@@ -146,9 +146,10 @@ Several projects live here:
 
 Other folder to be aware of
 
-- [`build-scripts/`](build-scripts/) - Contains all python scripts to build
-  and test the project on Linux and to test it on macOS; the macOS app bundle
-  is assembled in the macOS build VM, driven by `scripts/vm/mac-host.sh`
+- [`build-scripts/`](build-scripts/) - Inherited python build scripts, not used
+  by the VM build steps; the macOS app bundle is assembled in the macOS build
+  VM, driven by `scripts/vm/mac-host.sh`, and the Linux package in the Ubuntu
+  desktop VM, driven by `scripts/vm/linux-host.sh`
 - [`crates/`](crates/) - Contains all internal rust crates
 - [`packages/`](packages/) - Contains all internal npm packages
 - [`proto/`](proto/) -
