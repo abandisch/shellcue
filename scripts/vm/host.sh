@@ -24,6 +24,7 @@ LOG_DIR="$OUT_PARENT/vm-logs"
 OUT_DIR="$OUT_PARENT/vm-out"
 
 VM_INFO=""
+QUIET=0
 
 usage() {
     cat <<EOF
@@ -31,6 +32,11 @@ Usage: host.sh <command>
 
 Drives the Multipass VM "$VM_NAME" (Ubuntu $VM_IMAGE). Logs go to $LOG_DIR,
 fetched lockfiles and icons to $OUT_DIR (both outside the repo).
+step and clone print only the lines starting ==> or -->, the mounts and pushed lines, and this script's own
+errors and warnings (plus the last log lines if the step fails); the log has everything. Long steps therefore
+sit quiet here while they work. step info, step lock and step icons print everything, as does every other
+command. To see every line of a step here too:
+  SHELLCUE_VM_VERBOSE=1 scripts/vm/host.sh step rust-test
 
 Commands:
   create                  launch the VM ($VM_CPUS CPUs, $VM_MEMORY memory, $VM_DISK disk; no mounts, no cloud-init)
@@ -184,6 +190,15 @@ utc_stamp() {
     date -u +%Y%m%dT%H%M%SZ
 }
 
+# The log always gets every line; with QUIET=1 the terminal gets only the step, part and verdict lines and this script's own messages.
+terminal_filter() {
+    if [ "$QUIET" -eq 1 ]; then
+        LC_ALL=C grep --line-buffered -E '^(==> |--> |pushed |mounts: |!!!|host\.sh: )' || true
+    else
+        cat
+    fi
+}
+
 run_logged() {
     local label="$1" ts log rc tr_rc tee_rc statuses cmdline
     shift
@@ -196,7 +211,7 @@ run_logged() {
     cmdline="$(printf '%q ' "$@")"
     printf 'command: %s\n' "${cmdline% }" | tee -a "$log"
     set +e
-    ( set -e; "$@" ) 3>>"$log" 2>&1 | sanitize | tee -a "$log"
+    ( set -e; "$@" ) 3>>"$log" 2>&1 | sanitize | tee -a "$log" | terminal_filter
     statuses=("${PIPESTATUS[@]}")
     set -e
     rc="${statuses[0]}"
@@ -207,6 +222,10 @@ run_logged() {
         if [ "$rc" -eq 0 ]; then
             if [ "$tr_rc" -ne 0 ]; then rc="$tr_rc"; else rc="$tee_rc"; fi
         fi
+    fi
+    if [ "$QUIET" -eq 1 ] && [ "$rc" -ne 0 ]; then
+        printf 'last lines of the log (when a step has several parts, an earlier part'"'"'s error may be higher up in the log):\n'
+        tail -n 20 "$log" | sed 's/^/  | /'
     fi
     printf 'log: %s\nexit status: %s\n' "$log" "$rc" | tee -a "$log"
     return "$rc"
@@ -269,6 +288,11 @@ cmd_step() {
         *) die "unknown step '$name'; valid steps: $GUEST_STEPS" ;;
     esac
     require_multipass
+    # info, lock and icons exist for their detail lines, so they are never shortened.
+    case "$name" in
+        info|lock|icons) ;;
+        *) if [ "${SHELLCUE_VM_VERBOSE:-0}" != "1" ]; then QUIET=1; fi ;;
+    esac
     run_logged "$name" step_body "$name" "$@"
 }
 

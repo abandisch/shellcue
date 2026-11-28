@@ -5,14 +5,9 @@ use std::process::ExitCode;
 
 use anstream::eprintln;
 use clap::Parser;
-use clap::error::{
-    ContextKind,
-    ErrorKind,
-};
 use crossterm::style::Stylize;
 use eyre::Result;
 use fig_log::get_log_level_max;
-use fig_util::PRODUCT_NAME;
 use tracing::metadata::LevelFilter;
 
 #[global_allocator]
@@ -32,19 +27,6 @@ fn main() -> Result<ExitCode> {
         Ok(cli) => cli,
         Err(err) => {
             let _ = err.print();
-
-            let unknown_arg = matches!(err.kind(), ErrorKind::UnknownArgument | ErrorKind::InvalidSubcommand)
-                && !err.context().any(|(context_kind, _)| {
-                    matches!(
-                        context_kind,
-                        ContextKind::SuggestedSubcommand | ContextKind::SuggestedArg
-                    )
-                });
-
-            if unknown_arg {
-                eprintln!("\nThis command may be valid in newer versions of the {PRODUCT_NAME} CLI.");
-            }
-
             return Ok(ExitCode::from(err.exit_code().try_into().unwrap_or(2)));
         },
     };

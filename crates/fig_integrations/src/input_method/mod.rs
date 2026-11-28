@@ -169,12 +169,8 @@ fn lookup_can_be_retried(error: &InputMethodError) -> bool {
 
 fn timeout_message(last: Option<&str>) -> String {
     match last {
-        Some(last) => format!(
-            "Timed out waiting for the input method to be enabled ({last}). Run `{CLI_BINARY_NAME} integrations install input-method` to try again."
-        ),
-        None => format!(
-            "Timed out waiting for the input method to be enabled. Run `{CLI_BINARY_NAME} integrations install input-method` to try again."
-        ),
+        Some(last) => format!("Timed out waiting for the input method to be enabled ({last})."),
+        None => "Timed out waiting for the input method to be enabled.".to_owned(),
     }
 }
 
@@ -963,12 +959,11 @@ mod tests {
     fn timeout_message_names_the_last_reason() {
         assert_eq!(
             timeout_message(None),
-            format!(
-                "Timed out waiting for the input method to be enabled. Run `{CLI_BINARY_NAME} integrations install input-method` to try again."
-            )
+            "Timed out waiting for the input method to be enabled."
         );
-        let message = timeout_message(Some("Input source is not enabled"));
-        assert!(message.contains("Input source is not enabled"));
-        assert!(message.contains(&format!("{CLI_BINARY_NAME} integrations install input-method")));
+        assert_eq!(
+            timeout_message(Some("Input source is not enabled")),
+            "Timed out waiting for the input method to be enabled (Input source is not enabled)."
+        );
     }
 }

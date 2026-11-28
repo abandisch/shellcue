@@ -339,6 +339,7 @@ h2 {
   border-style: dashed;
 }
 
+.step.quiet[data-mark="busy"] .mark,
 .step.quiet[data-mark="done"] .mark {
   border-style: solid;
 }

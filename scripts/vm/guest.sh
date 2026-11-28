@@ -669,6 +669,7 @@ step_rust_check() {
     require_no_args "$@"
     load_env
     enter_src
+    printf -- '--> cargo check is running (several minutes on a first run); the short terminal view shows nothing more until it ends\n'
     cargo check --locked --workspace --all-targets --exclude fig_desktop-fuzz
 }
 
@@ -682,6 +683,7 @@ step_rust_test() {
         [[ -z "${!v+x}" ]] || set_vars+=("$v")
     done
     printf '    SSH session variables set (unset for cargo test): %s\n' "${set_vars[*]:-none}"
+    printf -- '--> cargo test is running (limit 90 minutes); the short terminal view shows nothing more until it ends\n'
     timeout --kill-after=60 5400 env -u SSH_CLIENT -u SSH_CONNECTION -u SSH_TTY \
         cargo test --locked --no-fail-fast --workspace --lib --bins --test '*' --exclude fig_desktop-fuzz || rc=$?
     if [[ $rc -eq 124 || $rc -eq 137 ]]; then
