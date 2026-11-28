@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs INSIDE the throwaway Ubuntu 24.04 build VM as user `ubuntu`; host.sh copies it in.
+# Runs INSIDE an Ubuntu 24.04 VM: the Multipass build VM (host.sh copies it in) or the UTM desktop VM (linux-host.sh).
 
 set -euo pipefail
 
@@ -15,6 +15,12 @@ SPECS_REPO_URL="https://github.com/abandisch/shellcue-specs.git"
 SPECS_SRC="$HOME/shellcue-specs"
 # Outside the checkout so generated icons never dirty it; host.sh pull-icons reads from here.
 ICONS_OUT="$HOME/shellcue-icons"
+LOCK_DIR="$HOME/.shellcue-guest.lock"
+STAMPS="$SRC/build/stamps"
+OUT="$SRC/build/linux"
+# Written by tools when sudo needs a password; the owner runs it in the VM's own Terminal.
+APT_SCRIPT="$HOME/shellcue-apt.sh"
+PROGRAMS="fig_desktop:shellcue-desktop q_cli:shellcue figterm:shellcue-term"
 
 # Change together with scripts/vm/mac-guest.sh, .mise.toml (node, pnpm, protoc), package.json (packageManager) and rust-toolchain.toml (Rust); enter_src enforces it.
 NODE_VERSION="26.13.0"
@@ -34,14 +40,16 @@ APT_PACKAGES=(
     librsvg2-bin icnsutils
 )
 
-STEPS="tools clone lock fetch web specs icons rust-check rust-test info"
+STEPS="tools clone lock fetch web specs icons rust-check rust-test build bundle info"
 
 usage() {
     cat <<'EOF'
 Usage: guest.sh <step> [args]
 
 Runs inside the ShellCue build VM. Steps:
-  tools                    apt packages + pinned, sha256-verified node, pnpm, protoc, rustup/rust; writes ~/tools/env.sh
+  tools                    apt packages + pinned, sha256-verified node, pnpm, protoc, rustup/rust; writes ~/tools/env.sh.
+                           Where sudo needs a password it installs nothing itself: if packages are missing it writes
+                           ~/shellcue-apt.sh and stops, for you to run   sudo bash ~/shellcue-apt.sh   in the VM's own Terminal
   clone <branch> <sha>     clone/fetch the public repo into ~/shellcue and check out <sha> detached
   lock                     refresh Cargo.lock (cargo update --workspace) and pnpm-lock.yaml (lockfile-only); print what changed
   fetch                    cargo fetch --locked and pnpm install --frozen-lockfile --ignore-scripts
@@ -53,6 +61,9 @@ Runs inside the ShellCue build VM. Steps:
   rust-check               cargo check --locked --workspace --all-targets --exclude fig_desktop-fuzz
   rust-test                cargo test --locked --no-fail-fast --workspace --lib --bins --test '*' --exclude fig_desktop-fuzz,
                            with SSH_CLIENT, SSH_CONNECTION and SSH_TTY unset
+  build                    cargo build --locked --release of the three programs (desktop app, CLI, terminal wrapper)
+  bundle                   stage them with the popup page and the specs and make the Debian package with dpkg-deb, in
+                           ~/shellcue/build/linux; web, specs and build must have succeeded at the checked-out commit
   info                     OS, arch, tool versions, disk free, checked-out commit, git status
 
 Each step prints "==> step: <name>" first and, as its last line, "==> ok: <name> (<N>s)" on success
@@ -67,10 +78,12 @@ die() {
 
 CURRENT_STEP=""
 STEP_START=0
+LOCK_HELD=0
 
 # Must stay the last thing printed, whatever ended the run.
 print_verdict() {
     local rc=$? secs=$((SECONDS - STEP_START))
+    if [[ $LOCK_HELD -eq 1 ]]; then rm -rf -- "$LOCK_DIR" || true; fi
     if [[ $rc -eq 0 ]]; then
         printf '==> ok: %s (%ss)\n' "$CURRENT_STEP" "$secs"
     else
@@ -87,6 +100,33 @@ begin_step() {
     printf '==> step: %s\n' "$CURRENT_STEP"
     printf '    time (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf '    guest.sh sha256: %s\n' "${self_sum%% *}"
+}
+
+# A step whose connection dropped keeps running in the VM; a second step on top of it would share its build folders.
+take_lock() {
+    local holder="" name pids left=""
+    if ! mkdir -- "$LOCK_DIR" 2>/dev/null; then
+        holder="$(cat -- "$LOCK_DIR/pid" 2>/dev/null || true)"
+        case "$holder" in
+            ''|*[!0-9]*) holder="" ;;
+        esac
+        # A lock outlives a reboot, and its number may by then belong to an unrelated process.
+        if [[ -n "$holder" ]] && kill -0 "$holder" 2>/dev/null \
+            && tr '\0' ' ' < "/proc/$holder/cmdline" 2>/dev/null | grep -qF -- "${0##*/}"; then
+            die "an earlier ${0##*/} step is still running in the VM (process $holder), probably left by a dropped connection. Wait for it to end, or stop it in a terminal inside the VM with: kill $holder"
+        fi
+        printf '    removing the lock of an earlier step that is no longer running (process %s)\n' "${holder:-unknown}"
+        rm -rf -- "$LOCK_DIR"
+        mkdir -- "$LOCK_DIR" || die "cannot create $LOCK_DIR"
+    fi
+    LOCK_HELD=1
+    printf '%s\n' "$$" > "$LOCK_DIR/pid"
+    for name in cargo rustc node pnpm; do
+        pids="$(pgrep -u "$(id -u)" -x "$name" | tr '\n' ' ' || true)"
+        [[ -z "$pids" ]] || left="$left $name: $pids"
+    done
+    [[ -z "$left" ]] \
+        || die "build processes from an earlier step are still running in the VM ($left). Wait for them to end, or stop them in the VM's own terminal with: kill <the numbers>"
 }
 
 FAILED_PARTS=()
@@ -343,6 +383,56 @@ enter_src() {
     fi
 }
 
+tree_is_clean() {
+    [[ -z "$(git status --porcelain=v1 --untracked-files=no)" ]]
+}
+
+require_clean_tree() {
+    local dirty
+    dirty="$(git status --porcelain=v1 --untracked-files=no)"
+    if [[ -n "$dirty" ]]; then
+        printf '    tracked files modified in %s:\n' "$SRC" >&2
+        printf '%s\n' "$dirty" | sed 's/^/      /' >&2
+        die "refusing to work from modified tracked files. In the VM's own terminal run: git -C ~/shellcue checkout HEAD -- .   and then run this step again"
+    fi
+}
+
+# A stamp records the commit a step last succeeded at, so bundle never mixes outputs of different commits.
+write_stamp() {
+    if ! tree_is_clean; then
+        printf '    no stamp written for %s: tracked files are modified, so bundle will not accept this run\n' "$1"
+        return 0
+    fi
+    mkdir -p -- "$STAMPS"
+    git rev-parse HEAD > "$STAMPS/$1"
+}
+
+require_stamps() {
+    local head name got missing=""
+    head="$(git rev-parse HEAD)"
+    for name in "$@"; do
+        got="$(cat -- "$STAMPS/$name" 2>/dev/null || true)"
+        printf '    stamp %s: %s\n' "$name" "${got:-never}"
+        [[ "$got" == "$head" ]] || missing="$missing $name"
+    done
+    [[ -z "$missing" ]] \
+        || die "these steps have not succeeded at the checked-out commit $head:$missing. Run the fetch step if it has not run at this commit, then each step named here in the order web specs build, then this step again"
+}
+
+# Build inputs and outputs must not be reachable from the host: a folder shared into the VM would break that.
+check_no_host_mounts() {
+    local shared gvfs
+    shared="$(awk '$3 ~ /^(9p|virtiofs|fuse\.sshfs|vboxsf|nfs|nfs4|cifs|smb3|davfs)$/ { print $2 " (" $3 ")" }' /proc/mounts)"
+    [[ -z "$shared" ]] || die "a shared or network folder is mounted in this VM: $shared. Remove the shared directory from the VM's settings and start it again"
+    # Folders opened in Files, and UTM's WebDAV share, appear only here; their mount type is always present on a desktop.
+    gvfs="/run/user/$(id -u)/gvfs"
+    if [[ -d "$gvfs" ]]; then
+        shared="$(find "$gvfs" -mindepth 1 -maxdepth 1 -print 2>/dev/null | sed -n 1,5p)"
+        [[ -z "$shared" ]] || die "a shared or network folder is open in the VM's Files app: $shared. Unmount it there (the eject button beside it), remove any shared directory from the VM's settings, and run this step again"
+    fi
+    printf '    no shared or network folders mounted\n'
+}
+
 host_triple() {
     local out triple
     out="$(rustc -vV)"
@@ -351,14 +441,39 @@ host_triple() {
     printf '%s' "$triple"
 }
 
+# Nothing here ever feeds sudo a password: where sudo would ask, the owner runs the install in the VM's own Terminal.
+install_apt_packages() {
+    local p missing=()
+    if sudo -n true 2>/dev/null; then
+        sudo apt-get update
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${APT_PACKAGES[@]}"
+        return 0
+    fi
+    for p in "${APT_PACKAGES[@]}"; do
+        [[ "$(dpkg-query -W -f='${db:Status-Status}' "$p" 2>/dev/null || true)" == "installed" ]] || missing+=("$p")
+    done
+    if [[ ${#missing[@]} -eq 0 ]]; then
+        printf '    all %s apt packages are installed (sudo needs a password here, so nothing was updated)\n' "${#APT_PACKAGES[@]}"
+        return 0
+    fi
+    printf '    apt packages not installed: %s\n' "${missing[*]}"
+    rm -f -- "$APT_SCRIPT"
+    {
+        printf '#!/bin/sh\n# Written by guest.sh tools. Run in the Terminal of the VM: sudo bash ~/shellcue-apt.sh\n'
+        printf 'set -e\napt-get -o DPkg::Lock::Timeout=300 update\nDEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends'
+        printf ' %s' "${APT_PACKAGES[@]}"
+        printf '\n'
+    } > "$APT_SCRIPT"
+    die "system packages are missing and sudo needs a password here. In the VM's own Terminal run:   sudo bash ~/shellcue-apt.sh   and then run the tools step again"
+}
+
 step_tools() {
     require_no_args "$@"
     check_os
     detect_arch
     printf '    arch: %s\n' "$ARCH"
 
-    sudo apt-get update
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${APT_PACKAGES[@]}"
+    install_apt_packages
 
     mkdir -p -- "$DL"
     export RUSTUP_HOME="$TOOLS/rustup"
@@ -584,9 +699,11 @@ step_web() {
     require_no_args "$@"
     load_env
     enter_src
+    rm -f -- "$STAMPS/web"
     run_part build pnpm run build
     run_part test:ci pnpm run test:ci
     end_parts
+    write_stamp web
 }
 
 # Nothing in the specs checkout is installed or executed (no pnpm/npm/node there); the compiler only reads it.
@@ -614,6 +731,7 @@ step_specs() {
     [[ "$lines" -eq 1 && "$pin" =~ $sha_re ]] \
         || die "$pin_file must be exactly one line holding a 40 lowercase hex commit sha"
     printf '    specs pin: %s\n' "$pin"
+    rm -f -- "$STAMPS/specs"
     fetch_specs "$pin"
 
     local out="$SRC/build/specs" license="$SPECS_SRC/LICENSE" tree
@@ -631,6 +749,7 @@ step_specs() {
     printf '    index.json sha256: %s\n' "$(sha256_of "$out/index.json")"
     tree="$(cd "$out" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum)"
     printf '    tree sha256 (sha256sum of the sorted per-file sha256sum list): %s\n' "${tree%% *}"
+    write_stamp specs
 }
 
 step_icons() {
@@ -692,6 +811,148 @@ step_rust_test() {
     [[ $rc -eq 0 ]] || exit "$rc"
 }
 
+# A program must be a plain ELF file for this machine before it is packaged.
+require_program() {
+    local f="$1" magic machine want
+    [[ -f "$f" && ! -L "$f" && -x "$f" ]] || die "$f is missing, is not a regular file, or is not executable"
+    magic="$(od -An -tx1 -N4 -- "$f" | tr -d ' \n')"
+    [[ "$magic" == "7f454c46" ]] || die "$f is not an ELF program"
+    machine="$(od -An -tx1 -j18 -N2 -- "$f" | tr -d ' \n')"
+    case "$(uname -m)" in
+        aarch64) want="b700" ;;
+        x86_64) want="3e00" ;;
+        *) die "unsupported architecture: $(uname -m)" ;;
+    esac
+    [[ "$machine" == "$want" ]] || die "$f is built for another machine type (ELF e_machine bytes $machine, expected $want)"
+}
+
+step_build() {
+    require_no_args "$@"
+    load_env
+    enter_src
+    require_clean_tree
+    check_no_host_mounts
+    rm -f -- "$STAMPS/build"
+    local triple pair pkg
+    triple="$(host_triple)"
+    # Same settings as the build script inherited from Amazon.
+    export CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_LTO=thin
+    export RUSTFLAGS="-C force-frame-pointers=yes -C link-arg=-Wl,--compress-debug-sections=zlib"
+    export SHELLCUE_BUILD_TARGET_TRIPLE="$triple"
+    SHELLCUE_BUILD_HASH="$(git rev-parse HEAD)"
+    # The commit's own time: a changing value would recompile every crate of ours on each run.
+    SHELLCUE_BUILD_DATETIME="$(TZ=UTC git log -1 --date=format-local:%Y-%m-%dT%H:%M:%SZ --format=%cd)"
+    [[ -n "$SHELLCUE_BUILD_DATETIME" ]] || die "cannot read the time of the checked-out commit"
+    export SHELLCUE_BUILD_HASH SHELLCUE_BUILD_DATETIME
+    printf '    target: %s, release profile with thin LTO\n' "$triple"
+    printf '    build hash: %s\n    build time (the time of the commit): %s\n' "$SHELLCUE_BUILD_HASH" "$SHELLCUE_BUILD_DATETIME"
+    printf -- '--> cargo build --release is running (well over ten minutes on a first run); the short terminal view shows nothing more until it ends\n'
+    cargo build --locked --release -p fig_desktop -p q_cli -p figterm
+    for pair in $PROGRAMS; do
+        pkg="${pair%%:*}"
+        require_program "target/release/$pkg"
+        printf '    %s sha256: %s\n' "target/release/$pkg" "$(sha256_of "target/release/$pkg")"
+    done
+    write_stamp build
+}
+
+workspace_version() {
+    local v version_re='^[0-9]+\.[0-9]+\.[0-9]+$'
+    v="$(sed -n '/^\[workspace\.package\]/,/^\[/s/^version = "\(.*\)"$/\1/p' Cargo.toml)"
+    [[ "$v" =~ $version_re ]] || die "cannot read a plain x.y.z version from [workspace.package] in Cargo.toml (got '$v')"
+    printf '%s' "$v"
+}
+
+# Build outputs come from third-party build tools: only plain files and folders are copied into the package.
+copy_plain_tree() {
+    local src="$1" dest="$2" odd
+    [[ -d "$src" && ! -L "$src" ]] || die "$src is not a real directory"
+    odd="$(find "$src" ! -type f ! -type d -print | sed -n 1,5p)"
+    [[ -z "$odd" ]] || die "$src holds something that is neither a plain file nor a folder: $odd"
+    [[ ! -e "$dest" ]] || die "$dest already exists"
+    cp -R -- "$src" "$dest"
+}
+
+copy_plain_file() {
+    local src="$1" dest="$2" mode="$3"
+    [[ -f "$src" && ! -L "$src" ]] || die "$src is missing or is not a regular file"
+    install -D -m "$mode" -- "$src" "$dest"
+}
+
+stage_deb() {
+    local stage="$1" version="$2" arch="$3" pair pkg name share="$1/usr/share" control="$1/DEBIAN/control" kb
+    for pair in $PROGRAMS; do
+        pkg="${pair%%:*}"
+        name="${pair##*:}"
+        require_program "target/release/$pkg"
+        copy_plain_file "target/release/$pkg" "$stage/usr/bin/$name" 0755
+    done
+    copy_plain_file bundle/deb/shellcue.desktop "$share/applications/shellcue.desktop" 0644
+    copy_plain_file crates/fig_desktop/icons/128x128.png "$share/icons/hicolor/128x128/apps/shellcue.png" 0644
+    mkdir -p -- "$share/shellcue"
+    [[ -f packages/autocomplete-app/dist/index.html ]] || die "packages/autocomplete-app/dist/index.html is missing; run the 'web' step"
+    copy_plain_tree packages/autocomplete-app/dist "$share/shellcue/autocomplete"
+    [[ -f build/specs/index.json ]] || die "build/specs/index.json is missing; run the 'specs' step"
+    copy_plain_tree build/specs "$share/shellcue/specs"
+    chmod -R u=rwX,go=rX -- "$stage"
+
+    copy_plain_file bundle/deb/prerm "$stage/DEBIAN/prerm" 0755
+    copy_plain_file bundle/deb/postrm "$stage/DEBIAN/postrm" 0755
+    chmod 0755 -- "$stage/DEBIAN"
+    [[ -f bundle/deb/control && ! -L bundle/deb/control ]] || die "bundle/deb/control is missing or is not a regular file"
+    kb="$(du -sk --exclude=DEBIAN -- "$stage" | cut -f1)"
+    sed -e 's/\$VERSION/'"$version"'/' -e 's/\$APT_ARCH/'"$arch"'/' bundle/deb/control > "$control"
+    printf 'Installed-Size: %s\n' "$kb" >> "$control"
+    chmod 0644 -- "$control"
+    ! grep -q '\$' "$control" || die "$control still holds an unfilled \$ placeholder"
+    grep -qx "Version: $version" "$control" || die "$control has no line 'Version: $version'"
+    grep -qx "Architecture: $arch" "$control" || die "$control has no line 'Architecture: $arch'"
+}
+
+step_bundle() {
+    require_no_args "$@"
+    enter_src
+    require_clean_tree
+    check_no_host_mounts
+    require_stamps web specs build
+    local version arch name stage deb sum
+    version="$(workspace_version)"
+    arch="$(dpkg --print-architecture)"
+    case "$arch" in
+        arm64|amd64) ;;
+        *) die "unexpected Debian architecture: '$arch'" ;;
+    esac
+    name="shellcue_${version}_${arch}"
+    stage="$OUT/$name"
+    deb="$OUT/$name.deb"
+    printf -- '--> version %s, architecture %s\n' "$version" "$arch"
+
+    [[ "$OUT" == "$HOME/shellcue/build/linux" ]] || die "refusing to clear an unexpected output folder: $OUT"
+    rm -rf -- "$OUT"
+    mkdir -p -- "$stage"
+    stage_deb "$stage" "$version" "$arch"
+
+    printf '    control:\n'
+    sed 's/^/      /' "$stage/DEBIAN/control"
+    printf '    programs:\n'
+    for name in shellcue-desktop shellcue shellcue-term; do
+        printf '      %s  usr/bin/%s\n' "$(sha256_of "$stage/usr/bin/$name")" "$name"
+    done
+    printf '    files: %s, size: %s\n' "$(find "$stage" -type f | wc -l)" "$(du -sh -- "$stage" | cut -f1)"
+
+    printf -- '--> making the package (a minute or two)\n'
+    dpkg-deb --build --root-owner-group "$stage" "$deb"
+    dpkg-deb --info "$deb" | sed 's/^/      /'
+    printf '    package contents outside usr/share/shellcue:\n'
+    dpkg-deb --contents "$deb" | grep -v ' \./usr/share/shellcue/.' | sed 's/^/      /'
+    sum="$(sha256_of "$deb")"
+    printf '%s  %s\n' "$sum" "${deb##*/}" > "$deb.sha256"
+    printf '    package size: %s\n' "$(du -h -- "$deb" | cut -f1)"
+    printf -- '--> package %s sha256 %s\n' "$deb" "$sum"
+    printf -- '--> the package stays in the VM; nothing is copied to the Mac. It is not signed.\n'
+    printf -- '--> to install it for a trial: take a UTM snapshot first, then run in the Terminal of the VM:   sudo apt install ~/shellcue/build/linux/%s\n' "${deb##*/}"
+}
+
 step_info() {
     require_no_args "$@"
     printf '    os: %s\n' "$( (. /etc/os-release && printf '%s' "${PRETTY_NAME:-unknown}") 2>/dev/null || printf 'unknown')"
@@ -731,6 +992,7 @@ main() {
         *) usage >&2; die "unknown step: '$step'" ;;
     esac
     begin_step "$step"
+    [[ "$step" == "info" ]] || take_lock
     case "$step" in
         tools) step_tools "$@" ;;
         clone) step_clone "$@" ;;
@@ -741,6 +1003,8 @@ main() {
         icons) step_icons "$@" ;;
         rust-check) step_rust_check "$@" ;;
         rust-test) step_rust_test "$@" ;;
+        build) step_build "$@" ;;
+        bundle) step_bundle "$@" ;;
         info) step_info "$@" ;;
         *) die "step '$step' is listed in STEPS but has no handler" ;;
     esac

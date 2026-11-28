@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=ShellCue
+Comment=Terminal autocomplete
+Exec=shellcue-desktop
+Icon=shellcue
+Terminal=false
+Categories=Development;
+StartupWMClass=Shellcue

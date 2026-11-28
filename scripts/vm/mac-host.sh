@@ -1,6 +1,7 @@
 #!/bin/bash
 # Runs on the owner's Mac and drives the throwaway macOS build VM over SSH; must stay compatible with macOS /bin/bash 3.2.
 # Never runs anything the VM produced, never copies a file out of the VM (the app and disk image stay there), writes only to ../vm-logs and ../vm-mac/known_hosts.
+# Change together with scripts/vm/linux-host.sh: the two differ only in names and help text.
 
 set -euo pipefail
 

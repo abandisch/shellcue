@@ -118,8 +118,8 @@ where
 #[cfg(target_os = "linux")]
 pub fn icon() -> Icon {
     load_icon(
-        fig_util::search_xdg_data_dirs("icons/hicolor/128x128/packages/shellcue.png")
-            .unwrap_or_else(|| "/usr/share/icons/hicolor/128x128/packages/shellcue.png".into()),
+        fig_util::search_xdg_data_dirs("icons/hicolor/128x128/apps/shellcue.png")
+            .unwrap_or_else(|| "/usr/share/icons/hicolor/128x128/apps/shellcue.png".into()),
     )
     .unwrap_or_else(load_from_memory)
 }
