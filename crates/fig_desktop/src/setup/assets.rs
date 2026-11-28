@@ -426,4 +426,9 @@ mod tests {
         assert!(SETUP_CSS.contains(".more-below .footer::before {"));
         assert!(SETUP_CSS.contains(".more-below .footer {"));
     }
+
+    #[test]
+    fn quiet_step_ring_is_solid_while_busy() {
+        assert!(SETUP_CSS.contains(".step.quiet[data-mark=\"busy\"] .mark,\n"));
+    }
 }
