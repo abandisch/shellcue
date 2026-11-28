@@ -5,27 +5,10 @@ declare global {
      */
     const constants:
       | {
-          codewhisperer: boolean;
-          version: string;
-          cli?: string;
-          bundlePath?: string;
-          remote?: string;
           home?: string;
-          figDotDir?: string;
-          figDataDir?: string;
-          backupsDir?: string;
-          logsDir?: string;
-          user?: string;
-          defaultPath?: string;
           themesFolder?: string;
-          themes?: string[];
           os?: string;
-          arch?: string;
-          env?: Record<string, string>;
           newUriFormat?: boolean;
-          macosVersion?: string;
-          // TODO: add actual types
-          linux?: unknown;
         }
       | undefined;
     let settings: Record<string, unknown>;

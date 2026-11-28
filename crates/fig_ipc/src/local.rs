@@ -5,7 +5,6 @@ use fig_proto::local::{
     self,
     CommandResponse,
     DebugModeCommand,
-    DevtoolsCommand,
     DumpStateCommand,
     DumpStateResponse,
     InputMethodAction,
@@ -18,7 +17,6 @@ use fig_proto::local::{
     RestartSettingsListenerCommand,
     command,
     command_response,
-    devtools_command,
     dump_state_command,
 };
 use fig_util::directories;
@@ -100,11 +98,6 @@ pub async fn restart_command() -> Result<()> {
 
 pub async fn quit_command() -> Result<()> {
     let command = command::Command::Quit(QuitCommand {});
-    send_command_to_socket(command).await
-}
-
-pub async fn devtools_command(window: devtools_command::Window) -> Result<()> {
-    let command = command::Command::Devtools(DevtoolsCommand { window: window.into() });
     send_command_to_socket(command).await
 }
 

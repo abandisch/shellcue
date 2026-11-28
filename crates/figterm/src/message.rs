@@ -2,10 +2,7 @@ use std::path::{
     Path,
     PathBuf,
 };
-use std::time::{
-    Duration,
-    SystemTime,
-};
+use std::time::SystemTime;
 
 use alacritty_terminal::Term;
 use alacritty_terminal::term::ShellState;
@@ -14,6 +11,7 @@ use fig_proto::fig::{
     EnvironmentVariable,
     RunProcessResponse,
 };
+use fig_proto::fig_common::run_process_timeout;
 use fig_proto::figterm::figterm_request_message::Request as FigtermRequest;
 use fig_proto::figterm::figterm_response_message::Response as FigtermResponse;
 use fig_proto::figterm::intercept_request::{
@@ -418,7 +416,7 @@ pub async fn process_remote_message(
                     tokio::spawn(async move {
                         debug!("running command");
 
-                        let timeout_duration = request.timeout.map_or(Duration::from_secs(60), Into::into);
+                        let timeout_duration = run_process_timeout(request.timeout.as_ref());
                         let command_timeout = tokio::time::timeout(timeout_duration, cmd.output());
 
                         let response = match command_timeout.await {

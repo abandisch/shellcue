@@ -65,32 +65,6 @@ export function sendMessage(
 
   const buffer = toBinary(ClientOriginatedMessageSchema, request);
 
-  if (
-    window?.fig?.constants?.supportApiProto &&
-    window?.fig?.constants?.apiProtoUrl
-  ) {
-    const url = new URL(window.fig.constants.apiProtoUrl);
-
-    if (typeof request.submessage?.case === "string") {
-      url.pathname = `/${request.submessage.case}`;
-    } else {
-      url.pathname = "/unknown";
-    }
-
-    fetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/fig-api",
-      },
-      body: buffer,
-    }).then(async (res) => {
-      const body = new Uint8Array(await res.arrayBuffer());
-      const message = fromBinary(ServerOriginatedMessageSchema, body);
-      receivedMessage(message);
-    });
-    return;
-  }
-
   const postMessage = window?.ipc?.postMessage;
   if (postMessage && typeof postMessage === "function") {
     const b64 = bytesToBase64(buffer);

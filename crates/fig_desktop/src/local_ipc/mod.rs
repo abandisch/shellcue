@@ -30,13 +30,9 @@ use tracing::{
     warn,
 };
 
-use crate::event::Event;
+use crate::EventLoopProxy;
 use crate::platform::PlatformState;
 use crate::webview::notification::WebviewNotificationsState;
-use crate::{
-    AUTOCOMPLETE_ID,
-    EventLoopProxy,
-};
 
 pub enum LocalResponse {
     Error { code: Option<i32>, message: Option<String> },
@@ -108,7 +104,6 @@ async fn handle_local_ipc(
                         use fig_proto::local::command::Command::{
                             ConnectToIbus,
                             DebugMode,
-                            Devtools,
                             Diagnostics,
                             DumpState,
                             InputMethod,
@@ -137,20 +132,6 @@ async fn handle_local_ipc(
                                 &platform_state,
                             ),
                             ConnectToIbus(_) => commands::connect_to_ibus(proxy.clone(), &platform_state).await,
-                            Devtools(command) => {
-                                let window_id = match command.window() {
-                                    fig_proto::local::devtools_command::Window::DevtoolsAutocomplete => AUTOCOMPLETE_ID,
-                                };
-
-                                proxy
-                                    .send_event(Event::WindowEvent {
-                                        window_id,
-                                        window_event: crate::event::WindowEvent::Devtools,
-                                    })
-                                    .ok();
-
-                                Ok(LocalResponse::Success(None))
-                            },
                             TerminalIntegration(_)
                             | ListTerminalIntegrations(_)
                             | Restart(_)

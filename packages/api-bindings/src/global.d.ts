@@ -5,10 +5,10 @@ declare global {
     | {
         constants:
           | {
-              version?: string;
+              home?: string;
+              themesFolder?: string;
               os?: string;
-              supportApiProto?: boolean;
-              apiProtoUrl?: string;
+              newUriFormat?: boolean;
             }
           | undefined;
         quiet: boolean | undefined;

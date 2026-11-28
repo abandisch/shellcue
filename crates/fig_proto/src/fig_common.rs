@@ -22,7 +22,24 @@ impl From<std::time::Duration> for Duration {
 
 impl From<Duration> for std::time::Duration {
     fn from(value: Duration) -> Self {
-        std::time::Duration::new(value.secs, value.nanos)
+        capped_duration(&value, std::time::Duration::MAX)
+    }
+}
+
+pub const RUN_PROCESS_TIMEOUT_LIMIT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Never panics or overflows, whatever `secs` and `nanos` arrive; never exceeds `limit`.
+pub fn capped_duration(value: &Duration, limit: std::time::Duration) -> std::time::Duration {
+    std::time::Duration::from_secs(value.secs)
+        .saturating_add(std::time::Duration::from_nanos(value.nanos.into()))
+        .min(limit)
+}
+
+/// No requested timeout means the limit.
+pub fn run_process_timeout(requested: Option<&Duration>) -> std::time::Duration {
+    match requested {
+        Some(timeout) => capped_duration(timeout, RUN_PROCESS_TIMEOUT_LIMIT),
+        None => RUN_PROCESS_TIMEOUT_LIMIT,
     }
 }
 
@@ -207,6 +224,54 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    const LIMIT: std::time::Duration = RUN_PROCESS_TIMEOUT_LIMIT;
+
+    fn capped(secs: u64, nanos: u32) -> std::time::Duration {
+        capped_duration(&Duration { secs, nanos }, LIMIT)
+    }
+
+    #[test]
+    fn capped_duration_keeps_values_within_the_limit() {
+        assert_eq!(capped(0, 0), std::time::Duration::ZERO);
+        assert_eq!(capped(1, 500_000_000), std::time::Duration::from_millis(1500));
+        assert_eq!(capped(59, 999_999_999), std::time::Duration::new(59, 999_999_999));
+        assert_eq!(capped(60, 0), LIMIT);
+    }
+
+    #[test]
+    fn capped_duration_caps_values_over_the_limit() {
+        assert_eq!(capped(60, 1), LIMIT);
+        assert_eq!(capped(3600, 0), LIMIT);
+        assert_eq!(capped(u64::MAX, 0), LIMIT);
+        assert_eq!(capped(u64::MAX, u32::MAX), LIMIT);
+    }
+
+    #[test]
+    fn capped_duration_tolerates_out_of_range_nanos() {
+        assert_eq!(capped(0, 1_000_000_000), std::time::Duration::from_secs(1));
+        assert_eq!(capped(0, u32::MAX), std::time::Duration::new(4, 294_967_295));
+        assert_eq!(capped(59, u32::MAX), LIMIT);
+    }
+
+    #[test]
+    fn run_process_timeout_defaults_to_and_caps_at_the_limit() {
+        assert_eq!(run_process_timeout(None), std::time::Duration::from_secs(60));
+        let timeout = |secs, nanos| run_process_timeout(Some(&Duration { secs, nanos }));
+        assert_eq!(timeout(5, 0), std::time::Duration::from_secs(5));
+        assert_eq!(timeout(u64::MAX, 0), std::time::Duration::from_secs(60));
+        assert_eq!(timeout(59, u32::MAX), std::time::Duration::from_secs(60));
+        assert_eq!(timeout(u64::MAX, u32::MAX), std::time::Duration::from_secs(60));
+    }
+
+    #[test]
+    fn duration_conversion_saturates_instead_of_panicking() {
+        let duration = Duration {
+            secs: u64::MAX,
+            nanos: u32::MAX,
+        };
+        assert_eq!(std::time::Duration::from(duration), std::time::Duration::MAX);
+    }
 
     #[test]
     fn into_value() {

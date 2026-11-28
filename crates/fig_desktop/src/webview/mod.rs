@@ -21,7 +21,6 @@ use fig_remote_ipc::figterm::FigtermState;
 use fig_util::directories;
 use fnv::FnvBuildHasher;
 use muda::MenuEvent;
-use regex::RegexSet;
 use tao::dpi::LogicalSize;
 use tao::event::{
     Event as WryEvent,
@@ -47,6 +46,7 @@ use tracing::{
 };
 use url::Url;
 use window::WindowState;
+use wry::http::Request;
 use wry::{
     Theme as WryTheme,
     WebContext,
@@ -68,7 +68,6 @@ use crate::platform::{
     PlatformState,
 };
 use crate::protocol::{
-    api,
     icons,
     resource,
     spec,
@@ -146,11 +145,7 @@ pub struct WebviewManager {
 }
 
 pub static GLOBAL_PROXY: OnceLock<EventLoopProxy> = OnceLock::new();
-pub static FIGTERM_STATE: OnceLock<Arc<FigtermState>> = OnceLock::new();
-pub static INTERCEPT_STATE: OnceLock<Arc<InterceptState>> = OnceLock::new();
 pub static PLATFORM_STATE: OnceLock<Arc<PlatformState>> = OnceLock::new();
-pub static NOTIFICATIONS_STATE: OnceLock<Arc<WebviewNotificationsState>> = OnceLock::new();
-pub static DASH_KV_STORE: OnceLock<Arc<DashKVStore>> = OnceLock::new();
 
 impl WebviewManager {
     #[allow(unused_mut)]
@@ -171,19 +166,15 @@ impl WebviewManager {
         GLOBAL_PROXY.set(proxy.clone()).unwrap();
 
         let figterm_state = Arc::new(FigtermState::default());
-        FIGTERM_STATE.set(figterm_state.clone()).unwrap();
 
         let intercept_state = Arc::new(InterceptState::default());
-        INTERCEPT_STATE.set(intercept_state.clone()).unwrap();
 
         let platform_state = Arc::new(PlatformState::new(proxy));
         PLATFORM_STATE.set(platform_state.clone()).unwrap();
 
         let notifications_state = Arc::new(WebviewNotificationsState::default());
-        NOTIFICATIONS_STATE.set(notifications_state.clone()).unwrap();
 
         let dash_kv_store = Arc::new(DashKVStore::new());
-        DASH_KV_STORE.set(dash_kv_store.clone()).unwrap();
 
         Self {
             fig_id_map: Default::default(),
@@ -548,30 +539,25 @@ impl WebviewManager {
     }
 }
 
-fn navigation_handler<I, S>(window_id: WindowId, exprs: I) -> impl Fn(String) -> bool
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<str>,
-{
-    let regex_set = RegexSet::new(exprs);
-
-    if let Err(ref err) = regex_set {
-        error!("Failed to compile regex: {err}");
+fn accepted_payload(request: Request<String>) -> Option<String> {
+    let origin = request.uri().to_string();
+    if !autocomplete::is_autocomplete_origin(&origin) {
+        warn!(%origin, "Autocomplete request from another origin dropped");
+        return None;
     }
+    Some(request.into_body())
+}
 
-    move |url: String| match regex_set.as_ref().ok().and_then(|r| {
-        Url::parse(&url)
-            .ok()
-            .and_then(|url| url.domain().map(|domain| r.is_match(domain)))
-    }) {
-        Some(true) => {
-            trace!("{window_id} allowed url: {url}");
-            true
-        },
-        Some(false) | None => {
-            warn!("{window_id} denied url: {url}");
-            false
-        },
+fn forward(proxy: &EventLoopProxy, request: Request<String>) {
+    let Some(payload) = accepted_payload(request) else {
+        return;
+    };
+    let event = Event::WindowEvent {
+        window_id: AUTOCOMPLETE_ID,
+        window_event: WindowEvent::Api { payload },
+    };
+    if proxy.send_event(event).is_err() {
+        warn!("Event loop closed; autocomplete request dropped");
     }
 }
 
@@ -628,16 +614,7 @@ pub fn build_autocomplete(
 
     let webview_builder = WebViewBuilder::with_web_context(web_context)
         .with_url(autocomplete::url().as_str())
-        .with_ipc_handler(move |payload| {
-            proxy
-                .send_event(Event::WindowEvent {
-                    window_id: AUTOCOMPLETE_ID.clone(),
-                    window_event: WindowEvent::Api {
-                        payload: payload.into_body(),
-                    },
-                })
-                .unwrap();
-        })
+        .with_ipc_handler(move |request: Request<String>| forward(&proxy, request))
         .with_asynchronous_custom_protocol(
             "fig".into(),
             utils::wrap_custom_protocol(Arc::clone(&ctx), "fig", AutocompleteId, icons::handle),
@@ -659,14 +636,20 @@ pub fn build_autocomplete(
                 resource::handle::<resource::Autocomplete>,
             ),
         )
-        .with_asynchronous_custom_protocol(
-            "api".into(),
-            utils::wrap_custom_protocol(Arc::clone(&ctx), "api", AutocompleteId, api::handle),
-        )
-        .with_devtools(true)
+        .with_devtools(false)
         .with_transparent(true)
-        .with_initialization_script(&javascript_init(true))
-        .with_navigation_handler(navigation_handler(AUTOCOMPLETE_ID, &[r"localhost$", r"^127\.0\.0\.1$"]))
+        .with_initialization_script(&javascript_init())
+        .with_navigation_handler(|url: String| {
+            let allowed = autocomplete::is_autocomplete_origin(&url);
+            if !allowed {
+                warn!(%url, "Autocomplete window navigation blocked");
+            }
+            allowed
+        })
+        .with_new_window_req_handler(|url: String| {
+            warn!(%url, "Autocomplete window new window blocked");
+            false
+        })
         .with_clipboard(true)
         .with_hotkeys_zoom(true)
         .with_accept_first_mouse(true);
@@ -818,4 +801,35 @@ async fn init_webview_notification_listeners(proxy: EventLoopProxy) {
                 .unwrap();
         }
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn payload_from(uri: &str) -> Option<String> {
+        let request = Request::builder().uri(uri).body("payload".to_owned()).expect(uri);
+        accepted_payload(request)
+    }
+
+    #[test]
+    fn accepts_payload_from_the_page() {
+        for uri in ["qcliresource://localhost/", "qcliresource://localhost/index.html"] {
+            assert_eq!(payload_from(uri).as_deref(), Some("payload"), "{uri:?}");
+        }
+    }
+
+    #[test]
+    fn drops_payload_from_other_origins() {
+        for uri in [
+            "api://localhost/",
+            "http://localhost/",
+            "https://evil.example/",
+            "qcliresource://evil/",
+            "qcliresource://localhost:8080/",
+            "shellcuesetup://localhost/",
+        ] {
+            assert_eq!(payload_from(uri), None, "{uri:?}");
+        }
+    }
 }
